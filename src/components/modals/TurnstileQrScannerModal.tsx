@@ -13,6 +13,8 @@ import {
   HelpCircle,
   Upload,
   Sparkles,
+  QrCode,
+  Zap,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -47,6 +49,8 @@ export const TurnstileQrScannerModal: React.FC<TurnstileQrScannerModalProps> = (
   const [scanResult, setScanResult] = useState<{ success: boolean; message: string; employeeName?: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [activeSite, setActiveSite] = useState<string>(targetSiteId || currentSite || 'SITE-001');
+  const [manualBadgeInput, setManualBadgeInput] = useState<string>('');
+  const [torchOn, setTorchOn] = useState<boolean>(false);
 
   // Stop camera media tracks cleanly
   const stopCamera = useCallback(() => {
@@ -315,6 +319,29 @@ export const TurnstileQrScannerModal: React.FC<TurnstileQrScannerModalProps> = (
     setSelectedDeviceId('');
   };
 
+  // Toggle camera flashlight / torch if hardware supported
+  const handleToggleTorch = async () => {
+    if (!streamRef.current) return;
+    const track = streamRef.current.getVideoTracks()[0];
+    if (!track) return;
+    try {
+      const nextTorch = !torchOn;
+      // @ts-expect-error non-standard torch constraint for modern browsers
+      await track.applyConstraints({ advanced: [{ torch: nextTorch }] });
+      setTorchOn(nextTorch);
+    } catch {
+      // torch not supported on this device/browser
+    }
+  };
+
+  // Process manual keyboard or barcode reader input
+  const handleManualSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualBadgeInput.trim()) return;
+    handleDecodedPayload(manualBadgeInput.trim());
+    setManualBadgeInput('');
+  };
+
   // Auto-request camera when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -499,8 +526,23 @@ export const TurnstileQrScannerModal: React.FC<TurnstileQrScannerModalProps> = (
 
                 <div className="flex items-center gap-1.5">
                   <button
+                    onClick={handleToggleTorch}
+                    className={`p-2 rounded-lg border text-xs flex items-center gap-1 backdrop-blur-xs transition-colors cursor-pointer ${
+                      torchOn
+                        ? 'bg-amber-400 text-black border-amber-300 shadow-md shadow-amber-500/20'
+                        : 'bg-black/70 hover:bg-black text-white border-white/20'
+                    }`}
+                    title="Toggle Flashlight / Torch"
+                  >
+                    <Zap className={`w-3.5 h-3.5 ${torchOn ? 'text-black fill-current' : 'text-amber-400'}`} />
+                    <span className="hidden sm:inline text-[10px] font-semibold">
+                      {torchOn ? 'Torch On' : 'Torch'}
+                    </span>
+                  </button>
+
+                  <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="p-2 bg-black/70 hover:bg-black text-white rounded-lg border border-white/20 text-xs flex items-center gap-1 backdrop-blur-xs transition-colors"
+                    className="p-2 bg-black/70 hover:bg-black text-white rounded-lg border border-white/20 text-xs flex items-center gap-1 backdrop-blur-xs transition-colors cursor-pointer"
                     title="Scan photo of QR badge"
                   >
                     <Upload className="w-3.5 h-3.5 text-emerald-400" />
@@ -570,6 +612,33 @@ export const TurnstileQrScannerModal: React.FC<TurnstileQrScannerModalProps> = (
               </div>
             </div>
           )}
+
+          {/* Manual Badge ID / Hardware Barcode Reader Input */}
+          <div className="p-3 bg-[#13241f] border border-[#234338] rounded-xl space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-white flex items-center gap-1.5">
+                <QrCode className="w-3.5 h-3.5 text-[#a3e635]" />
+                Manual Badge ID or Barcode Scanner Input:
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">Format: DRC-EMP-2026-XXXXXX</span>
+            </div>
+            <form onSubmit={handleManualSubmit} className="flex gap-2">
+              <input
+                type="text"
+                value={manualBadgeInput}
+                onChange={(e) => setManualBadgeInput(e.target.value)}
+                placeholder="Type or scan Badge ID (e.g. DRC-EMP-2026-000001)..."
+                className="flex-1 px-3 py-1.5 bg-[#080f0d] border border-[#234338] focus:border-[#a3e635] rounded-lg text-white font-mono text-xs placeholder:text-slate-600 outline-none"
+              />
+              <button
+                type="submit"
+                disabled={!manualBadgeInput.trim() || isProcessing}
+                className="px-3.5 py-1.5 bg-[#a3e635] text-[#080f0d] hover:bg-[#84cc16] font-bold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                Log Attendance
+              </button>
+            </form>
+          </div>
 
           {/* Quick Field Simulation Buttons */}
           <div className="pt-2 border-t border-[#234338]">

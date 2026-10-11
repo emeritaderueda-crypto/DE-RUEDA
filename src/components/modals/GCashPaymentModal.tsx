@@ -34,7 +34,7 @@ export const GCashPaymentModal: React.FC<GCashPaymentModalProps> = ({
   const { employees, sites, triggerGcashPayment, isOnline } = useApp();
 
   const [mobileNumber, setMobileNumber] = useState('');
-  const [managerPin, setManagerPin] = useState('2026');
+  const [managerPin, setManagerPin] = useState('Emerita0279');
   const [managerNotes, setManagerNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState(0);

@@ -1,14 +1,40 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { DeductionRecord } from '../../types';
-import { BadgePercent, Plus, Filter, Trash2, X, AlertCircle } from 'lucide-react';
+import { DeductionRecord, Site } from '../../types';
+import { CanteenGcashPayoutModal } from '../modals/CanteenGcashPayoutModal';
+import {
+  BadgePercent,
+  Plus,
+  Filter,
+  Trash2,
+  X,
+  AlertCircle,
+  UtensilsCrossed,
+  Smartphone,
+  Receipt,
+  CheckCircle2,
+} from 'lucide-react';
 
 export const DeductionsView: React.FC = () => {
-  const { deductions, employees, sites, dtrWeeks, currentSite, addDeduction, voidDeduction } = useApp();
+  const {
+    deductions,
+    employees,
+    sites,
+    dtrWeeks,
+    currentSite,
+    gcashTransactions,
+    addDeduction,
+    voidDeduction,
+  } = useApp();
 
   const [selectedWeek, setSelectedWeek] = useState(dtrWeeks[0]?.week_key || '2026-W40');
   const [siteFilter, setSiteFilter] = useState(currentSite);
   const [isAddOpen, setIsAddOpen] = useState(false);
+
+  // Canteen GCash Payout Modal States
+  const [canteenPayoutSite, setCanteenPayoutSite] = useState<Site | null>(null);
+  const [isCanteenPayoutOpen, setIsCanteenPayoutOpen] = useState(false);
+  const [notificationMsg, setNotificationMsg] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     employee_id: employees[0]?.employee_id || '',
@@ -27,6 +53,19 @@ export const DeductionsView: React.FC = () => {
     const matchS = siteFilter === 'ALL' || d.site_id === siteFilter;
     return matchW && matchS;
   });
+
+  // Canteen Calculations for the current filter view
+  const currentTargetSite = sites.find((s) => s.site_id === siteFilter) || sites[0];
+
+  const filteredCanteenCollected = filtered
+    .filter((d) => !d.is_void)
+    .reduce((sum, d) => sum + Number(d.canteen || 0), 0);
+
+  const filteredCanteenPaid = gcashTransactions
+    .filter((tx) => tx.category === 'Site Canteen Payout' && (siteFilter === 'ALL' || tx.site_id === siteFilter) && tx.status === 'COMPLETED')
+    .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+
+  const filteredCanteenOutstanding = Math.max(0, filteredCanteenCollected - filteredCanteenPaid);
 
   const calcTotalPreview = () => {
     return (
@@ -76,6 +115,71 @@ export const DeductionsView: React.FC = () => {
           <Plus className="w-4 h-4" />
           Record Worker Deductions
         </button>
+      </div>
+
+      {/* Notification Toast */}
+      {notificationMsg && (
+        <div className="p-3 bg-emerald-500/15 border border-emerald-500/40 rounded-xl flex items-center justify-between text-xs text-emerald-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{notificationMsg}</span>
+          </div>
+          <button onClick={() => setNotificationMsg(null)} className="text-slate-400 hover:text-white cursor-pointer">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Site Canteen Deduction & GCash Payout Settlement Banner */}
+      <div className="bg-gradient-to-r from-[#0e1a16] via-[#13241f] to-[#0e1a16] border border-[#234338] rounded-xl p-4 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-lime-500/15 border border-lime-500/30 flex items-center justify-center text-lime-400 shrink-0">
+            <UtensilsCrossed className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-white uppercase tracking-tight">
+                Site Canteen GCash Settlement Hub
+              </h3>
+              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-lime-400/20 text-lime-300">
+                {siteFilter === 'ALL' ? 'ALL SITES' : siteFilter}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Concessionaire: <strong className="text-slate-200">{currentTargetSite?.canteen_vendor_name || 'Project Canteen'}</strong> &bull; GCash: <span className="font-mono text-sky-400 font-bold">{currentTargetSite?.canteen_gcash_number || '09171234567'}</span>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-3 bg-[#080f0d] border border-[#234338] px-3 py-2 rounded-lg text-xs font-mono">
+            <div>
+              <div className="text-[10px] text-slate-500">Collected</div>
+              <div className="font-bold text-white">₱{filteredCanteenCollected.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+            </div>
+            <div className="w-px h-6 bg-[#234338]"></div>
+            <div>
+              <div className="text-[10px] text-slate-500">Settled</div>
+              <div className="font-bold text-emerald-400">₱{filteredCanteenPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+            </div>
+            <div className="w-px h-6 bg-[#234338]"></div>
+            <div>
+              <div className="text-[10px] text-slate-500">Outstanding</div>
+              <div className="font-black text-lime-400">₱{filteredCanteenOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              setCanteenPayoutSite(currentTargetSite);
+              setIsCanteenPayoutOpen(true);
+            }}
+            className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-lime-500 hover:from-emerald-500 hover:to-lime-400 text-white font-extrabold text-xs rounded-lg transition-all shadow-md flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+          >
+            <Smartphone className="w-4 h-4" />
+            <span>Disburse Canteen via GCash</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter Bar */}
@@ -185,11 +289,11 @@ export const DeductionsView: React.FC = () => {
                         {!isVoid && (
                           <button
                             onClick={() => {
-                              if (confirm('Void this deduction? Net pay will be automatically recalculated.')) {
-                                voidDeduction(ded.deduction_id);
-                              }
+                              voidDeduction(ded.deduction_id);
+                              setNotificationMsg(`Deduction for ${emp ? emp.name : ded.employee_id} (${ded.week_key}) has been voided. Net pay recalculated.`);
+                              setTimeout(() => setNotificationMsg(null), 5000);
                             }}
-                            className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-md"
+                            className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-md cursor-pointer transition-colors"
                             title="Void Deduction"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -365,6 +469,24 @@ export const DeductionsView: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Canteen GCash Payout Modal */}
+      {canteenPayoutSite && (
+        <CanteenGcashPayoutModal
+          isOpen={isCanteenPayoutOpen}
+          onClose={() => {
+            setIsCanteenPayoutOpen(false);
+            setCanteenPayoutSite(null);
+          }}
+          site={canteenPayoutSite}
+          defaultAmount={filteredCanteenOutstanding}
+          weekKey={selectedWeek}
+          onSuccess={(ref) => {
+            setNotificationMsg(`Canteen settlement disbursed via GCash. Ref: ${ref}`);
+            setTimeout(() => setNotificationMsg(null), 5000);
+          }}
+        />
       )}
     </div>
   );

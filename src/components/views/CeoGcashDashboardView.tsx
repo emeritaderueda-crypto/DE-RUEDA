@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CeoPasswordModal } from '../modals/CeoPasswordModal';
+import { CanteenGcashPayoutModal } from '../modals/CanteenGcashPayoutModal';
 import { PageId } from '../layout/Sidebar';
-import { GCashTransactionRecord } from '../../types';
+import { GCashTransactionRecord, Site } from '../../types';
 import {
   Wallet,
   Shield,
@@ -24,6 +25,10 @@ import {
   CreditCard,
   RefreshCw,
   ExternalLink,
+  UtensilsCrossed,
+  Edit,
+  Save,
+  Phone,
 } from 'lucide-react';
 
 interface CeoGcashDashboardViewProps {
@@ -35,14 +40,23 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
     payroll,
     employees,
     sites,
+    deductions,
     gcashTransactions,
     gcashWalletBalance,
     sendGcashDisbursement,
+    updateSite,
     isCeoUnlocked,
     lockCeoVault,
   } = useApp();
 
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(!isCeoUnlocked);
+
+  // Canteen Payout Modal States
+  const [selectedCanteenSite, setSelectedCanteenSite] = useState<Site | null>(null);
+  const [isCanteenModalOpen, setIsCanteenModalOpen] = useState(false);
+  const [inlineEditingSiteId, setInlineEditingSiteId] = useState<string | null>(null);
+  const [canteenVendorNameInput, setCanteenVendorNameInput] = useState('');
+  const [canteenGcashInput, setCanteenGcashInput] = useState('');
 
   // Send GCash Form States (Site Operations & Spot Payments)
   const [recipientName, setRecipientName] = useState('');
@@ -51,7 +65,7 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
   const [siteId, setSiteId] = useState('SITE-001');
   const [amount, setAmount] = useState<number>(5000);
   const [purpose, setPurpose] = useState('');
-  const [ceoPin, setCeoPin] = useState('2026');
+  const [ceoPin, setCeoPin] = useState('Emerita0279');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notificationMsg, setNotificationMsg] = useState<string | null>(null);
 
@@ -82,7 +96,7 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
       amount: pRecord.net_pay,
       purpose: `Weekly Wage Payout (${pRecord.week_key}) - ${empName}`,
       payroll_id: payrollId,
-      user_pin: '2026',
+      user_pin: 'Emerita0279',
     });
     setIsSubmitting(false);
 
@@ -116,7 +130,7 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
         amount: p.net_pay,
         purpose: `Batch Weekly Wage (${p.week_key}) - ${empName}`,
         payroll_id: p.payroll_id,
-        user_pin: '2026',
+        user_pin: 'Emerita0279',
       });
       count++;
       total += p.net_pay;
@@ -161,6 +175,32 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
     setTimeout(() => {
       setNotificationMsg(null);
     }, 6000);
+  };
+
+  // Canteen Concessionaire Management Handlers
+  const handleStartEditCanteen = (s: Site) => {
+    setInlineEditingSiteId(s.site_id);
+    setCanteenVendorNameInput(s.canteen_vendor_name || `${s.name} Canteen Concessionaire`);
+    setCanteenGcashInput(s.canteen_gcash_number || '09171234567');
+  };
+
+  const handleSaveCanteen = (siteId: string) => {
+    let cleanMobile = canteenGcashInput.trim().replace(/[^0-9]/g, '');
+    if (cleanMobile.startsWith('63') && cleanMobile.length === 12) {
+      cleanMobile = '0' + cleanMobile.slice(2);
+    }
+    updateSite(siteId, {
+      canteen_vendor_name: canteenVendorNameInput.trim(),
+      canteen_gcash_number: cleanMobile || '09171234567',
+    });
+    setInlineEditingSiteId(null);
+    setNotificationMsg(`Updated canteen concessionaire & GCash details for ${siteId}.`);
+    setTimeout(() => setNotificationMsg(null), 4000);
+  };
+
+  const handleOpenCanteenPayoutModal = (s: Site) => {
+    setSelectedCanteenSite(s);
+    setIsCanteenModalOpen(true);
   };
 
   // If locked, present security challenge
@@ -470,6 +510,7 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
                   className="w-full px-3 py-2 bg-[#080f0d] border border-[#234338] rounded-lg text-white font-semibold text-xs focus:outline-none focus:border-[#a3e635]"
                 >
                   <option value="Site Operations (Fuel/Emergency)">Site Operations (Fuel/Emergency)</option>
+                  <option value="Site Canteen Payout">Site Canteen Payout</option>
                   <option value="Subcontractor Spot Payment">Subcontractor Spot Payment</option>
                   <option value="Materials Spot Cash">Materials Spot Cash</option>
                   <option value="Weekly Salary">Weekly Salary (Ad-hoc)</option>
@@ -562,6 +603,181 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
         </div>
       </div>
 
+      {/* Section 2.5: Site Project Canteen GCash Payout & Settlement Hub */}
+      <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-4 sm:p-5 space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#234338]">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-lime-500/10 border border-lime-500/30 flex items-center justify-center text-lime-400">
+              <UtensilsCrossed className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm sm:text-base font-bold text-white uppercase tracking-tight">
+                  Site Project Canteen GCash Payout &amp; Settlement Hub
+                </h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-lime-400/20 text-lime-300 font-mono">
+                  AUTO-CALCULATED
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Direct GCash disbursements to site canteen concessionaires balancing worker meal deductions
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Canteen Sites Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {sites.map((s) => {
+            // Deductions collected for this site
+            const siteCanteenCollected = deductions
+              .filter((d) => d.site_id === s.site_id && !d.is_void)
+              .reduce((sum, d) => sum + Number(d.canteen || 0), 0);
+
+            // GCash payouts already sent to this site's canteen
+            const siteCanteenPaid = gcashTransactions
+              .filter((tx) => tx.category === 'Site Canteen Payout' && tx.site_id === s.site_id && tx.status === 'COMPLETED')
+              .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+
+            const outstanding = Math.max(0, siteCanteenCollected - siteCanteenPaid);
+            const isEditing = inlineEditingSiteId === s.site_id;
+
+            return (
+              <div
+                key={s.site_id}
+                className="bg-[#13241f] border border-[#234338] hover:border-lime-500/50 rounded-xl p-4 flex flex-col justify-between space-y-3 transition-colors shadow-sm"
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs font-bold text-lime-400 bg-[#0e1a16] px-2 py-0.5 rounded border border-[#234338]">
+                      {s.code}
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        outstanding > 0
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      }`}
+                    >
+                      {outstanding > 0 ? 'Settlement Pending' : 'Fully Settled'}
+                    </span>
+                  </div>
+
+                  <h4 className="font-bold text-white text-xs mt-2 truncate" title={s.name}>
+                    {s.name}
+                  </h4>
+                  <div className="text-[11px] text-slate-400 truncate">{s.location}</div>
+
+                  {/* Concessionaire & GCash Details Box */}
+                  <div className="mt-3 p-2.5 bg-[#0e1a16] border border-[#234338] rounded-lg space-y-1.5 text-xs">
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-bold block mb-0.5">
+                            Canteen Concessionaire:
+                          </label>
+                          <input
+                            type="text"
+                            value={canteenVendorNameInput}
+                            onChange={(e) => setCanteenVendorNameInput(e.target.value)}
+                            className="w-full px-2 py-1 bg-[#13241f] border border-[#234338] rounded text-white text-xs font-medium focus:outline-none focus:border-lime-400"
+                            placeholder="Vendor Name"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-bold block mb-0.5">
+                            GCash Mobile Number:
+                          </label>
+                          <input
+                            type="text"
+                            value={canteenGcashInput}
+                            onChange={(e) => setCanteenGcashInput(e.target.value)}
+                            className="w-full px-2 py-1 bg-[#13241f] border border-[#234338] rounded text-white font-mono text-xs font-bold focus:outline-none focus:border-lime-400"
+                            placeholder="09XXXXXXXXX"
+                            maxLength={12}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1.5 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveCanteen(s.site_id)}
+                            className="px-2.5 py-1 bg-lime-400 text-[#080f0d] font-bold text-[11px] rounded hover:bg-lime-300 cursor-pointer flex items-center gap-1"
+                          >
+                            <Save className="w-3 h-3" />
+                            <span>Save GCash</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setInlineEditingSiteId(null)}
+                            className="px-2 py-1 bg-[#13241f] text-slate-400 hover:text-white text-[11px] rounded cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase">Canteen Concessionaire</span>
+                          <button
+                            onClick={() => handleStartEditCanteen(s)}
+                            className="text-[10px] text-lime-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+                            title="Edit Canteen GCash Details"
+                          >
+                            <Edit className="w-3 h-3" />
+                            <span>Edit GCash #</span>
+                          </button>
+                        </div>
+                        <div className="font-semibold text-slate-200 truncate">
+                          {s.canteen_vendor_name || `${s.name} Canteen`}
+                        </div>
+                        <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-sky-400">
+                          <Smartphone className="w-3.5 h-3.5 shrink-0" />
+                          <span>{s.canteen_gcash_number || '09171234567'}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Calculations row */}
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-center text-xs">
+                    <div className="p-2 bg-[#080f0d] rounded-lg border border-[#234338]/60">
+                      <div className="text-[10px] text-slate-400">Deductions Pool</div>
+                      <div className="font-mono font-bold text-white mt-0.5">
+                        ₱{siteCanteenCollected.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <div className="p-2 bg-[#080f0d] rounded-lg border border-[#234338]/60">
+                      <div className="text-[10px] text-slate-400">Total Settled</div>
+                      <div className="font-mono font-bold text-emerald-400 mt-0.5">
+                        ₱{siteCanteenPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-2.5 p-2 bg-gradient-to-r from-lime-500/10 to-emerald-500/10 border border-lime-500/20 rounded-lg flex items-center justify-between text-xs">
+                    <span className="text-slate-300 font-medium text-[11px]">Outstanding Payout:</span>
+                    <span className="font-mono font-black text-lime-300 text-sm">
+                      ₱{outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Payout Action Button */}
+                <button
+                  type="button"
+                  onClick={() => handleOpenCanteenPayoutModal(s)}
+                  className="w-full py-2 bg-gradient-to-r from-emerald-600 to-lime-500 hover:from-emerald-500 hover:to-lime-400 text-white font-bold rounded-lg text-xs transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>Disburse Canteen Payout via GCash</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Section 3: Real-Time GCash Transaction Ledger */}
       <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-4 sm:p-5 space-y-4 shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#234338]">
@@ -599,6 +815,7 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
             >
               <option value="ALL">All Categories</option>
               <option value="Weekly Salary">Weekly Salary</option>
+              <option value="Site Canteen Payout">Site Canteen Payout</option>
               <option value="Site Operations (Fuel/Emergency)">Site Operations (Fuel/Emergency)</option>
               <option value="Subcontractor Spot Payment">Subcontractor Spot Payment</option>
               <option value="Materials Spot Cash">Materials Spot Cash</option>
@@ -711,6 +928,23 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
             </button>
           </div>
         </div>
+      )}
+
+      {/* Site Canteen GCash Payout Modal */}
+      {selectedCanteenSite && (
+        <CanteenGcashPayoutModal
+          isOpen={isCanteenModalOpen}
+          onClose={() => {
+            setIsCanteenModalOpen(false);
+            setSelectedCanteenSite(null);
+          }}
+          site={selectedCanteenSite}
+          weekKey="2026-W41"
+          onSuccess={(ref) => {
+            setNotificationMsg(`Canteen payout successfully disbursed via GCash. Reference No: ${ref}`);
+            setTimeout(() => setNotificationMsg(null), 6000);
+          }}
+        />
       )}
     </div>
   );

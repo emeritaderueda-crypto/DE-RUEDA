@@ -42,6 +42,7 @@ import {
   queueOfflineAction,
   generateClientOfflineGCashReceipt,
 } from '../utils/offlineStorage';
+import { getStoredPassword } from '../utils/credentials';
 import {
   INITIAL_EMPLOYEES,
   INITIAL_SITES,
@@ -144,9 +145,10 @@ interface AppContextType {
   rolloverWeek: (nextWeekKey: string, dateStart: string, dateEnd: string) => void;
 
   addDeduction: (ded: Omit<DeductionRecord, 'deduction_id' | 'created_at' | 'updated_at' | 'total_deductions' | 'is_void'>) => DeductionRecord;
+  addBatchDeductions: (deds: Array<Omit<DeductionRecord, 'deduction_id' | 'created_at' | 'updated_at' | 'total_deductions' | 'is_void'>>) => DeductionRecord[];
   voidDeduction: (deduction_id: string) => void;
 
-  recalculatePayroll: (weekKey: string, siteId?: string) => void;
+  recalculatePayroll: (weekKey: string, siteId?: string, overrideDeductions?: DeductionRecord[]) => void;
   verifyPayrollProof: (payroll_id: string, payment_method: 'Cash' | 'GCash', reference_no: string, status: 'Verified' | 'Paid', proof_url: string, notes?: string) => void;
   triggerGcashPayment: (payroll_id: string, customGcashNumber?: string, managerNotes?: string, userPin?: string) => Promise<{ success: boolean; reference_no: string; receipt_url: string; message: string }>;
   triggerBatchGcashPayment: (payroll_ids: string[]) => Promise<{ success: boolean; count: number; totalAmount: number; message: string }>;
@@ -207,7 +209,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [sites, setSites] = useState<Site[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_SITES`);
-      return saved ? JSON.parse(saved) : INITIAL_SITES;
+      if (saved) {
+        const parsed: Site[] = JSON.parse(saved);
+        return parsed.map((s) => {
+          const init = INITIAL_SITES.find((i) => i.site_id === s.site_id);
+          return {
+            ...s,
+            canteen_vendor_name: s.canteen_vendor_name || init?.canteen_vendor_name || `${s.name} Canteen Concessionaire`,
+            canteen_gcash_number: s.canteen_gcash_number || init?.canteen_gcash_number || '09171234567',
+            canteen_contact_person: s.canteen_contact_person || init?.canteen_contact_person || 'Canteen Manager',
+          };
+        });
+      }
+      return INITIAL_SITES;
     } catch {
       return INITIAL_SITES;
     }
@@ -971,43 +985,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Deductions
+  const addBatchDeductions = (
+    deds: Array<Omit<DeductionRecord, 'deduction_id' | 'created_at' | 'updated_at' | 'total_deductions' | 'is_void'>>
+  ): DeductionRecord[] => {
+    if (!deds.length) return [];
+
+    const nowStr = new Date().toISOString();
+    const createdRecords: DeductionRecord[] = deds.map((ded) => {
+      const total =
+        Number(ded.canteen || 0) +
+        Number(ded.sss || 0) +
+        Number(ded.philhealth || 0) +
+        Number(ded.other_deduction || 0) +
+        Number(ded.cash_advance || 0);
+
+      return {
+        ...ded,
+        canteen: Number(ded.canteen || 0),
+        sss: Number(ded.sss || 0),
+        philhealth: Number(ded.philhealth || 0),
+        other_deduction: Number(ded.other_deduction || 0),
+        cash_advance: Number(ded.cash_advance || 0),
+        deduction_id: `DED-${ded.employee_id}-${ded.week_key}`,
+        total_deductions: total,
+        is_void: 0,
+        created_at: nowStr,
+        updated_at: nowStr,
+      };
+    });
+
+    let finalDeds: DeductionRecord[] = [];
+    setDeductions((prev) => {
+      const keysToReplace = new Set(createdRecords.map((r) => `${r.employee_id}_${r.week_key}`));
+      const remaining = prev.filter((d) => !keysToReplace.has(`${d.employee_id}_${d.week_key}`));
+      finalDeds = [...createdRecords, ...remaining];
+      return finalDeds;
+    });
+
+    // Recalculate payroll for each distinct week in the batch
+    const distinctWeeks = Array.from(new Set(createdRecords.map((r) => r.week_key)));
+    distinctWeeks.forEach((wk) => {
+      recalculatePayroll(wk, undefined, finalDeds);
+    });
+
+    addAuditLog(
+      'BATCH_CREATE',
+      'DEDUCTION',
+      `${createdRecords.length} records`,
+      `Batch deductions updated for weeks: ${distinctWeeks.join(', ')}`
+    );
+    return createdRecords;
+  };
+
   const addDeduction = (
     ded: Omit<DeductionRecord, 'deduction_id' | 'created_at' | 'updated_at' | 'total_deductions' | 'is_void'>
   ): DeductionRecord => {
-    const total = ded.canteen + ded.sss + ded.philhealth + ded.other_deduction + ded.cash_advance;
-    const newDed: DeductionRecord = {
-      ...ded,
-      deduction_id: `DED-${ded.employee_id}-${ded.week_key}`,
-      total_deductions: total,
-      is_void: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    setDeductions((prev) => {
-      const filtered = prev.filter((d) => !(d.employee_id === ded.employee_id && d.week_key === ded.week_key));
-      return [newDed, ...filtered];
-    });
-
-    // Update or recalculate payroll record for this employee and week
-    recalculatePayroll(ded.week_key);
-    addAuditLog('CREATE', 'DEDUCTION', newDed.deduction_id, `Total Deductions: ₱${total}`);
-    return newDed;
+    const res = addBatchDeductions([ded]);
+    return res[0];
   };
 
   const voidDeduction = (deduction_id: string) => {
-    setDeductions((prev) =>
-      prev.map((d) => (d.deduction_id === deduction_id ? { ...d, is_void: 1, total_deductions: 0 } : d))
+    const nextDeds = deductions.map((d) =>
+      d.deduction_id === deduction_id ? { ...d, is_void: 1, total_deductions: 0 } : d
     );
+    setDeductions(nextDeds);
     addAuditLog('VOID', 'DEDUCTION', deduction_id, 'Deduction voided');
     const d = deductions.find((item) => item.deduction_id === deduction_id);
-    if (d) recalculatePayroll(d.week_key);
+    if (d) recalculatePayroll(d.week_key, undefined, nextDeds);
   };
 
   // Payroll Calculation
-  const recalculatePayroll = (weekKey: string, siteId?: string) => {
+  const recalculatePayroll = (weekKey: string, siteId?: string, overrideDeductions?: DeductionRecord[]) => {
     const targetWeek = dtrWeeks.find((w) => w.week_key === weekKey) || dtrWeeks[0];
     const activeEmps = employees.filter((e) => e.status !== 'archived');
+    const dedsToUse = overrideDeductions || deductions;
 
     const newPayrollRecords: PayrollRecord[] = activeEmps.map((emp) => {
       // Find all attendance for this employee within week dates
@@ -1024,8 +1075,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const grossPay = parseFloat((verifiedDays * emp.daily_rate).toFixed(2));
 
       // Find deductions
-      const empDed = deductions.find(
-        (d) => d.employee_id === emp.employee_id && d.week_key === weekKey && d.is_void === 0
+      const empDed = dedsToUse.find(
+        (d) => d.employee_id === emp.employee_id && d.week_key === weekKey && !d.is_void
       );
 
       const canteen = empDed?.canteen || 0;
@@ -1124,6 +1175,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const gcashNumber = customGcashNumber || emp?.gcash_number || '09182345671';
     const siteObj = sites.find((s) => s.site_id === record.site_id);
     const siteName = siteObj?.name || record.site_id;
+
+    if (userPin) {
+      const pinTrimmed = userPin.trim();
+      const pinNorm = pinTrimmed.toLowerCase();
+      const activeCeoPw = getStoredPassword('ceo');
+      if (
+        pinTrimmed !== 'Emerita0279' &&
+        pinNorm !== 'emerita0279' &&
+        pinNorm !== 'emerita zero two' &&
+        pinTrimmed !== activeCeoPw &&
+        pinNorm !== activeCeoPw.toLowerCase()
+      ) {
+        throw new Error('Invalid Authorization Passkey. Payout authorization declined.');
+      }
+    }
 
     let resData: any = null;
 
@@ -1609,6 +1675,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const siteObj = sites.find((s) => s.site_id === data.site_id);
     const siteName = siteObj?.name || (data.site_id === 'HQ' ? 'General Operations HQ' : data.site_id);
 
+    if (data.user_pin) {
+      const pinTrimmed = data.user_pin.trim();
+      const pinNorm = pinTrimmed.toLowerCase();
+      const activeCeoPw = getStoredPassword('ceo');
+      if (
+        pinTrimmed !== 'Emerita0279' &&
+        pinNorm !== 'emerita0279' &&
+        pinNorm !== 'emerita zero two' &&
+        pinTrimmed !== activeCeoPw &&
+        pinNorm !== activeCeoPw.toLowerCase()
+      ) {
+        throw new Error('Invalid CEO Authorization Passkey (Emerita0279). Disbursement declined.');
+      }
+    }
+
     const now = new Date();
     const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
     const randomSuffix = Math.floor(10000000 + Math.random() * 90000000).toString();
@@ -1684,6 +1765,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
 
+    // If Site Canteen Payout, automatically record an approved Expense record for cash flow integrity
+    if (data.category === 'Site Canteen Payout') {
+      const newExp: ExpenseRecord = {
+        expense_id: `EXP-CANTEEN-${Date.now()}`,
+        site_id: data.site_id,
+        date: new Date().toISOString().slice(0, 10),
+        category: 'Canteen & Worker Meals',
+        vendor: data.recipient_name,
+        amount: data.amount,
+        payment_method: 'GCash',
+        reference_no: referenceNo,
+        notes: `GCash Canteen Settlement Payout: ${data.purpose}`,
+        status: 'Approved',
+        created_at: new Date().toISOString(),
+      };
+      setExpenses((prev) => [newExp, ...prev]);
+    }
+
     addAuditLog(
       'CEO_GCASH_DISBURSEMENT',
       'GCASH_TRANSACTION',
@@ -1703,10 +1802,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  // Restricted CEO Vault Security Access (Password: Emerita Zero Two)
+  // Restricted CEO Vault Security Access (Passkey: Emerita0279)
   const unlockCeoVault = (password: string): boolean => {
-    const normalized = password.trim().toLowerCase();
-    if (normalized === 'emerita zero two'.toLowerCase()) {
+    const trimmed = password.trim();
+    const normalized = trimmed.toLowerCase();
+    const activeCeoPw = getStoredPassword('ceo');
+    if (
+      trimmed === 'Emerita0279' ||
+      normalized === 'emerita0279' ||
+      trimmed === activeCeoPw ||
+      normalized === activeCeoPw.toLowerCase() ||
+      normalized === 'emerita zero two'
+    ) {
       setIsCeoUnlocked(true);
       try {
         sessionStorage.setItem('DERUEDA_CEO_UNLOCKED', 'true');
@@ -1715,7 +1822,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'CEO_VAULT_UNLOCK',
         'SECURITY_VAULT',
         'CEO_RESTRICTED_ACCESS',
-        'CEO Monitoring and GCash Management Vault unlocked successfully via passphrase Emerita Zero Two'
+        'CEO Monitoring and GCash Management Vault unlocked successfully via passkey Emerita0279'
       );
       return true;
     }
@@ -1723,7 +1830,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'CEO_VAULT_UNLOCK_FAILED',
       'SECURITY_VAULT',
       'CEO_RESTRICTED_ACCESS',
-      'Failed attempt to access restricted CEO Vault with incorrect passphrase'
+      'Failed attempt to access restricted CEO Vault with incorrect passkey'
     );
     return false;
   };
@@ -1777,6 +1884,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         correctAttendance,
         rolloverWeek,
         addDeduction,
+        addBatchDeductions,
         voidDeduction,
         recalculatePayroll,
         verifyPayrollProof,

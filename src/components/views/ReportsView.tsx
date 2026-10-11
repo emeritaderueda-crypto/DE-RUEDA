@@ -20,6 +20,7 @@ export const ReportsView: React.FC = () => {
     dtrWeeks,
     auditLogs,
     currentSite,
+    gcashTransactions,
   } = useApp();
 
   const [reportType, setReportType] = useState('attendance-dtr');
@@ -228,19 +229,43 @@ export const ReportsView: React.FC = () => {
 
       case 'canteen':
         title = 'Site Commissary & Canteen Meal Settlements';
-        headers = ['Employee ID', 'Name', 'Site', 'Week', 'Meal Charges (₱)', 'Caterer Status', 'Settlement Date'];
+        headers = [
+          'Employee ID',
+          'Worker Name',
+          'Site Code',
+          'Concessionaire Caterer',
+          'Canteen GCash No.',
+          'Cycle Week',
+          'Meal Deduction (₱)',
+          'GCash Payout Status',
+          'Settlement Reference',
+        ];
         rows = filteredDeductions
-          .filter((d) => d.canteen > 0)
+          .filter((d) => Number(d.canteen || 0) > 0)
           .map((d) => {
             const emp = employees.find((e) => e.employee_id === d.employee_id);
+            const siteObj = sites.find((s) => s.site_id === d.site_id);
+            const vendorName = siteObj?.canteen_vendor_name || 'Project Canteen Concessionaire';
+            const gcashNo = siteObj?.canteen_gcash_number || '09171234567';
+
+            // Check if GCash payout has been settled for this site
+            const sitePayouts = gcashTransactions.filter(
+              (tx) => tx.category === 'Site Canteen Payout' && tx.site_id === d.site_id && tx.status === 'COMPLETED'
+            );
+            const latestPayout = sitePayouts[0];
+            const payoutStatus = latestPayout ? 'GCash Settled' : 'Pending Direct Payout';
+            const payoutRef = latestPayout ? latestPayout.reference_no : 'Awaiting Authorization';
+
             return [
               d.employee_id,
               emp ? emp.name : d.employee_id,
               d.site_id,
+              vendorName,
+              gcashNo,
               d.week_key,
-              d.canteen.toFixed(2),
-              'Accredited Caterer Payout Due',
-              'Weekly Disbursement',
+              Number(d.canteen).toFixed(2),
+              payoutStatus,
+              payoutRef,
             ];
           });
         break;

@@ -41,6 +41,9 @@ export interface Site {
   notes: string;
   documents?: string;
   created_at: string;
+  canteen_vendor_name?: string;
+  canteen_gcash_number?: string;
+  canteen_contact_person?: string;
 }
 
 export interface AttendanceRecord {
@@ -426,7 +429,7 @@ export interface WeeklyPayrollApprovalDoc {
 export interface GCashTransactionRecord {
   transaction_id: string;
   reference_no: string;
-  category: 'Weekly Salary' | 'Site Operations (Fuel/Emergency)' | 'Subcontractor Spot Payment' | 'Materials Spot Cash';
+  category: 'Weekly Salary' | 'Site Operations (Fuel/Emergency)' | 'Subcontractor Spot Payment' | 'Materials Spot Cash' | 'Site Canteen Payout';
   site_id: string;
   site_name: string;
   recipient_name: string;

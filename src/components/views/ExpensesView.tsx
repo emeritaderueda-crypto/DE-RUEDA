@@ -110,6 +110,7 @@ export const ExpensesView: React.FC = () => {
             className="bg-[#13241f] border border-[#234338] rounded-lg px-2.5 py-1.5 text-xs text-white outline-none cursor-pointer"
           >
             <option value="ALL">All Expense Categories</option>
+            <option value="Canteen & Worker Meals">Canteen & Worker Meals</option>
             <option value="Equipment Rental">Equipment Rental</option>
             <option value="Fuel & Lubricants">Fuel & Lubricants</option>
             <option value="Permits & Licenses">Permits & Licenses</option>
@@ -202,6 +203,7 @@ export const ExpensesView: React.FC = () => {
                     className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white"
                   >
                     <option value="Equipment Rental">Equipment Rental (Crane/Backhoe)</option>
+                    <option value="Canteen & Worker Meals">Canteen & Worker Meals (Site Mess)</option>
                     <option value="Fuel & Lubricants">Fuel & Lubricants (Diesel)</option>
                     <option value="Permits & Licenses">Permits & Clearances</option>
                     <option value="Site Utilities">Site Utilities (Power/Water)</option>

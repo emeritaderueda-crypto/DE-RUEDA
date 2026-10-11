@@ -4,12 +4,12 @@ import { downloadCSV, downloadExcelXML, downloadWordDoc } from '../../utils/expo
 import { TrendingDown, Banknote, Download, FileSpreadsheet, FileText, Printer } from 'lucide-react';
 
 export const CashFlowView: React.FC = () => {
-  const { payroll, deductions, dtrWeeks } = useApp();
+  const { payroll, deductions, dtrWeeks, gcashTransactions } = useApp();
   const [selectedWeek, setSelectedWeek] = useState(dtrWeeks[0]?.week_key || '2026-W40');
 
   const filteredPayroll = payroll.filter((p) => selectedWeek === 'ALL' || p.week_key === selectedWeek);
   const filteredDeductions = deductions.filter(
-    (d) => (selectedWeek === 'ALL' || d.week_key === selectedWeek) && d.is_void === 0
+    (d) => (selectedWeek === 'ALL' || d.week_key === selectedWeek) && !d.is_void
   );
 
   const totalDisbursement = filteredPayroll.reduce((sum, p) => sum + p.net_pay, 0);
@@ -20,11 +20,15 @@ export const CashFlowView: React.FC = () => {
     .filter((p) => p.payment_method === 'Cash')
     .reduce((sum, p) => sum + p.net_pay, 0);
 
-  const totalCanteen = filteredDeductions.reduce((sum, d) => sum + d.canteen, 0);
-  const totalSss = filteredDeductions.reduce((sum, d) => sum + d.sss, 0);
-  const totalPhilhealth = filteredDeductions.reduce((sum, d) => sum + d.philhealth, 0);
-  const totalAdvances = filteredDeductions.reduce((sum, d) => sum + d.cash_advance, 0);
-  const totalOther = filteredDeductions.reduce((sum, d) => sum + d.other_deduction, 0);
+  const totalCanteen = filteredDeductions.reduce((sum, d) => sum + Number(d.canteen || 0), 0);
+  const siteCanteenDisbursed = gcashTransactions
+    .filter((tx) => tx.category === 'Site Canteen Payout' && tx.status === 'COMPLETED')
+    .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+
+  const totalSss = filteredDeductions.reduce((sum, d) => sum + Number(d.sss || 0), 0);
+  const totalPhilhealth = filteredDeductions.reduce((sum, d) => sum + Number(d.philhealth || 0), 0);
+  const totalAdvances = filteredDeductions.reduce((sum, d) => sum + Number(d.cash_advance || 0), 0);
+  const totalOther = filteredDeductions.reduce((sum, d) => sum + Number(d.other_deduction || 0), 0);
   const totalWithheld = totalCanteen + totalSss + totalPhilhealth + totalAdvances + totalOther;
 
   const handleExportCSV = () => {
@@ -194,7 +198,13 @@ export const CashFlowView: React.FC = () => {
               <td className="p-3 font-bold text-white">Canteen & Commissary Deductions</td>
               <td className="p-3"><span className="text-slate-400 font-semibold">Internal Withholding</span></td>
               <td className="p-3 text-right font-mono font-bold">₱{totalCanteen.toFixed(2)}</td>
-              <td className="p-3 text-slate-400 text-[11px]">Reimburses accredited site commissary and meal plan caterer.</td>
+              <td className="p-3 text-slate-400 text-[11px]">Withheld from worker wages to reimburse site canteen meals.</td>
+            </tr>
+            <tr>
+              <td className="p-3 font-bold text-lime-300">Canteen Concessionaire Settlements (GCash)</td>
+              <td className="p-3"><span className="text-lime-400 font-semibold">Vendor Outflow</span></td>
+              <td className="p-3 text-right font-mono font-bold text-emerald-400">₱{siteCanteenDisbursed.toFixed(2)}</td>
+              <td className="p-3 text-slate-400 text-[11px]">Direct automated electronic GCash payments disbursed to accredited canteen concessionaires.</td>
             </tr>
             <tr>
               <td className="p-3 font-bold text-white">SSS Mandatory Contributions</td>

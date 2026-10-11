@@ -179,12 +179,8 @@ export const MaterialsView: React.FC = () => {
                     <td className="p-3 text-[11px] text-slate-400 max-w-[200px] truncate">{m.notes || 'None'}</td>
                     <td className="p-3 text-right">
                       <button
-                        onClick={() => {
-                          if (confirm(`Archive material delivery ${m.material_id}?`)) {
-                            archiveMaterial(m.material_id);
-                          }
-                        }}
-                        className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-md"
+                        onClick={() => archiveMaterial(m.material_id)}
+                        className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-md cursor-pointer transition-colors"
                         title="Archive Delivery"
                       >
                         <Archive className="w-3.5 h-3.5" />

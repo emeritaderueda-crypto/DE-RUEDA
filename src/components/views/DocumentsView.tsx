@@ -276,23 +276,21 @@ export const DocumentsView: React.FC = () => {
   };
 
   const handleDisconnectDrive = () => {
-    if (confirm('Disconnect Google Drive subscription? Files in the system table will remain intact.')) {
-      updateSettings({
-        master_drive_link: '',
-        drive_subscription: {
-          is_registered: false,
-          plan: 'unregistered',
-          plan_name: 'Self-Service Registration Required',
-          storage_quota: 'Not registered',
-          account_email: '',
-          drive_folder_url: '',
-          gemini_enabled: false,
-          gemini_model: 'gemini-3.8-flash',
-          gemini_features: [],
-        },
-      });
-      addAuditLog('DISCONNECT_GDRIVE', 'GOOGLE_DRIVE', 'DISCONNECTED', 'Cleared drive link');
-    }
+    updateSettings({
+      master_drive_link: '',
+      drive_subscription: {
+        is_registered: false,
+        plan: 'unregistered',
+        plan_name: 'Self-Service Registration Required',
+        storage_quota: 'Not registered',
+        account_email: '',
+        drive_folder_url: '',
+        gemini_enabled: false,
+        gemini_model: 'gemini-3.8-flash',
+        gemini_features: [],
+      },
+    });
+    addAuditLog('DISCONNECT_GDRIVE', 'GOOGLE_DRIVE', 'DISCONNECTED', 'Cleared drive link');
   };
 
   const handleAddSubmit = (e: React.FormEvent) => {

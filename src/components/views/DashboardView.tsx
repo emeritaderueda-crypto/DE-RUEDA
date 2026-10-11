@@ -49,6 +49,7 @@ import {
   Stamp,
   Tractor,
   Wallet,
+  UtensilsCrossed,
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -825,13 +826,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           <button
             onClick={() => onNavigate('deductions')}
-            className="p-3 bg-[#13241f] border border-[#234338] hover:border-[#10b981] rounded-lg text-left transition-colors group"
+            className="p-3 bg-[#13241f] border border-[#234338] hover:border-[#10b981] rounded-lg text-left transition-colors group cursor-pointer"
           >
             <div className="text-xs font-semibold text-white group-hover:text-[#a3e635] flex items-center justify-between">
               <span>Deductions</span>
               <ArrowRight className="w-3.5 h-3.5 text-slate-500" />
             </div>
-            <div className="text-[10px] text-slate-400 mt-1">Canteen & advances</div>
+            <div className="text-[10px] text-slate-400 mt-1">SSS, PhilHealth & advances</div>
+          </button>
+
+          <button
+            onClick={() => onNavigate('canteen')}
+            className="p-3 bg-[#13241f] border border-[#234338] hover:border-lime-400 rounded-lg text-left transition-colors group cursor-pointer"
+          >
+            <div className="text-xs font-semibold text-white group-hover:text-lime-300 flex items-center justify-between">
+              <span>Canteen & GCash</span>
+              <UtensilsCrossed className="w-3.5 h-3.5 text-lime-400" />
+            </div>
+            <div className="text-[10px] text-slate-400 mt-1">Concessionaire & meals</div>
           </button>
 
           <button

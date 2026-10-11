@@ -72,6 +72,9 @@ export const INITIAL_SITES: Site[] = [
     notes: 'Structural steel framing and foundation works for 12,000 sqm warehouse.',
     documents: '[{"name": "Site 001 Building Permit", "url": "https://drive.google.com/drive/folders/SITE001-Permits", "type": "PDF"}]',
     created_at: '2026-10-06T09:56:23+08:00',
+    canteen_vendor_name: "Ate Maria's Mariveles Site Canteen",
+    canteen_gcash_number: '09171234567',
+    canteen_contact_person: 'Maria Santos',
   },
   {
     site_id: 'SITE-002',
@@ -85,6 +88,9 @@ export const INITIAL_SITES: Site[] = [
     notes: 'Three-storey retail and office commercial complex.',
     documents: '[{"name": "Subic Architectural Plans", "url": "https://drive.google.com/drive/folders/SITE002-Blueprints", "type": "Drive Folder"}]',
     created_at: '2026-10-06T09:56:23+08:00',
+    canteen_vendor_name: 'Subic Bay Construction Mess & Catering',
+    canteen_gcash_number: '09189876543',
+    canteen_contact_person: 'Teresita Gomez',
   },
   {
     site_id: 'SITE-003',
@@ -98,6 +104,9 @@ export const INITIAL_SITES: Site[] = [
     notes: '24 duplex residential housing units concrete casting and finishing.',
     documents: '[{"name": "Balanga Civil Works Contract", "url": "https://drive.google.com/drive/folders/SITE003-Contract", "type": "DOCX"}]',
     created_at: '2026-10-06T09:56:23+08:00',
+    canteen_vendor_name: 'Balanga Heights Worker Food Hub',
+    canteen_gcash_number: '09205551234',
+    canteen_contact_person: 'Luzviminda Cruz',
   },
 ];
 

@@ -1,6 +1,6 @@
 {
   "name": "De Rueda Construction ERP",
   "description": "Enterprise construction management software for De Rueda Construction, featuring real-time attendance QR, weekly DTR, payroll & cash flow, materials procurement, and internal messaging.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

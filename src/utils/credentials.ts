@@ -9,7 +9,7 @@ export interface RoleCredential {
 
 export const DEFAULT_CREDENTIALS: Record<AccessPointRole, RoleCredential> = {
   'ceo': {
-    password: 'DRC01',
+    password: 'Emerita0279',
     email: 'operations@deruedaconstruction.com',
     label: "CEO's Account",
     description: 'Executive Operations & Financial Oversight',

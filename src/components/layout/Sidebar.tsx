@@ -24,6 +24,7 @@ import {
   Shield,
   Lock,
   Wallet,
+  UtensilsCrossed,
 } from 'lucide-react';
 
 export type PageId =
@@ -34,6 +35,7 @@ export type PageId =
   | 'sites'
   | 'attendance'
   | 'deductions'
+  | 'canteen'
   | 'payroll'
   | 'cashflow'
   | 'payslips'
@@ -96,6 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'attendance' as PageId, label: 'Attendance / DTR', icon: Clock },
         { id: 'deductions' as PageId, label: 'Deductions & Advances', icon: BadgePercent },
+        { id: 'canteen' as PageId, label: 'Canteen & Meal Hub', icon: UtensilsCrossed, badge: 'GCASH' },
         { id: 'payroll' as PageId, label: 'Weekly Payroll', icon: Banknote },
         { id: 'cashflow' as PageId, label: 'Cash Flow Disbursements', icon: TrendingDown },
         { id: 'payslips' as PageId, label: 'Payslips Hub (6/Page)', icon: FileSpreadsheet },

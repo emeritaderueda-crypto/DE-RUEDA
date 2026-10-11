@@ -101,7 +101,7 @@ export const CeoPasswordModal: React.FC<CeoPasswordModalProps> = ({
                   setPassword(e.target.value);
                   if (error) setError(null);
                 }}
-                placeholder="Enter passphrase..."
+                placeholder="Enter passkey (Emerita0279)..."
                 className="w-full px-3.5 py-2.5 bg-[#080f0d] border border-[#234338] focus:border-amber-400 rounded-xl text-white font-mono text-sm placeholder:text-slate-600 focus:outline-none transition-colors pr-10"
               />
               <button

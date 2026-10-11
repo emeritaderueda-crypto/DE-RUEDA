@@ -27,6 +27,7 @@ import { PublicWebsiteView } from './components/views/PublicWebsiteView';
 import { LandingPagePreviewView } from './components/views/LandingPagePreviewView';
 import { CeoMonitoringView } from './components/views/CeoMonitoringView';
 import { CeoGcashDashboardView } from './components/views/CeoGcashDashboardView';
+import { CanteenView } from './components/views/CanteenView';
 
 const MainAppContent: React.FC = () => {
   const { currentUser, logout } = useApp();
@@ -149,6 +150,8 @@ const MainAppContent: React.FC = () => {
         return <AttendanceView />;
       case 'deductions':
         return <DeductionsView />;
+      case 'canteen':
+        return <CanteenView onNavigate={handleNavigate} />;
       case 'payroll':
         return <PayrollView onOpenSinglePayslip={handleOpenSinglePayslip} />;
       case 'cashflow':

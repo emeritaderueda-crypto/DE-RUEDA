@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { PageId } from '../layout/Sidebar';
-import { Search, Users, Building, Banknote, Package, Receipt, FileText, X } from 'lucide-react';
+import { Search, Users, Building, Banknote, Package, Receipt, FileText, UtensilsCrossed, X } from 'lucide-react';
 
 interface GlobalSearchModalProps {
   isOpen: boolean;
@@ -11,7 +11,7 @@ interface GlobalSearchModalProps {
 
 interface SearchResult {
   id: string;
-  category: 'employee' | 'site' | 'payroll' | 'material' | 'expense' | 'document';
+  category: 'employee' | 'site' | 'payroll' | 'material' | 'expense' | 'document' | 'canteen';
   title: string;
   subtitle: string;
   page: PageId;
@@ -138,6 +138,28 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         });
       }
     });
+
+    // Search Canteen & Concessionaires
+    sites.forEach((s) => {
+      const vendor = s.canteen_vendor_name || `${s.name} Canteen`;
+      const gcash = s.canteen_gcash_number || '09171234567';
+      if (
+        vendor.toLowerCase().includes(q) ||
+        gcash.includes(q) ||
+        'canteen'.includes(q) ||
+        'meal'.includes(q) ||
+        'food'.includes(q) ||
+        'mess'.includes(q)
+      ) {
+        results.push({
+          id: `canteen-${s.site_id}`,
+          category: 'canteen',
+          title: `Canteen: ${vendor} (${s.code})`,
+          subtitle: `GCash: ${gcash} • Contact: ${s.canteen_contact_person || 'Manager'} • ${s.name}`,
+          page: 'canteen',
+        });
+      }
+    });
   }
 
   const getCategoryIcon = (cat: SearchResult['category']) => {
@@ -146,6 +168,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         return <Users className="w-4 h-4 text-[#10b981]" />;
       case 'site':
         return <Building className="w-4 h-4 text-[#a3e635]" />;
+      case 'canteen':
+        return <UtensilsCrossed className="w-4 h-4 text-lime-400" />;
       case 'payroll':
         return <Banknote className="w-4 h-4 text-emerald-400" />;
       case 'material':
