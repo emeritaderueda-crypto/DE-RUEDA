@@ -444,3 +444,123 @@ export interface GCashTransactionRecord {
   timestamp: string;
 }
 
+export interface CanteenMenuItem {
+  id: string;
+  name: string;
+  meal_type: 'Breakfast' | 'Lunch' | 'Dinner' | 'Heavy Pack' | 'Weekly Bundle';
+  price: number;
+  description: string;
+  sanitary_certified: boolean;
+  serving_window: string;
+}
+
+export interface PendingOfflineCanteenRecord {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  site_id: string;
+  week_key: string;
+  amount: number;
+  payment_method?: 'GCash' | 'Cash';
+  notes: string;
+  created_at: string;
+  status: 'PENDING_SYNC' | 'SYNCED' | 'FAILED';
+  storage_type?: 'IndexedDB' | 'localStorage';
+  error_reason?: string;
+  failed_at?: string;
+  retry_count?: number;
+  requires_manual_action?: boolean;
+}
+
+export interface CanteenSyncStatusInfo {
+  pendingCount: number;
+  failedCount: number;
+  totalPendingAmount: number;
+  isSyncing: boolean;
+  lastSyncAt: string | null;
+  lastSyncStatus: 'SUCCESS' | 'PARTIAL' | 'FAILED' | 'IDLE';
+  manualActionRequired: boolean;
+  failedRecords: PendingOfflineCanteenRecord[];
+}
+
+export interface GeminiCopilotFileAttachment {
+  filename: string;
+  file_type: 'csv' | 'xlsx' | 'pdf' | 'svg' | 'json' | 'doc' | 'txt';
+  label: string;
+  content?: string;
+  dataUrl?: string;
+  rows?: (string | number)[][];
+  mime_type?: string;
+  summary?: string;
+}
+
+export interface GeminiCopilotActionExecuted {
+  action_type:
+    | 'CHECK_ATTENDANCE'
+    | 'RECORD_ATTENDANCE'
+    | 'CORRECT_ATTENDANCE'
+    | 'ADD_CANTEEN_STIPEND'
+    | 'RETRY_CANTEEN_SYNC'
+    | 'RESOLVE_FAILED_CANTEEN_RECORD'
+    | 'UPDATE_EMPLOYEE'
+    | 'ADD_EXPENSE'
+    | 'ADD_MATERIAL'
+    | 'UPDATE_SETTINGS'
+    | 'EXPORT_REPORT';
+  target: string;
+  details: string;
+  timestamp: string;
+  success: boolean;
+}
+
+export interface GeminiChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+  actions_executed?: GeminiCopilotActionExecuted[];
+  files_generated?: GeminiCopilotFileAttachment[];
+  attendance_summary?: {
+    date: string;
+    site_name: string;
+    total_present: number;
+    total_absent: number;
+    total_late: number;
+    total_hours: number;
+    records: Array<{
+      employee_id: string;
+      name: string;
+      status: string;
+      time_in: string;
+      time_out: string;
+      total_hours: number;
+      overtime_hours: number;
+    }>;
+  };
+}
+
+
+export interface CanteenAggregationWorkerLine {
+  employee_id: string;
+  name: string;
+  position: string;
+  canteen_deduction: number;
+  week_key: string;
+  notes?: string;
+}
+
+export interface CanteenAggregationSiteSummary {
+  site_id: string;
+  site_code: string;
+  site_name: string;
+  location: string;
+  vendor_name: string;
+  gcash_number: string;
+  contact_person: string;
+  worker_count: number;
+  total_meal_deductions: number;
+  total_gcash_settled: number;
+  net_outstanding_balance: number;
+  workers: CanteenAggregationWorkerLine[];
+}
+

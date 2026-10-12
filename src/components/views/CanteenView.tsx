@@ -3,11 +3,15 @@ import { useApp } from '../../context/AppContext';
 import { Site, Employee, DeductionRecord, GCashTransactionRecord } from '../../types';
 import { PageId } from '../layout/Sidebar';
 import { CanteenGcashPayoutModal } from '../modals/CanteenGcashPayoutModal';
+import { CanteenOfflineQueueModal } from '../modals/CanteenOfflineQueueModal';
+import { TurnstileQrScannerModal } from '../modals/TurnstileQrScannerModal';
 import {
   UtensilsCrossed,
   Smartphone,
   CheckCircle2,
   AlertCircle,
+  Wifi,
+  WifiOff,
   Building,
   Users,
   DollarSign,
@@ -38,6 +42,7 @@ import {
   QrCode,
   Trash2,
   Calculator,
+  Camera,
 } from 'lucide-react';
 import { generateSvgQRCode } from '../../utils/qrGenerator';
 
@@ -60,7 +65,15 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
     addBatchDeductions,
     sendGcashDisbursement,
     dtrWeeks,
+    isOnline,
+    pendingOfflineCanteenQueue,
+    addOfflineCanteenCharge,
+    removePendingOfflineRecord,
+    syncPendingCanteenQueue,
   } = useApp();
+
+  const [isOfflineQueueModalOpen, setIsOfflineQueueModalOpen] = useState(false);
+
 
   // Site Filter State (defaults to current active site or first site)
   const [selectedSiteId, setSelectedSiteId] = useState<string>(
@@ -79,6 +92,8 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
 
   // Modal States
   const [isCanteenPayoutModalOpen, setIsCanteenPayoutModalOpen] = useState(false);
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
+  const [collectionPaymentMethod, setCollectionPaymentMethod] = useState<'GCash' | 'Cash'>('GCash');
   const [editingWorkerDeduction, setEditingWorkerDeduction] = useState<{
     employee: Employee;
     existingDeduction?: DeductionRecord;
@@ -336,13 +351,34 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
     }
   };
 
-  // Save Worker Meal Deduction
+  // Save Worker Weekly Canteen Stipend Collection
   const handleSaveWorkerMeal = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingWorkerDeduction) return;
 
     const { employee, existingDeduction, amount, notes } = editingWorkerDeduction;
-    const notesText = notes?.trim() || `Canteen meal charges (${selectedWeek})`;
+    const targetWeek = existingDeduction ? existingDeduction.week_key : (selectedWeek === 'ALL' ? '2026-W41' : selectedWeek);
+    const notesText = notes?.trim() || `Weekly canteen stipend (${collectionPaymentMethod}) - ${targetWeek}`;
+
+    // If offline, store locally in IndexedDB with auto-sync capability
+    if (!isOnline) {
+      addOfflineCanteenCharge({
+        employee_id: employee.employee_id,
+        employee_name: employee.name,
+        site_id: employee.site_id,
+        week_key: targetWeek,
+        amount: Math.max(0, Number(amount || 0)),
+        payment_method: collectionPaymentMethod,
+        notes: notesText,
+      });
+
+      setEditingWorkerDeduction(null);
+      setNotificationMsg(
+        `Offline weekly canteen stipend (₱${Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}) saved locally to IndexedDB for ${employee.name}. Will automatically sync once connectivity is detected!`
+      );
+      setTimeout(() => setNotificationMsg(null), 6000);
+      return;
+    }
 
     if (existingDeduction) {
       // addDeduction automatically updates and replaces existing record for the same employee and week
@@ -361,7 +397,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
       // Create new deduction record for this week
       addDeduction({
         employee_id: employee.employee_id,
-        week_key: selectedWeek === 'ALL' ? '2026-W41' : selectedWeek,
+        week_key: targetWeek,
         site_id: employee.site_id,
         canteen: Math.max(0, Number(amount || 0)),
         sss: 0,
@@ -373,7 +409,9 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
     }
 
     setEditingWorkerDeduction(null);
-    setNotificationMsg(`Updated weekly canteen deduction for ${employee.name} (₱${Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}).`);
+    setNotificationMsg(
+      `Updated weekly canteen stipend for ${employee.name} (₱${Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}) via ${collectionPaymentMethod}.`
+    );
     setTimeout(() => setNotificationMsg(null), 5000);
   };
 
@@ -463,6 +501,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
   };
 
   // Export Canteen Data to CSV
+
   const handleExportCSV = () => {
     const rows = [
       ['DE RUEDA CONSTRUCTION - SITE CANTEEN & MEAL SETTLEMENT LEDGER'],
@@ -507,6 +546,27 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
 
   return (
     <div className="space-y-5 animate-in fade-in duration-150">
+      {/* Offline Site Network Alert Banner */}
+      {!isOnline && (
+        <div className="p-3.5 bg-amber-950/40 border border-amber-500/40 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-200 no-print animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <WifiOff className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+            <div>
+              <span className="font-bold text-white">Site Offline — Local Stipend Queue Active.</span>{' '}
+              <span className="text-amber-300/90">
+                Stipend collections are cached via Service Worker. Stipend entries are safely stored in local queue ({pendingOfflineCanteenQueue.length} pending) and will auto-sync upon reconnection.
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsOfflineQueueModalOpen(true)}
+            className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 hover:text-white rounded-lg font-bold text-xs shrink-0 cursor-pointer self-start sm:self-auto"
+          >
+            View Queue ({pendingOfflineCanteenQueue.length})
+          </button>
+        </div>
+      )}
+
       {/* Module Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -516,13 +576,13 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
-                Site Canteen &amp; Meal Management
+                Weekly Canteen Stipend Collection &amp; GCash Payout
                 <span className="text-[10px] font-mono font-bold bg-[#a3e635] text-[#080f0d] px-2 py-0.5 rounded-full uppercase">
-                  GCASH GATEWAY
+                  GCASH &bull; CASH FLOAT
                 </span>
               </h1>
               <p className="text-xs text-slate-400 mt-0.5">
-                Site concessionaire GCash disbursements, employee meal deductions, and automated project accounting
+                Weekly canteen stipend collection (GCash or Cash) per site and automated concessionaire disbursement
               </p>
             </div>
           </div>
@@ -530,28 +590,51 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
 
         {/* Global Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          {/* Offline Pending Queue Button */}
+          <button
+            onClick={() => setIsOfflineQueueModalOpen(true)}
+            className={`px-3 py-2 border rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+              pendingOfflineCanteenQueue.length > 0
+                ? 'bg-amber-500/20 border-amber-500 text-amber-300 animate-pulse'
+                : 'bg-[#13241f] border-[#234338] text-slate-300 hover:text-white'
+            }`}
+            title="Inspect pending offline canteen meal records"
+          >
+            <Clock className="w-3.5 h-3.5 text-amber-400" />
+            <span>Offline Queue ({pendingOfflineCanteenQueue.length})</span>
+          </button>
+
+          <button
+            onClick={() => setIsQrScannerOpen(true)}
+            className="px-3.5 py-2 bg-[#13241f] border border-[#234338] hover:border-lime-400 text-lime-300 hover:text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+            title="Scan Worker QR Badge with device camera to record weekly stipend collection"
+          >
+            <Camera className="w-3.5 h-3.5 text-lime-400" />
+            <span>Scan Worker QR</span>
+          </button>
+
           <button
             onClick={() => setIsBatchMealModalOpen(true)}
             className="px-3.5 py-2 bg-[#13241f] border border-[#234338] hover:border-lime-400 text-lime-300 hover:text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-            title="Batch Apply Standard Meal Deductions"
+            title="Batch Apply Weekly Canteen Stipend Collection"
           >
             <Sparkles className="w-3.5 h-3.5 text-lime-400" />
-            <span>Batch Meal Entry</span>
+            <span>Batch Stipend Entry</span>
           </button>
 
           <button
             onClick={() => setIsPrintSheetOpen(true)}
             className="px-3.5 py-2 bg-[#13241f] border border-[#234338] hover:border-sky-400 text-sky-300 hover:text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-            title="Print Physical Meal Signoff Voucher for Concessionaire"
+            title="Print Physical Stipend Signoff Voucher for Site Concessionaire"
           >
             <Printer className="w-3.5 h-3.5 text-sky-400" />
-            <span>Print Signoff Sheet</span>
+            <span>Print Stipend Sheet</span>
           </button>
 
           <button
             onClick={handleExportCSV}
             className="px-3 py-2 bg-[#13241f] border border-[#234338] hover:border-slate-500 text-slate-200 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Export Canteen Ledger to CSV"
+            title="Export Canteen Stipend Ledger to CSV"
           >
             <Download className="w-3.5 h-3.5 text-lime-400" />
             <span>Export CSV</span>
@@ -636,7 +719,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
         {/* Metric 1: Worker Deductions Collected */}
         <div className="p-4 bg-[#0e1a16] border border-[#234338] rounded-xl flex flex-col justify-between shadow-sm">
           <div className="flex items-center justify-between text-xs text-slate-400">
-            <span className="font-bold uppercase tracking-wider text-[10px]">Worker Meal Deductions</span>
+            <span className="font-bold uppercase tracking-wider text-[10px]">Weekly Canteen Stipend Collected</span>
             <Users className="w-4 h-4 text-sky-400" />
           </div>
           <div className="mt-2">
@@ -838,35 +921,41 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                   </div>
                 </div>
 
-                {/* Concessionaire Menu Standards & Sanitary Compliance */}
+                {/* Concessionaire Weekly Stipend Protocol & Payout Linkage */}
                 <div className="p-3 bg-[#13241f] border border-[#234338] rounded-xl space-y-2 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] uppercase font-bold text-slate-400">Accredited Pricing &amp; Menu</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Weekly Canteen Stipend Collection Protocol</span>
                     <span className="text-[9px] font-mono text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/30">
-                      DOLE SANITATION PASSED
+                      GCASH &bull; CASH FLOAT
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    <div className="bg-[#080f0d] p-1.5 rounded border border-[#234338]">
-                      <span className="text-slate-400 block text-[9px] uppercase">Breakfast Meal</span>
-                      <strong className="text-white font-mono">₱40.00 / meal</strong>
+
+                  <div className="space-y-2 text-[11px] text-slate-300">
+                    <div className="bg-[#080f0d] p-2.5 rounded-lg border border-[#234338] space-y-1">
+                      <div className="text-white font-bold flex items-center justify-between">
+                        <span>Weekly Stipend Basis</span>
+                        <span className="text-lime-400 font-mono font-bold">₱350 - ₱700 / wk</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-relaxed">
+                        Collected on-site every payroll cycle via worker payroll deduction, then directly disbursed to the accredited site canteen concessionaire via GCash or Cash Float.
+                      </p>
                     </div>
-                    <div className="bg-[#080f0d] p-1.5 rounded border border-[#234338]">
-                      <span className="text-slate-400 block text-[9px] uppercase">Standard Lunch</span>
-                      <strong className="text-lime-300 font-mono">₱70.00 / meal</strong>
-                    </div>
-                    <div className="bg-[#080f0d] p-1.5 rounded border border-[#234338]">
-                      <span className="text-slate-400 block text-[9px] uppercase">Overtime Dinner</span>
-                      <strong className="text-white font-mono">₱60.00 / meal</strong>
-                    </div>
-                    <div className="bg-[#080f0d] p-1.5 rounded border border-[#234338]">
-                      <span className="text-slate-400 block text-[9px] uppercase">Heavy Shift Extra</span>
-                      <strong className="text-amber-300 font-mono">₱100.00 / pack</strong>
+
+                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                      <div className="bg-[#080f0d] p-2 rounded-lg border border-[#234338]">
+                        <span className="text-slate-400 block font-semibold">Collection Channel</span>
+                        <span className="text-sky-300 font-bold font-mono">Payroll Deduction</span>
+                      </div>
+                      <div className="bg-[#080f0d] p-2 rounded-lg border border-[#234338]">
+                        <span className="text-slate-400 block font-semibold">Concessionaire Payout</span>
+                        <span className="text-emerald-400 font-bold font-mono">GCash / Cash Float</span>
+                      </div>
                     </div>
                   </div>
-                  <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1">
-                    <span>Serving Hours: 06:00 - 19:30</span>
-                    <span className="text-emerald-400 font-mono text-[9px]">SANITARY-BTN-2026</span>
+
+                  <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-[#234338]/40">
+                    <span>Reconciliation Cycle: Weekly</span>
+                    <span className="text-emerald-400 font-mono text-[9px]">100% AUDIT READY</span>
                   </div>
                 </div>
               </div>
@@ -1067,7 +1156,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
             <Users className="w-4 h-4 text-[#a3e635]" />
             <div>
               <h3 className="text-sm font-bold text-white uppercase tracking-tight">
-                Worker Meal Deductions &amp; Allowance Ledger
+                Worker Weekly Canteen Stipend Collection Ledger
               </h3>
               <p className="text-[11px] text-slate-400">
                 {siteWorkers.length} workers shown of {baseSiteWorkers.length} active on {selectedSite ? selectedSite.name : 'All Sites'} ({selectedWeek})
@@ -1304,10 +1393,10 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                             type="button"
                             onClick={() => setMealPassWorker(emp)}
                             className="px-2 py-1 bg-lime-500/10 hover:bg-lime-500/20 border border-lime-500/30 text-lime-300 rounded-md text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                            title="Generate / Print Digital Canteen Meal Pass"
+                            title="Generate / Print Digital Canteen Stipend Pass"
                           >
                             <QrCode className="w-3 h-3 text-lime-400" />
-                            <span>Pass</span>
+                            <span>Stipend Pass</span>
                           </button>
                         </div>
                       </td>
@@ -1422,7 +1511,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
             <div className="flex items-center justify-between pb-3 border-b border-[#234338]">
               <div className="flex items-center gap-2">
                 <UtensilsCrossed className="w-4 h-4 text-lime-400" />
-                <h3 className="text-sm font-bold text-white">Record Worker Meal Charge</h3>
+                <h3 className="text-sm font-bold text-white">Record Weekly Canteen Stipend Collection</h3>
               </div>
               <button
                 onClick={() => setEditingWorkerDeduction(null)}
@@ -1446,16 +1535,16 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
               {/* Quick Preset Buttons */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
-                  Quick Meal Presets
+                  Weekly Canteen Stipend Presets
                 </label>
                 <div className="grid grid-cols-3 gap-1.5">
                   {[
-                    { amount: 70, label: '1 Day Lunch' },
-                    { amount: 210, label: '3 Days Lunch' },
-                    { amount: 350, label: '5 Days Lunch' },
-                    { amount: 420, label: '6 Days Lunch' },
-                    { amount: 500, label: '5D Lunch+Bkfst' },
-                    { amount: 700, label: '7D Full Overtime' },
+                    { amount: 150, label: 'Partial Stipend' },
+                    { amount: 350, label: 'Standard 5-Day' },
+                    { amount: 420, label: '6-Day Shift' },
+                    { amount: 500, label: 'Extended Shift' },
+                    { amount: 600, label: 'High-Allowance' },
+                    { amount: 700, label: 'Full 7-Day Pack' },
                   ].map((p) => (
                     <button
                       key={p.amount}
@@ -1464,7 +1553,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                         setEditingWorkerDeduction({
                           ...editingWorkerDeduction,
                           amount: p.amount,
-                          notes: `${p.label} @ accredited canteen`,
+                          notes: `${p.label} weekly canteen stipend`,
                         })
                       }
                       className={`py-1.5 px-2 rounded-lg border text-center transition-all cursor-pointer ${
@@ -1484,7 +1573,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-[11px] font-bold text-slate-300 uppercase">
-                    Canteen Deduction Amount (₱ PHP) *
+                    Weekly Canteen Stipend Amount (₱ PHP) *
                   </label>
                   {editingWorkerDeduction.amount > 0 && (
                     <button
@@ -1493,7 +1582,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                         setEditingWorkerDeduction({
                           ...editingWorkerDeduction,
                           amount: 0,
-                          notes: 'Meal charge cleared',
+                          notes: 'Canteen stipend cleared',
                         })
                       }
                       className="text-[10px] text-red-400 hover:underline flex items-center gap-1 cursor-pointer"
@@ -1525,10 +1614,50 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                 </div>
               </div>
 
+              {/* Collection Payment Method */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                  Collection Method *
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCollectionPaymentMethod('GCash')}
+                    className={`py-2 px-3 rounded-lg border font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                      collectionPaymentMethod === 'GCash'
+                        ? 'bg-sky-500/20 border-sky-400 text-sky-300 shadow-xs'
+                        : 'bg-[#080f0d] border-[#234338] text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Smartphone className="w-3.5 h-3.5 text-sky-400" />
+                    <span>GCash Collection</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCollectionPaymentMethod('Cash')}
+                    className={`py-2 px-3 rounded-lg border font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                      collectionPaymentMethod === 'Cash'
+                        ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-xs'
+                        : 'bg-[#080f0d] border-[#234338] text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Wallet className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Cash Float</span>
+                  </button>
+                </div>
+              </div>
+
+              {!isOnline && (
+                <div className="p-2.5 bg-amber-950/40 border border-amber-500/30 rounded-lg text-[10px] text-amber-200 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Offline Mode: Will save locally to IndexedDB and automatically sync once connectivity is detected.</span>
+                </div>
+              )}
+
               {/* Notes */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
-                  Meal Billing Details / Notes
+                  Stipend Notes / Collection Memo
                 </label>
                 <input
                   type="text"
@@ -1539,7 +1668,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                       notes: e.target.value,
                     })
                   }
-                  placeholder="e.g. 5 days lunch meal allowance at site mess"
+                  placeholder="e.g. Standard weekly canteen stipend for site mess"
                   className="w-full px-3 py-2 bg-[#080f0d] border border-[#234338] rounded-lg text-white text-xs focus:outline-none focus:border-lime-400"
                 />
               </div>
@@ -1556,7 +1685,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                   type="submit"
                   className="px-4 py-2 bg-[#a3e635] text-[#080f0d] font-bold rounded-lg hover:bg-[#84cc16] cursor-pointer shadow-md"
                 >
-                  Save Deduction
+                  Save Stipend Collection
                 </button>
               </div>
             </form>
@@ -1571,7 +1700,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
             <div className="flex items-center justify-between pb-3 border-b border-[#234338] no-print">
               <div className="flex items-center gap-2">
                 <QrCode className="w-4 h-4 text-lime-400" />
-                <h3 className="text-sm font-bold text-white">Worker Canteen Meal Chit Pass</h3>
+                <h3 className="text-sm font-bold text-white">Worker Weekly Canteen Stipend Pass</h3>
               </div>
               <button
                 onClick={() => setMealPassWorker(null)}
@@ -1588,7 +1717,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                   DE RUEDA CONSTRUCTION MANAGEMENT
                 </div>
                 <div className="text-sm font-black text-slate-950 uppercase mt-0.5">
-                  OFFICIAL SITE CANTEEN MEAL PASS
+                  OFFICIAL WEEKLY CANTEEN STIPEND PASS
                 </div>
                 <div className="text-[9px] text-slate-500 font-mono">
                   Cycle: {selectedWeek === 'ALL' ? '2026-W41' : selectedWeek} &bull; {mealPassWorker.site_id}
@@ -1601,7 +1730,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                   dangerouslySetInnerHTML={{
                     __html: generateSvgQRCode(
                       JSON.stringify({
-                        type: 'CANTEEN_PASS',
+                        type: 'CANTEEN_STIPEND_PASS',
                         employee_id: mealPassWorker.employee_id,
                         week_key: selectedWeek,
                         site_id: mealPassWorker.site_id,
@@ -1636,7 +1765,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                   <div className="pt-3 space-y-2 text-xs">
                     <div className="flex items-center justify-between bg-slate-50 p-2 rounded border border-slate-200">
                       <span className="text-[10px] font-bold text-slate-600 uppercase">
-                        Weekly Meal Deduction Value:
+                        Weekly Canteen Stipend Collected:
                       </span>
                       <span className="font-mono font-black text-sm text-slate-950">
                         ₱{mealVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
@@ -1644,11 +1773,11 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                     </div>
 
                     <div className="text-[9px] text-slate-500 leading-tight text-center">
-                      Present at site mess hall or accredited canteen counter. Scannable via turnstile or handheld scanner.
+                      Official weekly canteen stipend verification voucher. Accredited for site concessionaire settlement.
                     </div>
 
                     <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-[8px] text-slate-400 font-mono">
-                      <span>CONCESSIONAIRE: {selectedSite?.canteen_vendor_name || 'SITE MESS'}</span>
+                      <span>CONCESSIONAIRE: {selectedSite?.canteen_vendor_name || 'SITE CANTEEN'}</span>
                       <span>AUDIT COMPLIANT</span>
                     </div>
                   </div>
@@ -1687,9 +1816,9 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                   <Sparkles className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">Batch Apply Canteen Meal Deductions</h3>
+                  <h3 className="text-sm font-bold text-white">Batch Apply Weekly Canteen Stipend Collection</h3>
                   <p className="text-[10px] text-slate-400">
-                    Quickly assign standardized meal allowances or daily charges across the workforce
+                    Quickly assign weekly canteen stipend deductions across active workers for site concessionaire payout
                   </p>
                 </div>
               </div>
@@ -1714,17 +1843,17 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
             </div>
 
             <form onSubmit={handleApplyBatchMeals} className="space-y-4 text-xs">
-              {/* Standard Meal Package Presets */}
+              {/* Standard Stipend Package Presets */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1.5">
-                  Standard Meal Package Presets
+                  Standard Weekly Stipend Presets
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
                     { amount: 350, label: '5-Day (₱70/day)' },
-                    { amount: 500, label: '5-Day (₱100/day)' },
+                    { amount: 420, label: '6-Day (₱70/day)' },
+                    { amount: 500, label: '5-Day Extended' },
                     { amount: 700, label: '7-Day (₱100/day)' },
-                    { amount: 1050, label: 'Heavy (₱150/day)' },
                   ].map((preset) => (
                     <button
                       key={preset.amount}
@@ -1743,55 +1872,32 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                 </div>
               </div>
 
-              {/* Quick Days x Menu Calculator */}
+              {/* Quick Stipend Calculator */}
               <div className="p-3 bg-[#13241f] border border-[#234338] rounded-xl space-y-2">
                 <div className="flex items-center justify-between text-[11px] font-bold text-slate-300 uppercase">
-                  <span>Quick Days &times; Menu Calculator</span>
+                  <span>Weekly Stipend Multiplier</span>
                   <span className="text-lime-400 font-mono text-[10px]">Instant Auto-Fill</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[10px] text-slate-400 mr-1">Shift Days:</span>
+                  <span className="text-[10px] text-slate-400 mr-1">Shift Days (₱70/day):</span>
                   {[1, 2, 3, 5, 6, 7].map((days) => (
                     <button
                       key={days}
                       type="button"
                       onClick={() => setBatchMealAmount(days * 70)}
                       className="px-2 py-1 rounded bg-[#080f0d] border border-[#234338] hover:border-lime-400 text-slate-300 hover:text-white text-[10px] font-mono cursor-pointer"
-                      title={`${days} days lunch @ ₱70`}
+                      title={`${days} days stipend @ ₱70`}
                     >
                       {days}d (₱{days * 70})
                     </button>
                   ))}
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-[#234338]/40">
-                  <span className="text-[10px] text-slate-400 mr-1">Diet Pack:</span>
-                  {[
-                    { name: '5d Bkfst (₱200)', val: 200 },
-                    { name: '5d Standard (₱350)', val: 350 },
-                    { name: '5d Lunch+Bkfst (₱550)', val: 550 },
-                    { name: '6d Lunch (₱420)', val: 420 },
-                    { name: '7d Heavy (₱1,050)', val: 1050 },
-                  ].map((pkg) => (
-                    <button
-                      key={pkg.name}
-                      type="button"
-                      onClick={() => setBatchMealAmount(pkg.val)}
-                      className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-all cursor-pointer ${
-                        batchMealAmount === pkg.val
-                          ? 'bg-lime-400/20 text-lime-300 border-lime-400'
-                          : 'bg-[#080f0d] text-slate-300 border-[#234338] hover:text-white'
-                      }`}
-                    >
-                      {pkg.name}
-                    </button>
-                  ))}
-                </div>
               </div>
 
-              {/* Custom Deduction Input */}
+              {/* Custom Stipend Input */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
-                  Or Custom Meal Charge (₱ PHP) *
+                  Or Custom Weekly Stipend Amount (₱ PHP) *
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono font-bold text-xs">
@@ -1837,7 +1943,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                       className="text-lime-400"
                     />
                     <span className="text-slate-200">
-                      Only Workers with Zero Charges Currently (<strong>{workersWithoutMealsCount} workers</strong>)
+                      Only Workers with Zero Stipend Currently (<strong>{workersWithoutMealsCount} workers</strong>)
                     </span>
                   </label>
 
@@ -1859,20 +1965,20 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
               {/* Memo */}
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
-                  Batch Ledger Memo
+                  Batch Stipend Memo
                 </label>
                 <input
                   type="text"
                   value={batchMemo}
                   onChange={(e) => setBatchMemo(e.target.value)}
-                  placeholder="e.g. Weekly Canteen Meal Credit Pack"
+                  placeholder="e.g. Standard weekly canteen stipend for site mess"
                   className="w-full px-3 py-2 bg-[#080f0d] border border-[#234338] rounded-lg text-white text-xs focus:outline-none focus:border-lime-400"
                 />
               </div>
 
               {/* Confirmation Preview */}
               <div className="p-2.5 bg-[#080f0d] border border-lime-500/30 rounded-lg text-[11px] text-lime-300 flex items-center justify-between">
-                <span>Total Expected Deduction:</span>
+                <span>Total Expected Collection:</span>
                 <span className="font-mono font-bold text-sm text-white">
                   ₱
                   {(
@@ -1898,7 +2004,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                   type="submit"
                   className="px-4 py-2 bg-[#a3e635] text-[#080f0d] font-bold rounded-lg hover:bg-[#84cc16] cursor-pointer shadow-md"
                 >
-                  Confirm &amp; Apply Batch Meals
+                  Confirm &amp; Apply Batch Stipends
                 </button>
               </div>
             </form>
@@ -1916,10 +2022,10 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                 <Printer className="w-5 h-5 text-sky-400" />
                 <div>
                   <h3 className="text-base font-bold text-white">
-                    Printable Canteen Concessionaire Meal Sheet
+                    Printable Canteen Stipend Collection &amp; Signoff Sheet
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Official billing voucher and physical signature sheet for concessionaire payout
+                    Official weekly canteen stipend collection voucher and physical signature sheet for concessionaire payout
                   </p>
                 </div>
               </div>
@@ -1949,10 +2055,10 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                   DE RUEDA CONSTRUCTION MANAGEMENT SYSTEM
                 </div>
                 <h1 className="text-xl sm:text-2xl font-black text-slate-950 mt-1 uppercase tracking-tight">
-                  SITE CANTEEN MEAL CONSUMPTION &amp; BILLING SHEET
+                  WEEKLY CANTEEN STIPEND COLLECTION &amp; DISBURSEMENT SHEET
                 </h1>
                 <div className="text-xs text-slate-600 mt-1">
-                  Central Luzon Operations &bull; Concessionaire Settlement Ledger
+                  Central Luzon Operations &bull; Site Concessionaire Settlement Ledger
                 </div>
               </div>
 
@@ -2061,7 +2167,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
               {/* Settlement Summary Statement */}
               <div className="mt-4 p-3 bg-slate-50 border border-slate-300 rounded-lg text-xs grid grid-cols-3 gap-3 text-center">
                 <div>
-                  <div className="text-[10px] uppercase text-slate-500 font-semibold">Total Meal Billing</div>
+                  <div className="text-[10px] uppercase text-slate-500 font-semibold">Total Stipends Collected</div>
                   <div className="font-mono font-bold text-slate-900 mt-0.5">
                     ₱{siteTotalCanteenDeductions.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </div>
@@ -2123,6 +2229,40 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
           }}
         />
       )}
+
+
+
+      {/* Canteen Offline Queue Drawer / Modal */}
+      <CanteenOfflineQueueModal
+        isOpen={isOfflineQueueModalOpen}
+        onClose={() => setIsOfflineQueueModalOpen(false)}
+      />
+
+      {/* Canteen QR Badge Camera Scanner Modal */}
+      <TurnstileQrScannerModal
+        isOpen={isQrScannerOpen}
+        onClose={() => setIsQrScannerOpen(false)}
+        targetSiteId={selectedSiteId}
+        customTitle="Scan Worker QR Badge - Weekly Canteen Stipend"
+        customDescription="Point device camera at worker badge to instantly load their weekly canteen stipend record"
+        onScanEmployee={(scannedEmp) => {
+          setIsQrScannerOpen(false);
+          const currentWeekDed = deductions.find(
+            (d) =>
+              d.employee_id === scannedEmp.employee_id &&
+              (selectedWeek === 'ALL' || d.week_key === selectedWeek) &&
+              !d.is_void
+          );
+          setEditingWorkerDeduction({
+            employee: scannedEmp,
+            existingDeduction: currentWeekDed,
+            amount: currentWeekDed?.canteen || 350,
+            notes: currentWeekDed?.notes || `Weekly canteen stipend (${collectionPaymentMethod})`,
+          });
+          setNotificationMsg(`Identified ${scannedEmp.name} (${scannedEmp.employee_id}). Ready to record weekly canteen stipend.`);
+          setTimeout(() => setNotificationMsg(null), 5000);
+        }}
+      />
     </div>
   );
 };

@@ -26,6 +26,8 @@ import {
   InternalPurchaseOrder,
   WeeklyPayrollApprovalDoc,
   GCashTransactionRecord,
+  CanteenMenuItem,
+  PendingOfflineCanteenRecord,
 } from '../types';
 import {
   saveAttendanceCache,
@@ -42,6 +44,13 @@ import {
   queueOfflineAction,
   generateClientOfflineGCashReceipt,
 } from '../utils/offlineStorage';
+import {
+  saveOfflineCollectionToIndexedDB,
+  getAllOfflineCollectionsFromIndexedDB,
+  deleteOfflineCollectionFromIndexedDB,
+  clearAllOfflineCollectionsFromIndexedDB,
+  setupAutoSyncOnConnectivity,
+} from '../utils/indexedDbStorage';
 import { getStoredPassword } from '../utils/credentials';
 import {
   INITIAL_EMPLOYEES,
@@ -159,6 +168,13 @@ interface AppContextType {
   syncOfflineQueue: () => Promise<{ syncedCount: number; errorsCount: number }>;
   toggleSimulateOffline: () => void;
   forceRefreshOfflineCache: () => void;
+
+  // Canteen Field Offline Operations & Menu Standards
+  pendingOfflineCanteenQueue: PendingOfflineCanteenRecord[];
+  addOfflineCanteenCharge: (record: Omit<PendingOfflineCanteenRecord, 'id' | 'created_at' | 'status'>) => PendingOfflineCanteenRecord;
+  removePendingOfflineRecord: (id: string) => void;
+  syncPendingCanteenQueue: () => Promise<{ success: boolean; syncedCount: number; message: string }>;
+  canteenMenuStandards: CanteenMenuItem[];
 
   addMaterial: (mat: Omit<MaterialRecord, 'material_id' | 'created_at' | 'total_cost'>) => MaterialRecord;
   archiveMaterial: (id: string) => void;
@@ -329,7 +345,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [settings, setSettings] = useState<SystemSettings>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_SETTINGS`);
-      return saved ? JSON.parse(saved) : INITIAL_SETTINGS;
+      if (saved) {
+        const parsed: SystemSettings = JSON.parse(saved);
+        const parsedSub = parsed.drive_subscription;
+        const fallbackSub = INITIAL_SETTINGS.drive_subscription!;
+        return {
+          ...parsed,
+          master_drive_link: parsed.master_drive_link || INITIAL_SETTINGS.master_drive_link,
+          drive_subscription: {
+            ...fallbackSub,
+            ...(parsedSub || {}),
+            plan: (parsedSub?.plan && parsedSub.plan !== 'unregistered') ? parsedSub.plan : 'google_workspace_standard',
+            plan_name: parsedSub?.plan_name || 'Google Workspace Business Standard',
+            storage_quota: parsedSub?.storage_quota || '2 TB Pooled / User',
+            is_registered: true,
+            account_email: parsedSub?.account_email || 'emeritaderueda@gmail.com',
+            drive_folder_url: parsedSub?.drive_folder_url || 'https://drive.google.com/drive/folders/1BUusZTUKtHYI3OfghaNkgZWQgQiMhDfy?usp=sharing',
+          },
+        };
+      }
+      return INITIAL_SETTINGS;
     } catch {
       return INITIAL_SETTINGS;
     }
@@ -424,6 +459,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Offline network state & diagnostic statistics
   const [isOnline, setIsOnline] = useState<boolean>(() => isNetworkOnline());
   const [offlineStats, setOfflineStats] = useState<OfflineCacheStats>(() => getOfflineCacheStats());
+
+  // Canteen Weekly Stipend Standards & Offline IndexedDB Queue State
+  const [canteenMenuStandards] = useState<CanteenMenuItem[]>([
+    { id: 'STIPEND-01', name: '5-Day Standard Weekly Stipend (₱70/day)', meal_type: 'Weekly Bundle', price: 350, description: 'Standard 5-day weekly canteen stipend for accredited site mess', sanitary_certified: true, serving_window: 'Mon-Fri' },
+    { id: 'STIPEND-02', name: '6-Day Shift Weekly Stipend (₱70/day)', meal_type: 'Weekly Bundle', price: 420, description: '6-day extended workweek canteen stipend', sanitary_certified: true, serving_window: 'Mon-Sat' },
+    { id: 'STIPEND-03', name: '5-Day High-Allowance Stipend (₱100/day)', meal_type: 'Weekly Bundle', price: 500, description: 'Heavy structural & equipment crew weekly stipend', sanitary_certified: true, serving_window: 'Mon-Fri' },
+    { id: 'STIPEND-04', name: '7-Day Full Heavy Overtime Stipend', meal_type: 'Weekly Bundle', price: 700, description: 'Continuous critical pour / weekend overtime stipend', sanitary_certified: true, serving_window: 'All Week' },
+    { id: 'FLOAT-01', name: 'Emergency Cash Float Shift Stipend', meal_type: 'Lunch', price: 150, description: 'On-site emergency cash/GCash spot meal allowance', sanitary_certified: true, serving_window: 'Per Shift' },
+    { id: 'FLOAT-02', name: 'Single Day Standard Stipend Float', meal_type: 'Breakfast', price: 70, description: 'Single workday cash/GCash stipend float voucher', sanitary_certified: true, serving_window: 'Daily' },
+  ]);
+
+  const [pendingOfflineCanteenQueue, setPendingOfflineCanteenQueue] = useState<PendingOfflineCanteenRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(`${STORAGE_KEY}_PENDING_CANTEEN_QUEUE`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Load durable pending offline canteen collections from IndexedDB on startup
+  useEffect(() => {
+    let isMounted = true;
+    getAllOfflineCollectionsFromIndexedDB()
+      .then((records) => {
+        if (!isMounted || !records || records.length === 0) return;
+        setPendingOfflineCanteenQueue((prev) => {
+          const existingIds = new Set(prev.map((r) => r.id));
+          const fresh = records.filter((r) => !existingIds.has(r.id));
+          return fresh.length > 0 ? [...fresh, ...prev] : prev;
+        });
+      })
+      .catch((err) => {
+        console.warn('[IndexedDB] Startup load error:', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${STORAGE_KEY}_PENDING_CANTEEN_QUEUE`, JSON.stringify(pendingOfflineCanteenQueue));
+    } catch {}
+  }, [pendingOfflineCanteenQueue]);
 
   const refreshOfflineStats = () => {
     setOfflineStats(getOfflineCacheStats());
@@ -1410,6 +1491,130 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { syncedCount: synced, errorsCount: errors };
   };
 
+  // Canteen Field Offline Operations & Queue Sync
+  const addOfflineCanteenCharge = (
+    record: Omit<PendingOfflineCanteenRecord, 'id' | 'created_at' | 'status'>
+  ): PendingOfflineCanteenRecord => {
+    const newRecord: PendingOfflineCanteenRecord = {
+      ...record,
+      id: `OFFCAN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      created_at: new Date().toISOString(),
+      status: 'PENDING_SYNC',
+      storage_type: 'IndexedDB',
+    };
+
+    setPendingOfflineCanteenQueue((prev) => [newRecord, ...prev]);
+
+    // Save locally using IndexedDB
+    saveOfflineCollectionToIndexedDB(newRecord).catch((err) =>
+      console.warn('[IndexedDB] Save error:', err)
+    );
+
+    // Also queue in generic offline storage queue for diagnostic visibility
+    queueOfflineAction({
+      type: 'DEDUCTION_ADD',
+      payload: { canteenCharge: newRecord },
+    });
+
+    addAuditLog(
+      'CANTEEN_OFFLINE_CHARGE',
+      'EMPLOYEE_CANTEEN',
+      record.employee_id,
+      `Offline weekly canteen stipend (${record.payment_method || 'GCash/Cash'}) queued in IndexedDB: ₱${record.amount} for ${record.employee_name} (${record.week_key}) at ${record.site_id}`
+    );
+
+    refreshOfflineStats();
+    return newRecord;
+  };
+
+  const removePendingOfflineRecord = (id: string) => {
+    setPendingOfflineCanteenQueue((prev) => prev.filter((r) => r.id !== id));
+    deleteOfflineCollectionFromIndexedDB(id).catch((err) =>
+      console.warn('[IndexedDB] Delete error:', err)
+    );
+    addAuditLog(
+      'CANTEEN_OFFLINE_REMOVE',
+      'CANTEEN_QUEUE',
+      id,
+      `Removed pending offline canteen transaction ${id} from IndexedDB and local queue`
+    );
+  };
+
+  const syncPendingCanteenQueue = async (): Promise<{ success: boolean; syncedCount: number; message: string }> => {
+    // Read directly from IndexedDB or state
+    let toSync = [...pendingOfflineCanteenQueue];
+    try {
+      const idbRecords = await getAllOfflineCollectionsFromIndexedDB();
+      if (idbRecords.length > 0) {
+        const idMap = new Map<string, PendingOfflineCanteenRecord>();
+        toSync.forEach((r) => idMap.set(r.id, r));
+        idbRecords.forEach((r) => idMap.set(r.id, r));
+        toSync = Array.from(idMap.values());
+      }
+    } catch (err) {
+      console.warn('[IndexedDB] Fallback to state queue:', err);
+    }
+
+    if (toSync.length === 0) {
+      return { success: true, syncedCount: 0, message: 'No offline canteen stipend records pending sync.' };
+    }
+
+    const deductionPayloads = toSync.map((item) => ({
+      employee_id: item.employee_id,
+      site_id: item.site_id,
+      week_key: item.week_key,
+      canteen: item.amount,
+      sss: 0,
+      philhealth: 0,
+      cash_advance: 0,
+      other_deduction: 0,
+      notes: `[Offline Site Canteen Stipend (${item.payment_method || 'GCash/Cash'}): ₱${item.amount} - ${item.notes || 'Weekly Stipend'}]`,
+    }));
+
+    addBatchDeductions(deductionPayloads);
+
+    setPendingOfflineCanteenQueue([]);
+    try {
+      localStorage.removeItem(`${STORAGE_KEY}_PENDING_CANTEEN_QUEUE`);
+    } catch {}
+
+    // Clear IndexedDB store
+    clearAllOfflineCollectionsFromIndexedDB().catch((err) =>
+      console.warn('[IndexedDB] Clear error:', err)
+    );
+
+    addAuditLog(
+      'CANTEEN_OFFLINE_SYNC_COMPLETE',
+      'CANTEEN_QUEUE',
+      'INDEXED_DB',
+      `Auto-synced ${toSync.length} offline site weekly canteen stipend records from IndexedDB to official deductions and recalculated payroll.`
+    );
+
+    refreshOfflineStats();
+
+    return {
+      success: true,
+      syncedCount: toSync.length,
+      message: `Successfully synchronized ${toSync.length} offline weekly canteen stipend transactions from IndexedDB to official deductions.`,
+    };
+  };
+
+  // Automatically sync offline GCash/cash collection records once connectivity is detected
+  useEffect(() => {
+    const cleanup = setupAutoSyncOnConnectivity(async () => {
+      if (!isNetworkOnline()) return;
+      const idbRecords = await getAllOfflineCollectionsFromIndexedDB();
+      if (idbRecords.length > 0 || pendingOfflineCanteenQueue.length > 0) {
+        console.log('[IndexedDB AutoSync] Connectivity detected! Automatically synchronizing offline canteen stipend records...');
+        await syncPendingCanteenQueue();
+      }
+    });
+
+    return () => {
+      cleanup();
+    };
+  }, [pendingOfflineCanteenQueue]);
+
   // Materials
   const addMaterial = (mat: Omit<MaterialRecord, 'material_id' | 'created_at' | 'total_cost'>): MaterialRecord => {
     const total = mat.quantity * mat.unit_cost;
@@ -1895,6 +2100,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         syncOfflineQueue,
         toggleSimulateOffline,
         forceRefreshOfflineCache,
+        // Canteen Field Offline Operations & Menu Standards
+        pendingOfflineCanteenQueue,
+        addOfflineCanteenCharge,
+        removePendingOfflineRecord,
+        syncPendingCanteenQueue,
+        canteenMenuStandards,
         addMaterial,
         archiveMaterial,
         addExpense,

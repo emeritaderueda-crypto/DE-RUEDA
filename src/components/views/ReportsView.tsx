@@ -6,7 +6,8 @@ import {
   downloadWordDoc,
   downloadReportPDF,
 } from '../../utils/exporters';
-import { FileBarChart, Download, FileSpreadsheet, FileText, Printer, FileCheck } from 'lucide-react';
+import { FileBarChart, Download, FileSpreadsheet, FileText, Printer, FileCheck, UtensilsCrossed, ArrowRight } from 'lucide-react';
+import { CanteenSpendingAggregationTab } from '../reports/CanteenSpendingAggregationTab';
 
 export const ReportsView: React.FC = () => {
   const {
@@ -23,9 +24,14 @@ export const ReportsView: React.FC = () => {
     gcashTransactions,
   } = useApp();
 
+  const [activeMainTab, setActiveMainTab] = useState<'standard' | 'canteen-aggregation'>('standard');
   const [reportType, setReportType] = useState('attendance-dtr');
   const [siteFilter, setSiteFilter] = useState(currentSite);
   const [weekFilter, setWeekFilter] = useState(dtrWeeks[0]?.week_key || '2026-W41');
+
+  const totalCompanyCanteenDeductions = deductions
+    .filter((d) => d.is_void === 0)
+    .reduce((sum, d) => sum + Number(d.canteen || 0), 0);
 
   // Filter datasets
   const filteredEmployees = employees.filter((e) => siteFilter === 'ALL' || e.site_id === siteFilter);
@@ -376,12 +382,46 @@ export const ReportsView: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-            Centralized Reports Hub (15 Connected Reports)
-          </h1>
+      {/* Top Tab Bar: Standard Reports Register vs Canteen Spending Aggregator */}
+      <div className="flex items-center gap-2 border-b border-[#234338] pb-3 no-print flex-wrap">
+        <button
+          onClick={() => setActiveMainTab('standard')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+            activeMainTab === 'standard'
+              ? 'bg-[#13241f] text-[#a3e635] border border-[#a3e635]/40 shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-[#13241f]/50 border border-transparent'
+          }`}
+        >
+          <FileBarChart className="w-4 h-4" />
+          <span>Standard Reports Register (15 Reports)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveMainTab('canteen-aggregation')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+            activeMainTab === 'canteen-aggregation'
+              ? 'bg-[#13241f] text-[#a3e635] border border-[#a3e635]/40 shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-[#13241f]/50 border border-transparent'
+          }`}
+        >
+          <UtensilsCrossed className="w-4 h-4" />
+          <span>Weekly Canteen Stipend Aggregator (Per Site &amp; Employee)</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-black bg-[#a3e635]/20 text-[#a3e635]">
+            ₱{totalCompanyCanteenDeductions.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          </span>
+        </button>
+      </div>
+
+      {activeMainTab === 'canteen-aggregation' ? (
+        <CanteenSpendingAggregationTab />
+      ) : (
+        <>
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                Centralized Reports Hub (15 Connected Reports)
+              </h1>
           <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
             <span>Dynamic Multi-Factor Filtering</span>
             <span>·</span>
@@ -504,6 +544,25 @@ export const ReportsView: React.FC = () => {
         </div>
       </div>
 
+      {/* Helper Shortcut Banner to Dedicated Canteen Aggregator Tab */}
+      {reportType === 'canteen' && (
+        <div className="bg-[#13241f] border border-[#a3e635]/30 rounded-xl p-3.5 flex items-center justify-between gap-3 text-xs no-print">
+          <div className="flex items-center gap-2.5">
+            <UtensilsCrossed className="w-4 h-4 text-[#a3e635] shrink-0" />
+            <span className="text-slate-300">
+              Need multi-site aggregations, hierarchical employee breakdown, or executive summary cards?
+            </span>
+          </div>
+          <button
+            onClick={() => setActiveMainTab('canteen-aggregation')}
+            className="px-3 py-1.5 bg-[#a3e635] text-[#080f0d] hover:bg-[#84cc16] font-bold text-xs rounded-lg transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
+          >
+            <span>Open Canteen Aggregator Tab</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Report Live Preview Table */}
       <div className="bg-[#0e1a16] border border-[#234338] rounded-xl overflow-hidden shadow-lg">
         <div className="p-3.5 bg-[#13241f] border-b border-[#234338] flex flex-wrap items-center justify-between gap-2">
@@ -584,6 +643,8 @@ export const ReportsView: React.FC = () => {
           </table>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };

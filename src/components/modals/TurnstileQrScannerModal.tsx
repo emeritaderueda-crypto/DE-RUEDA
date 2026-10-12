@@ -22,12 +22,18 @@ interface TurnstileQrScannerModalProps {
   isOpen: boolean;
   onClose: () => void;
   targetSiteId?: string;
+  customTitle?: string;
+  customDescription?: string;
+  onScanEmployee?: (employee: import('../../types').Employee) => void;
 }
 
 export const TurnstileQrScannerModal: React.FC<TurnstileQrScannerModalProps> = ({
   isOpen,
   onClose,
   targetSiteId,
+  customTitle,
+  customDescription,
+  onScanEmployee,
 }) => {
   const { employees, currentSite, scanAttendanceQr } = useApp();
 
@@ -42,6 +48,7 @@ export const TurnstileQrScannerModal: React.FC<TurnstileQrScannerModalProps> = (
 
   const [cameraActive, setCameraActive] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isRequestingCamera, setIsRequestingCamera] = useState<boolean>(false);
   const [permissionState, setPermissionState] = useState<'idle' | 'prompt' | 'granted' | 'denied' | 'unsupported'>('idle');
   const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
@@ -116,6 +123,18 @@ export const TurnstileQrScannerModal: React.FC<TurnstileQrScannerModalProps> = (
       const emp = employees.find((e) => e.employee_id === employeeId);
       const effectiveSite = activeSite === 'ALL' ? (emp?.site_id || 'SITE-001') : activeSite;
 
+      // If custom scanner handler provided (e.g. Canteen Stipend Collection)
+      if (emp && onScanEmployee) {
+        onScanEmployee(emp);
+        setScanResult({
+          success: true,
+          message: `Worker identified: ${emp.name} (${emp.employee_id}). Ready for weekly stipend recording.`,
+          employeeName: emp.name,
+        });
+        setIsProcessing(false);
+        return;
+      }
+
       // Dispatch to AppContext attendance timekeeper
       const res = scanAttendanceQr(employeeId, qrVersion, effectiveSite);
       setScanResult({
@@ -182,12 +201,14 @@ export const TurnstileQrScannerModal: React.FC<TurnstileQrScannerModalProps> = (
 
   // Request camera access and start stream with multi-fallback constraints
   const startCamera = useCallback(async () => {
+    setIsRequestingCamera(true);
     setCameraError(null);
     stopCamera();
 
     if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setPermissionState('unsupported');
       setCameraError('Camera access is not supported by this browser or protocol (HTTPS/localhost required). You can still scan badge files or use direct simulation below.');
+      setIsRequestingCamera(false);
       return;
     }
 
@@ -275,6 +296,8 @@ export const TurnstileQrScannerModal: React.FC<TurnstileQrScannerModalProps> = (
       } else {
         setCameraError(errorObj.message || 'Unable to access camera on this device.');
       }
+    } finally {
+      setIsRequestingCamera(false);
     }
   }, [facingMode, scanVideoFrame, selectedDeviceId, stopCamera]);
 
@@ -369,10 +392,10 @@ export const TurnstileQrScannerModal: React.FC<TurnstileQrScannerModalProps> = (
             </div>
             <div>
               <h2 className="text-sm sm:text-base font-extrabold text-white tracking-tight flex items-center gap-2">
-                Turnstile QR Code Attendance Scanner
+                {customTitle || 'Turnstile QR Code Attendance Scanner'}
               </h2>
               <p className="text-[11px] text-slate-400">
-                Live camera scanner with instant Time In & Time Out logging
+                {customDescription || 'Live camera scanner with instant Time In & Time Out logging'}
               </p>
             </div>
           </div>
@@ -459,10 +482,20 @@ export const TurnstileQrScannerModal: React.FC<TurnstileQrScannerModalProps> = (
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <button
                     onClick={startCamera}
-                    className="px-4 py-2 bg-[#a3e635] text-[#080f0d] font-bold text-xs rounded-lg hover:bg-[#84cc16] flex items-center gap-1.5 shadow-md"
+                    disabled={isRequestingCamera}
+                    className="px-4 py-2 bg-[#a3e635] text-[#080f0d] font-bold text-xs rounded-lg hover:bg-[#84cc16] flex items-center gap-1.5 shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-75"
                   >
-                    <Camera className="w-4 h-4" />
-                    {permissionState === 'denied' ? 'Request Camera Access Again' : 'Allow & Open Camera'}
+                    {isRequestingCamera ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin text-black" />
+                        <span>Requesting Camera Permission...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="w-4 h-4" />
+                        <span>{permissionState === 'denied' ? 'Request Camera Access Again' : 'Allow & Open Camera'}</span>
+                      </>
+                    )}
                   </button>
 
                   <button

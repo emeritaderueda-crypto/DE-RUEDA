@@ -10,8 +10,12 @@ import {
   Shield,
   Wifi,
   WifiOff,
+  UtensilsCrossed,
+  ShieldCheck,
 } from 'lucide-react';
 import { OfflineSyncModal } from '../modals/OfflineSyncModal';
+import { CanteenOfflineQueueModal } from '../modals/CanteenOfflineQueueModal';
+import { RoadmapComplianceModal } from '../modals/RoadmapComplianceModal';
 
 interface NavbarProps {
   onOpenSearch: () => void;
@@ -30,8 +34,18 @@ export const Navbar: React.FC<NavbarProps> = ({
   onViewPublic,
   onNavigateLanding,
 }) => {
-  const { currentUser, currentSite, setCurrentSite, sites, isOnline, offlineStats } = useApp();
+  const {
+    currentUser,
+    currentSite,
+    setCurrentSite,
+    sites,
+    isOnline,
+    offlineStats,
+    pendingOfflineCanteenQueue,
+  } = useApp();
   const [isOfflineModalOpen, setIsOfflineModalOpen] = useState(false);
+  const [isCanteenQueueModalOpen, setIsCanteenQueueModalOpen] = useState(false);
+  const [isRoadmapModalOpen, setIsRoadmapModalOpen] = useState(false);
 
   return (
     <>
@@ -91,6 +105,31 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </>
             )}
+          </button>
+
+          {/* Canteen Offline Pending Queue Badge Button */}
+          {pendingOfflineCanteenQueue.length > 0 && (
+            <button
+              onClick={() => setIsCanteenQueueModalOpen(true)}
+              className="px-2.5 py-1 rounded-lg border border-amber-500 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer animate-pulse"
+              title="Inspect pending offline canteen meal chits"
+            >
+              <UtensilsCrossed className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline text-[11px]">Canteen Queue</span>
+              <span className="px-1.5 py-0.2 rounded bg-amber-500/40 text-[10px] font-mono font-black">
+                {pendingOfflineCanteenQueue.length}
+              </span>
+            </button>
+          )}
+
+          {/* Roadmap Governance & Sandbox Compliance Badge */}
+          <button
+            onClick={() => setIsRoadmapModalOpen(true)}
+            className="px-2.5 py-1 rounded-lg border border-[#a3e635]/30 bg-[#a3e635]/5 text-[#a3e635] hover:bg-[#a3e635]/15 text-xs font-semibold hidden xl:flex items-center gap-1.5 transition-all cursor-pointer"
+            title="View Phase 0–1 Roadmap & Simulation Containment safeguards"
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span className="text-[11px]">Phase 0–1 Sandbox Active</span>
           </button>
         </div>
 
@@ -174,6 +213,18 @@ export const Navbar: React.FC<NavbarProps> = ({
     <OfflineSyncModal
       isOpen={isOfflineModalOpen}
       onClose={() => setIsOfflineModalOpen(false)}
+    />
+
+    {/* Canteen Offline Queue Drawer / Modal */}
+    <CanteenOfflineQueueModal
+      isOpen={isCanteenQueueModalOpen}
+      onClose={() => setIsCanteenQueueModalOpen(false)}
+    />
+
+    {/* System Roadmap Governance & Sandbox Compliance Modal */}
+    <RoadmapComplianceModal
+      isOpen={isRoadmapModalOpen}
+      onClose={() => setIsRoadmapModalOpen(false)}
     />
   </>
   );

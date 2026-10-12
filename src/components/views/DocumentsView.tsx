@@ -216,8 +216,8 @@ export const DocumentsView: React.FC = () => {
     drive_folder_url: string;
   }>({
     plan: (driveSub?.plan && driveSub.plan !== 'unregistered') ? driveSub.plan : 'google_workspace_standard',
-    account_email: driveSub?.account_email || settings.contact_email || '',
-    drive_folder_url: settings.master_drive_link || '',
+    account_email: driveSub?.account_email || 'emeritaderueda@gmail.com',
+    drive_folder_url: settings.master_drive_link || 'https://drive.google.com/drive/folders/1BUusZTUKtHYI3OfghaNkgZWQgQiMhDfy?usp=sharing',
   });
 
   // Add Document Form

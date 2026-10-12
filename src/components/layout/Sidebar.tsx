@@ -98,7 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'attendance' as PageId, label: 'Attendance / DTR', icon: Clock },
         { id: 'deductions' as PageId, label: 'Deductions & Advances', icon: BadgePercent },
-        { id: 'canteen' as PageId, label: 'Canteen & Meal Hub', icon: UtensilsCrossed, badge: 'GCASH' },
+        { id: 'canteen' as PageId, label: 'Canteen Weekly Stipend', icon: UtensilsCrossed, badge: 'GCASH' },
         { id: 'payroll' as PageId, label: 'Weekly Payroll', icon: Banknote },
         { id: 'cashflow' as PageId, label: 'Cash Flow Disbursements', icon: TrendingDown },
         { id: 'payslips' as PageId, label: 'Payslips Hub (6/Page)', icon: FileSpreadsheet },
@@ -114,7 +114,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       title: 'Intelligence & Comms',
       items: [
-        { id: 'reports' as PageId, label: 'Reports Hub (15 Reports)', icon: FileBarChart },
+        { id: 'reports' as PageId, label: 'Reports & Aggregator', icon: FileBarChart, badge: 'NEW' },
         { id: 'messages' as PageId, label: 'De Rueda Messages', icon: MessageSquare },
         { id: 'documents' as PageId, label: 'Documents & Drive Vault', icon: FolderGit2 },
         { id: 'intake' as PageId, label: 'Public Intake Leads', icon: Inbox },
