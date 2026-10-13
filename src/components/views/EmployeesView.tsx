@@ -31,6 +31,7 @@ export const EmployeesView: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [siteFilter, setSiteFilter] = useState(currentSite);
+  const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'Site-Based' | 'Office-Based'>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'active' | 'archived'>('active');
 
   // Modals
@@ -45,6 +46,8 @@ export const EmployeesView: React.FC = () => {
     position: 'Lead Mason / Foreman',
     daily_rate: 750,
     site_id: 'SITE-001',
+    category: 'Site-Based' as 'Site-Based' | 'Office-Based',
+    photo_url: '',
     email: '',
     contact_number: '',
     sss_number: '',
@@ -61,9 +64,10 @@ export const EmployeesView: React.FC = () => {
       emp.position.toLowerCase().includes(q);
 
     const matchesSite = siteFilter === 'ALL' || emp.site_id === siteFilter;
+    const matchesCategory = categoryFilter === 'ALL' || (emp.category || 'Site-Based') === categoryFilter;
     const matchesStatus = statusFilter === 'ALL' || emp.status === statusFilter;
 
-    return matchesQ && matchesSite && matchesStatus;
+    return matchesQ && matchesSite && matchesCategory && matchesStatus;
   });
 
   const handleCreateSubmit = (e: React.FormEvent) => {
@@ -73,6 +77,8 @@ export const EmployeesView: React.FC = () => {
       position: formData.position.trim(),
       daily_rate: Number(formData.daily_rate),
       site_id: formData.site_id,
+      category: formData.category,
+      photo_url: formData.photo_url.trim() || undefined,
       email: formData.email.trim(),
       contact_number: formData.contact_number.trim(),
       sss_number: formData.sss_number.trim(),
@@ -171,6 +177,18 @@ export const EmployeesView: React.FC = () => {
 
         <div>
           <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value as any)}
+            className="bg-[#13241f] border border-[#234338] rounded-lg px-2.5 py-1.5 text-xs text-white outline-none cursor-pointer"
+          >
+            <option value="ALL">All Categories</option>
+            <option value="Site-Based">Site-Based Personnel</option>
+            <option value="Office-Based">Office-Based Staff</option>
+          </select>
+        </div>
+
+        <div>
+          <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as any)}
             className="bg-[#13241f] border border-[#234338] rounded-lg px-2.5 py-1.5 text-xs text-white outline-none cursor-pointer"
@@ -192,8 +210,8 @@ export const EmployeesView: React.FC = () => {
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-[#13241f] border-b border-[#234338] text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
-                <th className="p-3">Employee ID</th>
-                <th className="p-3">Full Name & Contact</th>
+                <th className="p-3">Employee</th>
+                <th className="p-3">Category</th>
                 <th className="p-3">Trade / Position</th>
                 <th className="p-3">Site</th>
                 <th className="p-3 text-right">Daily Rate</th>
@@ -213,12 +231,36 @@ export const EmployeesView: React.FC = () => {
               ) : (
                 filtered.map((emp) => (
                   <tr key={emp.employee_id} className="hover:bg-[#13241f]/70 transition-colors">
-                    <td className="p-3 font-mono font-bold text-[#a3e635] whitespace-nowrap">
-                      {emp.employee_id}
+                    <td className="p-3 whitespace-nowrap">
+                      <div className="flex items-center gap-2.5">
+                        {emp.photo_url ? (
+                          <img
+                            src={emp.photo_url}
+                            alt={emp.name}
+                            className="w-8 h-8 rounded-full object-cover border border-[#234338] shrink-0"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-[#13241f] border border-[#234338] flex items-center justify-center font-bold text-slate-300 text-[11px] shrink-0">
+                            {emp.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                          </div>
+                        )}
+                        <div>
+                          <div className="font-bold text-white">{emp.name}</div>
+                          <div className="text-[10px] text-[#a3e635] font-mono">{emp.employee_id}</div>
+                          <div className="text-[10px] text-slate-400">{emp.contact_number || emp.email}</div>
+                        </div>
+                      </div>
                     </td>
-                    <td className="p-3">
-                      <div className="font-bold text-white">{emp.name}</div>
-                      <div className="text-[11px] text-slate-400">{emp.contact_number || emp.email}</div>
+                    <td className="p-3 whitespace-nowrap">
+                      {emp.category === 'Office-Based' ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                          Office-Based
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          Site-Based
+                        </span>
+                      )}
                     </td>
                     <td className="p-3 font-medium text-slate-200">{emp.position}</td>
                     <td className="p-3">
@@ -358,6 +400,30 @@ export const EmployeesView: React.FC = () => {
                     value={formData.daily_rate}
                     onChange={(e) => setFormData({ ...formData, daily_rate: Number(e.target.value) })}
                     className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Workforce Category *</label>
+                  <select
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value as any })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white"
+                  >
+                    <option value="Site-Based">Site-Based Personnel (Field)</option>
+                    <option value="Office-Based">Office-Based Staff (HQ)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Worker Photo / Avatar URL</label>
+                  <input
+                    type="url"
+                    value={formData.photo_url}
+                    onChange={(e) => setFormData({ ...formData, photo_url: e.target.value })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white"
+                    placeholder="https://images.unsplash.com/... (optional)"
                   />
                 </div>
               </div>
@@ -515,6 +581,30 @@ export const EmployeesView: React.FC = () => {
                     value={editingEmp.daily_rate}
                     onChange={(e) => setEditingEmp({ ...editingEmp, daily_rate: Number(e.target.value) })}
                     className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Workforce Category</label>
+                  <select
+                    value={editingEmp.category || 'Site-Based'}
+                    onChange={(e) => setEditingEmp({ ...editingEmp, category: e.target.value as any })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white"
+                  >
+                    <option value="Site-Based">Site-Based Personnel (Field)</option>
+                    <option value="Office-Based">Office-Based Staff (HQ)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Worker Photo / Avatar URL</label>
+                  <input
+                    type="url"
+                    value={editingEmp.photo_url || ''}
+                    onChange={(e) => setEditingEmp({ ...editingEmp, photo_url: e.target.value })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white"
+                    placeholder="https://images.unsplash.com/..."
                   />
                 </div>
               </div>

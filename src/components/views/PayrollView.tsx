@@ -18,8 +18,11 @@ import {
   Zap,
   Send,
   Sparkles,
+  Download,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { GCashPaymentModal } from '../modals/GCashPaymentModal';
+import { downloadReportPDF, downloadCSV } from '../../utils/exporters';
 
 interface PayrollViewProps {
   onOpenSinglePayslip: (payrollId: string) => void;
@@ -153,6 +156,176 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
     }
   };
 
+  const handleExportRegisterPDF = () => {
+    const siteObj = sites.find((s) => s.site_id === siteFilter);
+    const siteName = siteFilter === 'ALL' ? 'All Project Sites' : siteObj?.name || siteFilter;
+    const filename = `Weekly_Payroll_Register_${selectedWeek}_${siteFilter}.pdf`;
+    const headers = [
+      'Emp ID',
+      'Worker Name',
+      'Category',
+      'Position',
+      'Gross Pay',
+      'Canteen',
+      'SSS',
+      'PhilHealth',
+      'Other',
+      'Total Deds',
+      'Net Pay',
+      'Method',
+      'Status',
+    ];
+
+    const rows = filtered.map((p) => {
+      const emp = employees.find((e) => e.employee_id === p.employee_id);
+      return [
+        p.employee_id,
+        emp?.name || p.employee_id,
+        emp?.category || 'Site-Based',
+        emp?.position || 'Worker',
+        `P${p.gross_pay.toLocaleString()}`,
+        `P${(p.canteen || 0).toLocaleString()}`,
+        `P${(p.sss || 0).toLocaleString()}`,
+        `P${(p.philhealth || 0).toLocaleString()}`,
+        `P${(p.other_deduction || 0).toLocaleString()}`,
+        `P${(p.total_deductions || 0).toLocaleString()}`,
+        `P${(p.net_pay || 0).toLocaleString()}`,
+        p.payment_method,
+        p.payment_status,
+      ];
+    });
+
+    // Add totals row
+    rows.push([
+      'TOTALS',
+      `${filtered.length} Workers`,
+      '-',
+      '-',
+      `P${totalGross.toLocaleString()}`,
+      `P${filtered.reduce((s, p) => s + (p.canteen || 0), 0).toLocaleString()}`,
+      `P${filtered.reduce((s, p) => s + (p.sss || 0), 0).toLocaleString()}`,
+      `P${filtered.reduce((s, p) => s + (p.philhealth || 0), 0).toLocaleString()}`,
+      `P${filtered.reduce((s, p) => s + (p.other_deduction || 0), 0).toLocaleString()}`,
+      `P${totalDeductions.toLocaleString()}`,
+      `P${totalNet.toLocaleString()}`,
+      '-',
+      '-',
+    ]);
+
+    downloadReportPDF(
+      filename,
+      'WEEKLY PAYROLL REGISTER - DE RUEDA CONSTRUCTION',
+      `Payroll Week: ${selectedWeek} | Project: ${siteName} | Exported: ${new Date().toLocaleDateString()}`,
+      headers,
+      rows,
+      true
+    );
+  };
+
+  const handleExportPaymentVerificationPDF = () => {
+    const filename = `Payroll_Payment_Verification_Audit_${selectedWeek}.pdf`;
+    const headers = [
+      'Payroll ID',
+      'Employee ID',
+      'Worker Name',
+      'Net Amount',
+      'Method',
+      'Reference No',
+      'Payment Status',
+      'Proof of Payout',
+    ];
+
+    const rows = filtered.map((p) => {
+      const emp = employees.find((e) => e.employee_id === p.employee_id);
+      return [
+        p.payroll_id,
+        p.employee_id,
+        emp?.name || p.employee_id,
+        `P${p.net_pay.toLocaleString()}`,
+        p.payment_method,
+        p.reference_no || 'Pending Receipt',
+        p.payment_status,
+        p.proof_url ? 'Attached (Verified)' : 'Not Uploaded',
+      ];
+    });
+
+    downloadReportPDF(
+      filename,
+      'PAYMENT VERIFICATION & DISBURSEMENT AUDIT LOG',
+      `Verified Disbursements for Cycle: ${selectedWeek} | De Rueda Construction Executive Audit`,
+      headers,
+      rows,
+      false
+    );
+  };
+
+  const handleExportSiteOfficeSummaryPDF = () => {
+    const filename = `Site_Office_Workforce_Payroll_Summary_${selectedWeek}.pdf`;
+    const headers = [
+      'Category',
+      'Personnel Count',
+      'Total Gross Wages',
+      'Total Deductions',
+      'Net Salary Payout',
+      'Disbursement Methods',
+    ];
+
+    const siteBased = filtered.filter((p) => {
+      const emp = employees.find((e) => e.employee_id === p.employee_id);
+      return (emp?.category || 'Site-Based') === 'Site-Based';
+    });
+    const officeBased = filtered.filter((p) => {
+      const emp = employees.find((e) => e.employee_id === p.employee_id);
+      return emp?.category === 'Office-Based';
+    });
+
+    const calcGroup = (group: typeof filtered) => ({
+      count: group.length,
+      gross: group.reduce((s, p) => s + p.gross_pay, 0),
+      deds: group.reduce((s, p) => s + p.total_deductions, 0),
+      net: group.reduce((s, p) => s + p.net_pay, 0),
+    });
+
+    const siteTotals = calcGroup(siteBased);
+    const officeTotals = calcGroup(officeBased);
+
+    const rows = [
+      [
+        'Site-Based Personnel (Field)',
+        siteTotals.count,
+        `P${siteTotals.gross.toLocaleString()}`,
+        `P${siteTotals.deds.toLocaleString()}`,
+        `P${siteTotals.net.toLocaleString()}`,
+        'Cash & GCash Mobile',
+      ],
+      [
+        'Office-Based Staff (HQ Operations)',
+        officeTotals.count,
+        `P${officeTotals.gross.toLocaleString()}`,
+        `P${officeTotals.deds.toLocaleString()}`,
+        `P${officeTotals.net.toLocaleString()}`,
+        'GCash Direct Payroll',
+      ],
+      [
+        'GRAND TOTAL COMBINED',
+        filtered.length,
+        `P${totalGross.toLocaleString()}`,
+        `P${totalDeductions.toLocaleString()}`,
+        `P${totalNet.toLocaleString()}`,
+        'Consolidated Disbursements',
+      ],
+    ];
+
+    downloadReportPDF(
+      filename,
+      'SITE & OFFICE WORKFORCE PAYROLL SUMMARY',
+      `Executive Category Breakdown | Cycle Week: ${selectedWeek} | Generated: ${new Date().toLocaleDateString()}`,
+      headers,
+      rows,
+      false
+    );
+  };
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -172,6 +345,33 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleExportRegisterPDF}
+            className="px-3 py-2 bg-[#13241f] border border-[#234338] text-white hover:border-[#a3e635] font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Export full weekly payroll register with deductions as official PDF"
+          >
+            <Download className="w-4 h-4 text-[#a3e635]" />
+            <span>Register (PDF)</span>
+          </button>
+
+          <button
+            onClick={handleExportPaymentVerificationPDF}
+            className="px-3 py-2 bg-[#13241f] border border-[#234338] text-white hover:border-[#10b981] font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Export payment verification audit log as PDF"
+          >
+            <FileCheck2 className="w-4 h-4 text-[#10b981]" />
+            <span>Verification (PDF)</span>
+          </button>
+
+          <button
+            onClick={handleExportSiteOfficeSummaryPDF}
+            className="px-3 py-2 bg-[#13241f] border border-[#234338] text-white hover:border-sky-400 font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Export site-based vs office-based workforce payroll summary report as PDF"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-sky-400" />
+            <span>Site/Office PDF</span>
+          </button>
+
           {pendingGcashItems.length > 0 && (
             <button
               onClick={handleBatchDisburse}

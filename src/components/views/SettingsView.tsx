@@ -284,12 +284,10 @@ export const SettingsView: React.FC = () => {
             </button>
           </div>
 
-          {/* Active Key Display Badges (Masked for Security) */}
+          {/* Protected Credential Badges (Strict Security Policy: Never Display Plaintext Keys) */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {(['ceo', 'admin 1', 'admin 2'] as AccessPointRole[]).map((r) => {
-              const activeKey = getStoredPassword(r);
               const isUserRole = currentUser?.access_point === r;
-              const isRevealed = !!revealedRoles[r];
               return (
                 <div
                   key={r}
@@ -303,17 +301,9 @@ export const SettingsView: React.FC = () => {
                     <div className="text-[10px] uppercase font-bold text-slate-400">
                       {DEFAULT_CREDENTIALS[r].label}
                     </div>
-                    <div className="font-mono font-bold text-sm text-[#a3e635] mt-0.5 flex items-center gap-2">
-                      <span>{isRevealed ? activeKey : '••••••••'}</span>
-                      <button
-                        type="button"
-                        onClick={() => toggleRoleKeyReveal(r)}
-                        className="text-slate-400 hover:text-white transition-colors cursor-pointer"
-                        title={isRevealed ? 'Mask key' : 'Reveal key'}
-                        aria-label={isRevealed ? 'Mask key' : 'Reveal key'}
-                      >
-                        {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                      </button>
+                    <div className="font-mono font-bold text-xs text-[#a3e635] mt-1 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Protected &amp; Encrypted</span>
                     </div>
                   </div>
                   {isUserRole && (

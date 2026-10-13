@@ -73,7 +73,7 @@ export const RoadmapComplianceModal: React.FC<RoadmapComplianceModalProps> = ({
                 <span>Three-Tier RBAC Governance</span>
               </div>
               <p className="text-slate-400 text-[11px] leading-relaxed">
-                Strict separation of authority: <strong>CEO Vault</strong> (passkey Emerita0279 / Marco), <strong>Lead Admin (A1)</strong> for payroll locking &amp; DTR overrides, and <strong>Site Ops (A2)</strong> for field meal deductions.
+                Strict separation of authority: <strong>CEO Vault</strong> (confidential executive clearance), <strong>Lead Admin (A1)</strong> for payroll locking &amp; DTR overrides, and <strong>Site Ops (A2)</strong> for field meal deductions.
               </p>
             </div>
 

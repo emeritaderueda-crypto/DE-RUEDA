@@ -28,6 +28,10 @@ import {
   GCashTransactionRecord,
   CanteenMenuItem,
   PendingOfflineCanteenRecord,
+  QrScanLogItem,
+  CanteenPdfReviewBatch,
+  CanteenPdfExtractionItem,
+  CanteenSyncStatusInfo,
 } from '../types';
 import {
   saveAttendanceCache,
@@ -74,6 +78,7 @@ import {
   INITIAL_PURCHASE_ORDERS,
   INITIAL_PAYROLL_DOCS,
   INITIAL_GCASH_TRANSACTIONS,
+  INITIAL_QR_SCAN_LOGS,
 } from '../data/initialData';
 
 interface AppContextType {
@@ -169,12 +174,33 @@ interface AppContextType {
   toggleSimulateOffline: () => void;
   forceRefreshOfflineCache: () => void;
 
+  // Last 20 QR Scan Log Entries
+  qrScanLogs: QrScanLogItem[];
+  recordQrScanLog: (log: Omit<QrScanLogItem, 'id' | 'timestamp'>) => void;
+
+  // CEO GCash Session Management
+  gcashSessionStatus: 'Connected' | 'Reconnecting' | 'Expired' | 'Disconnected';
+  logoutGcashSession: () => void;
+  reconnectGcashSession: () => void;
+
   // Canteen Field Offline Operations & Menu Standards
   pendingOfflineCanteenQueue: PendingOfflineCanteenRecord[];
   addOfflineCanteenCharge: (record: Omit<PendingOfflineCanteenRecord, 'id' | 'created_at' | 'status'>) => PendingOfflineCanteenRecord;
   removePendingOfflineRecord: (id: string) => void;
   syncPendingCanteenQueue: () => Promise<{ success: boolean; syncedCount: number; message: string }>;
   canteenMenuStandards: CanteenMenuItem[];
+
+  // Notification center status for canteen
+  canteenSyncStatus: CanteenSyncStatusInfo;
+  retryFailedCanteenRecords: () => Promise<{ success: boolean; resolvedCount: number; message: string }>;
+  resolveFailedCanteenRecord: (recordId: string, updates?: Partial<PendingOfflineCanteenRecord>) => Promise<void>;
+  simulateFailedUploadForTesting: () => Promise<void>;
+
+  // Weekly Canteen Deduction PDF Upload & AI Review Batch
+  canteenPdfBatches: CanteenPdfReviewBatch[];
+  uploadCanteenPdfBatch: (batch: CanteenPdfReviewBatch) => void;
+  updateCanteenBatchItem: (batchId: string, itemId: string, updates: Partial<CanteenPdfExtractionItem>) => void;
+  postApprovedCanteenDeductions: (batchId: string) => Promise<{ success: boolean; postedCount: number }>;
 
   addMaterial: (mat: Omit<MaterialRecord, 'material_id' | 'created_at' | 'total_cost'>) => MaterialRecord;
   archiveMaterial: (id: string) => void;
@@ -505,6 +531,213 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem(`${STORAGE_KEY}_PENDING_CANTEEN_QUEUE`, JSON.stringify(pendingOfflineCanteenQueue));
     } catch {}
   }, [pendingOfflineCanteenQueue]);
+
+  // 1. QR Scan Log (stores last 20 scans with timestamps for administrative reference)
+  const [qrScanLogs, setQrScanLogs] = useState<QrScanLogItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(`${STORAGE_KEY}_QR_SCAN_LOGS`);
+      return saved ? JSON.parse(saved) : INITIAL_QR_SCAN_LOGS;
+    } catch {
+      return INITIAL_QR_SCAN_LOGS;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${STORAGE_KEY}_QR_SCAN_LOGS`, JSON.stringify(qrScanLogs));
+    } catch {}
+  }, [qrScanLogs]);
+
+  const recordQrScanLog = (logData: Omit<QrScanLogItem, 'id' | 'timestamp'>) => {
+    const newLog: QrScanLogItem = {
+      ...logData,
+      id: `SCAN-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+    };
+    setQrScanLogs((prev) => [newLog, ...prev].slice(0, 20));
+  };
+
+  // 2. CEO GCash Session Management
+  const [gcashSessionStatus, setGcashSessionStatus] = useState<'Connected' | 'Reconnecting' | 'Expired' | 'Disconnected'>(() => {
+    try {
+      const saved = sessionStorage.getItem('DERUEDA_GCASH_SESSION_STATUS');
+      return (saved as any) || 'Connected';
+    } catch {
+      return 'Connected';
+    }
+  });
+
+  const logoutGcashSession = () => {
+    setGcashSessionStatus('Disconnected');
+    try {
+      sessionStorage.setItem('DERUEDA_GCASH_SESSION_STATUS', 'Disconnected');
+    } catch {}
+    addAuditLog('GCASH_LOGOUT', 'GCASH_SESSION', 'CEO_GCASH', 'CEO manually logged out from GCash Session');
+  };
+
+  const reconnectGcashSession = () => {
+    setGcashSessionStatus('Reconnecting');
+    setTimeout(() => {
+      setGcashSessionStatus('Connected');
+      try {
+        sessionStorage.setItem('DERUEDA_GCASH_SESSION_STATUS', 'Connected');
+      } catch {}
+      addAuditLog('GCASH_RECONNECT', 'GCASH_SESSION', 'CEO_GCASH', 'CEO successfully reconnected and renewed GCash Session');
+    }, 1200);
+  };
+
+  // 3. Weekly Canteen Deduction PDF Batches & AI Copilot Review
+  const [canteenPdfBatches, setCanteenPdfBatches] = useState<CanteenPdfReviewBatch[]>([
+    {
+      batch_id: 'CANTEEN-BATCH-2026W42-S1',
+      file_name: 'Concessionaire_Statement_Site001_Week42.pdf',
+      file_size: 245760,
+      upload_timestamp: '2026-10-16T14:30:00+08:00',
+      site_id: 'SITE-001',
+      week_key: '2026-W42',
+      status: 'PENDING_REVIEW',
+      total_extracted_amount: 2450.0,
+      flagged_count: 0,
+      extracted_items: [
+        { id: 'EXT-1', employee_id: 'EMP-0001', employee_name: 'Juan Dela Cruz', date: '2026-10-16', meal_type: '5-Day Lunch Pack', amount: 350.0, is_matched: true, is_flagged: false, approved: true },
+        { id: 'EXT-2', employee_id: 'EMP-0002', employee_name: 'Pedro Santos', date: '2026-10-16', meal_type: '4-Day Meal Allocation', amount: 280.0, is_matched: true, is_flagged: false, approved: true },
+        { id: 'EXT-3', employee_id: 'EMP-0003', employee_name: 'Miguel Reyes', date: '2026-10-16', meal_type: '5-Day Lunch Pack', amount: 350.0, is_matched: true, is_flagged: false, approved: true },
+        { id: 'EXT-4', employee_id: 'EMP-0004', employee_name: 'Alan Garcia', date: '2026-10-16', meal_type: '5-Day Lunch Pack', amount: 350.0, is_matched: true, is_flagged: false, approved: true },
+        { id: 'EXT-5', employee_id: 'EMP-0005', employee_name: 'Ramon Torres', date: '2026-10-16', meal_type: '3-Day Meal Charges', amount: 210.0, is_matched: true, is_flagged: false, approved: true },
+        { id: 'EXT-6', employee_id: 'EMP-0006', employee_name: 'Luis Mendoza', date: '2026-10-16', meal_type: '5-Day Lunch Pack', amount: 350.0, is_matched: true, is_flagged: false, approved: true },
+        { id: 'EXT-7', employee_id: 'EMP-0007', employee_name: 'Erick Salvador', date: '2026-10-16', meal_type: '3-Day Meal Charges', amount: 210.0, is_matched: true, is_flagged: false, approved: true },
+        { id: 'EXT-8', employee_id: 'EMP-0008', employee_name: 'Mario Aquino', date: '2026-10-16', meal_type: '5-Day Lunch Pack', amount: 350.0, is_matched: true, is_flagged: false, approved: true },
+      ],
+    },
+  ]);
+
+  const uploadCanteenPdfBatch = (batch: CanteenPdfReviewBatch) => {
+    setCanteenPdfBatches((prev) => [batch, ...prev]);
+    addAuditLog('UPLOAD_CANTEEN_PDF', 'CANTEEN_AUDIT', batch.batch_id, `Uploaded ${batch.file_name} with ${batch.extracted_items.length} extracted items`);
+  };
+
+  const updateCanteenBatchItem = (batchId: string, itemId: string, updates: Partial<CanteenPdfExtractionItem>) => {
+    setCanteenPdfBatches((prev) =>
+      prev.map((b) => {
+        if (b.batch_id !== batchId) return b;
+        const updatedItems = b.extracted_items.map((it) => (it.id === itemId ? { ...it, ...updates } : it));
+        const newTotal = updatedItems.reduce((acc, it) => acc + (it.approved ? it.amount : 0), 0);
+        const newFlagged = updatedItems.filter((it) => it.is_flagged).length;
+        return {
+          ...b,
+          extracted_items: updatedItems,
+          total_extracted_amount: newTotal,
+          flagged_count: newFlagged,
+        };
+      })
+    );
+  };
+
+  const postApprovedCanteenDeductions = async (batchId: string): Promise<{ success: boolean; postedCount: number }> => {
+    const batch = canteenPdfBatches.find((b) => b.batch_id === batchId);
+    if (!batch) return { success: false, postedCount: 0 };
+
+    const approvedItems = batch.extracted_items.filter((it) => it.approved);
+    if (approvedItems.length === 0) return { success: false, postedCount: 0 };
+
+    // Group deductions by employee_id for the week
+    const empDedsMap = new Map<string, number>();
+    approvedItems.forEach((it) => {
+      const cur = empDedsMap.get(it.employee_id) || 0;
+      empDedsMap.set(it.employee_id, cur + it.amount);
+    });
+
+    const dedsToAdd: Array<Omit<DeductionRecord, 'deduction_id' | 'created_at' | 'updated_at' | 'total_deductions' | 'is_void'>> = [];
+    empDedsMap.forEach((amt, empId) => {
+      const existing = deductions.find((d) => d.employee_id === empId && d.week_key === batch.week_key && !d.is_void);
+      dedsToAdd.push({
+        employee_id: empId,
+        week_key: batch.week_key,
+        site_id: batch.site_id,
+        canteen: amt,
+        sss: existing?.sss || 0,
+        philhealth: existing?.philhealth || 0,
+        other_deduction: existing?.other_deduction || 0,
+        cash_advance: existing?.cash_advance || 0,
+        notes: `Extracted from verified Concessionaire Statement (${batch.file_name})`,
+      });
+    });
+
+    addBatchDeductions(dedsToAdd);
+
+    setCanteenPdfBatches((prev) =>
+      prev.map((b) =>
+        b.batch_id === batchId
+          ? {
+              ...b,
+              status: 'POSTED',
+              posted_at: new Date().toISOString(),
+              posted_by: currentUser?.email || 'admin 1',
+            }
+          : b
+      )
+    );
+
+    addAuditLog('POST_CANTEEN_PDF_DEDUCTIONS', 'PAYROLL_DEDUCTIONS', batchId, `Posted ${approvedItems.length} verified meal deductions from ${batch.file_name} to payroll`);
+    return { success: true, postedCount: approvedItems.length };
+  };
+
+  // 4. Notification Center Status for Canteen View
+  const canteenSyncStatus: CanteenSyncStatusInfo = {
+    pendingCount: pendingOfflineCanteenQueue.filter((r) => r.status === 'PENDING_SYNC').length,
+    failedCount: pendingOfflineCanteenQueue.filter((r) => r.status === 'FAILED').length,
+    totalPendingAmount: pendingOfflineCanteenQueue
+      .filter((r) => r.status === 'PENDING_SYNC')
+      .reduce((sum, r) => sum + (r.amount || 0), 0),
+    isSyncing: false,
+    lastSyncAt: new Date().toISOString(),
+    lastSyncStatus: pendingOfflineCanteenQueue.some((r) => r.status === 'FAILED')
+      ? 'FAILED'
+      : pendingOfflineCanteenQueue.length > 0
+      ? 'IDLE'
+      : 'SUCCESS',
+    manualActionRequired: pendingOfflineCanteenQueue.some((r) => r.status === 'FAILED' && r.requires_manual_action),
+    failedRecords: pendingOfflineCanteenQueue.filter((r) => r.status === 'FAILED'),
+  };
+
+  const retryFailedCanteenRecords = async (): Promise<{ success: boolean; resolvedCount: number; message: string }> => {
+    const res = await syncPendingCanteenQueue();
+    return {
+      success: res.success,
+      resolvedCount: res.syncedCount,
+      message: res.message,
+    };
+  };
+
+  const resolveFailedCanteenRecord = async (recordId: string, updates?: Partial<PendingOfflineCanteenRecord>) => {
+    setPendingOfflineCanteenQueue((prev) =>
+      prev.map((r) => (r.id === recordId ? { ...r, status: 'PENDING_SYNC' as const, requires_manual_action: false, ...(updates || {}) } : r))
+    );
+    await syncPendingCanteenQueue();
+  };
+
+  const simulateFailedUploadForTesting = async () => {
+    const dummyRecord: PendingOfflineCanteenRecord = {
+      id: `OFFLINE-FAIL-${Date.now()}`,
+      employee_id: 'EMP-9999',
+      employee_name: 'Unregistered Laborer (Demo Anomaly)',
+      site_id: 'SITE-001',
+      week_key: '2026-W42',
+      amount: 450,
+      payment_method: 'GCash',
+      notes: 'Failed upload test: Unregistered Employee ID requires manual reconciliation',
+      created_at: new Date().toISOString(),
+      status: 'FAILED',
+      storage_type: 'IndexedDB',
+      error_reason: 'HTTP 422: Employee ID EMP-9999 not found in registered masterlist. Manual action required.',
+      failed_at: new Date().toISOString(),
+      retry_count: 3,
+      requires_manual_action: true,
+    };
+    setPendingOfflineCanteenQueue((prev) => [dummyRecord, ...prev]);
+    addAuditLog('SIMULATE_CANTEEN_FAILURE', 'CANTEEN_SYNC', dummyRecord.id, 'Simulated failed offline canteen stipend upload for testing manual alert resolution');
+  };
+
 
   const refreshOfflineStats = () => {
     setOfflineStats(getOfflineCacheStats());
@@ -2100,12 +2333,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         syncOfflineQueue,
         toggleSimulateOffline,
         forceRefreshOfflineCache,
+        // Last 20 QR Scan Logs
+        qrScanLogs,
+        recordQrScanLog,
+        // CEO GCash Session Management
+        gcashSessionStatus,
+        logoutGcashSession,
+        reconnectGcashSession,
         // Canteen Field Offline Operations & Menu Standards
         pendingOfflineCanteenQueue,
         addOfflineCanteenCharge,
         removePendingOfflineRecord,
         syncPendingCanteenQueue,
         canteenMenuStandards,
+        // Canteen Notification Center & Sync Status
+        canteenSyncStatus,
+        retryFailedCanteenRecords,
+        resolveFailedCanteenRecord,
+        simulateFailedUploadForTesting,
+        // Weekly Canteen PDF Review & Extraction
+        canteenPdfBatches,
+        uploadCanteenPdfBatch,
+        updateCanteenBatchItem,
+        postApprovedCanteenDeductions,
         addMaterial,
         archiveMaterial,
         addExpense,

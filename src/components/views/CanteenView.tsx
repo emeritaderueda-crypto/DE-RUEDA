@@ -5,6 +5,8 @@ import { PageId } from '../layout/Sidebar';
 import { CanteenGcashPayoutModal } from '../modals/CanteenGcashPayoutModal';
 import { CanteenOfflineQueueModal } from '../modals/CanteenOfflineQueueModal';
 import { TurnstileQrScannerModal } from '../modals/TurnstileQrScannerModal';
+import { CanteenNotificationCenter } from '../canteen/CanteenNotificationCenter';
+import { CanteenGeminiCopilot } from '../canteen/CanteenGeminiCopilot';
 import {
   UtensilsCrossed,
   Smartphone,
@@ -144,7 +146,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
   );
   const [directAmount, setDirectAmount] = useState<number>(0);
   const [directMemo, setDirectMemo] = useState<string>('');
-  const [directPin, setDirectPin] = useState<string>('Emerita0279');
+  const [directPin, setDirectPin] = useState<string>('');
   const [isDirectSubmitting, setIsDirectSubmitting] = useState<boolean>(false);
   const [directError, setDirectError] = useState<string | null>(null);
 
@@ -546,6 +548,9 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
 
   return (
     <div className="space-y-5 animate-in fade-in duration-150">
+      {/* Canteen Transaction Sync & Notification Center */}
+      <CanteenNotificationCenter />
+
       {/* Offline Site Network Alert Banner */}
       {!isOnline && (
         <div className="p-3.5 bg-amber-950/40 border border-amber-500/40 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-200 no-print animate-in fade-in">
@@ -1086,7 +1091,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                 <div>
                   <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1 flex items-center justify-between">
                     <span>CEO Passkey PIN *</span>
-                    <span className="text-[9px] text-amber-400 font-mono">Emerita0279</span>
+                    <span className="text-[9px] text-slate-500 font-mono">Confidential Authorization</span>
                   </label>
                   <div className="relative">
                     <Lock className="w-3.5 h-3.5 text-amber-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1095,7 +1100,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                       required
                       value={directPin}
                       onChange={(e) => setDirectPin(e.target.value)}
-                      placeholder="Enter passkey (Emerita0279)..."
+                      placeholder="Enter CEO authorization passkey..."
                       className="w-full pl-8 pr-3 py-2 bg-[#080f0d] border border-[#234338] rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-400"
                     />
                   </div>
@@ -2263,6 +2268,9 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
           setTimeout(() => setNotificationMsg(null), 5000);
         }}
       />
+
+      {/* Universal Gemini Copilot for Attendance Check, Actions & File Analysis */}
+      <CanteenGeminiCopilot />
     </div>
   );
 };

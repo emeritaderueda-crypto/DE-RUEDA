@@ -21,12 +21,55 @@ export interface Employee {
   gcash_number: string;
   daily_rate: number;
   site_id: string;
+  category?: 'Site-Based' | 'Office-Based';
+  photo_url?: string;
   status: 'active' | 'archived' | 'on_leave';
   qr_version: number;
   documents?: string;
   drive_link?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface QrScanLogItem {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  site_id: string;
+  site_name: string;
+  timestamp: string; // ISO string
+  type: 'IN' | 'OUT';
+  verified: boolean;
+  notes?: string;
+}
+
+export interface CanteenPdfExtractionItem {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  date: string;
+  meal_type?: string;
+  amount: number;
+  is_matched: boolean;
+  is_flagged: boolean;
+  flag_reason?: string;
+  original_raw_text?: string;
+  approved: boolean;
+}
+
+export interface CanteenPdfReviewBatch {
+  batch_id: string;
+  file_name: string;
+  file_size?: number;
+  upload_timestamp: string;
+  site_id: string;
+  week_key: string;
+  status: 'PENDING_REVIEW' | 'APPROVED' | 'POSTED' | 'DISCARDED';
+  extracted_items: CanteenPdfExtractionItem[];
+  total_extracted_amount: number;
+  flagged_count: number;
+  posted_at?: string;
+  posted_by?: string;
 }
 
 export interface Site {

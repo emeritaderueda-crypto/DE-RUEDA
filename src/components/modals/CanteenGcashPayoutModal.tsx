@@ -49,7 +49,7 @@ export const CanteenGcashPayoutModal: React.FC<CanteenGcashPayoutModalProps> = (
   const [contactPerson, setContactPerson] = useState('');
   const [amount, setAmount] = useState<number>(0);
   const [purpose, setPurpose] = useState('');
-  const [ceoPin, setCeoPin] = useState('Emerita0279');
+  const [ceoPin, setCeoPin] = useState('');
   const [saveAsSiteDefault, setSaveAsSiteDefault] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -94,7 +94,7 @@ export const CanteenGcashPayoutModal: React.FC<CanteenGcashPayoutModalProps> = (
 
       setAmount(initialAmount);
       setPurpose(`Canteen Settlement (${weekKey}) - ${site.code} ${site.name}`);
-      setCeoPin('Emerita0279');
+      setCeoPin('');
       setValidationError(null);
       setPaymentResult(null);
     }
