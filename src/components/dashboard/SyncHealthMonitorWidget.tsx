@@ -233,6 +233,21 @@ export const SyncHealthMonitorWidget: React.FC<SyncHealthMonitorWidgetProps> = (
                 </span>
                 <span>{isOnline ? 'ACTIVE REPLICATION' : 'OFFLINE BUFFER'}</span>
               </span>
+
+              {/* Subtle 'last synchronized' time readout directly inside Sync Health monitor widget */}
+              <div
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#080f0d] border border-[#234338] text-[11px] text-slate-300 shadow-xs"
+                title={`Last background sync timestamp: ${formattedExactDate}`}
+              >
+                <Clock className="w-3 h-3 text-[#a3e635] shrink-0" />
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Last synchronized:</span>
+                <span className="font-mono font-bold text-[#a3e635] tabular-nums">
+                  {formatElapsedTime(elapsedSeconds)}
+                </span>
+                <span className="text-[10px] text-slate-500 hidden sm:inline font-mono">
+                  &bull; {formattedExactDate.split(',')[1]?.trim() || formattedExactDate}
+                </span>
+              </div>
             </div>
             <p className="text-[11px] text-slate-400 mt-0.5">
               Live telemetry tracking site turnstile replication, gateway connection, and background sync heartbeat

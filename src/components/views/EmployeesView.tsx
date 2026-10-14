@@ -30,6 +30,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { EmployeeQrBadgeExportModal } from '../modals/EmployeeQrBadgeExportModal';
+import { BulkQrExportModal } from '../modals/BulkQrExportModal';
 
 export const EmployeesView: React.FC = () => {
   const {
@@ -53,6 +54,7 @@ export const EmployeesView: React.FC = () => {
   const [badgeEmp, setBadgeEmp] = useState<Employee | null>(null);
   const [selectedProfileEmp, setSelectedProfileEmp] = useState<Employee | null>(null);
   const [isBatchOpen, setIsBatchOpen] = useState(false);
+  const [isBulkExportModalOpen, setIsBulkExportModalOpen] = useState(false);
   const [isQrExportModalOpen, setIsQrExportModalOpen] = useState(false);
   const [exportModalInitialEmpId, setExportModalInitialEmpId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -314,7 +316,16 @@ export const EmployeesView: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setIsBulkExportModalOpen(true)}
+            className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-[#10b981] hover:from-emerald-500 hover:to-emerald-400 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            title="Generate a single PDF containing multiple employee QR codes, formatted for easier batch printing"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Bulk Export QR</span>
+            <span className="px-1.5 py-0.2 bg-black/25 rounded text-[10px] font-mono">PDF</span>
+          </button>
           <button
             onClick={() => {
               setExportModalInitialEmpId(null);
@@ -1277,6 +1288,15 @@ export const EmployeesView: React.FC = () => {
         initialEmployeeId={exportModalInitialEmpId}
       />
 
+      {/* Bulk QR Export PDF Modal */}
+      <BulkQrExportModal
+        isOpen={isBulkExportModalOpen}
+        onClose={() => setIsBulkExportModalOpen(false)}
+        employees={employees}
+        sites={sites}
+        currentSite={currentSite}
+      />
+
       {/* Batch Badges Modal */}
       {isBatchOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
@@ -1288,13 +1308,24 @@ export const EmployeesView: React.FC = () => {
               </div>
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => {
+                    setIsBatchOpen(false);
+                    setIsBulkExportModalOpen(true);
+                  }}
+                  className="px-3.5 py-1.5 bg-[#10b981] hover:bg-[#059669] text-white font-bold text-xs rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Generate single PDF containing multiple employee QR codes for batch printing"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Bulk Export QR (PDF)</span>
+                </button>
+                <button
                   onClick={() => window.print()}
-                  className="px-3.5 py-1.5 bg-[#a3e635] text-[#080f0d] font-bold text-xs rounded-lg flex items-center gap-1.5"
+                  className="px-3.5 py-1.5 bg-[#a3e635] text-[#080f0d] font-bold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer"
                 >
                   <Printer className="w-3.5 h-3.5" />
                   Print All Badges
                 </button>
-                <button onClick={() => setIsBatchOpen(false)} className="text-slate-400 hover:text-white">
+                <button onClick={() => setIsBatchOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
                   <X className="w-5 h-5" />
                 </button>
               </div>
