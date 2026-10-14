@@ -551,6 +551,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-16T17:38:12+08:00',
     type: 'OUT',
     verified: true,
+    device_id: 'TURNSTILE-GATE-01A',
+    location_tag: 'Main Turnstile Gate 1 - North Checkpoint',
     notes: 'Turnstile Exit Gate 1 - Verified',
   },
   {
@@ -562,6 +564,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-16T17:35:45+08:00',
     type: 'OUT',
     verified: true,
+    device_id: 'TURNSTILE-GATE-01A',
+    location_tag: 'Main Turnstile Gate 1 - North Checkpoint',
     notes: 'Turnstile Exit Gate 1 - Verified',
   },
   {
@@ -573,6 +577,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-16T17:33:04+08:00',
     type: 'OUT',
     verified: true,
+    device_id: 'TURNSTILE-GATE-02B',
+    location_tag: 'Fabrication Yard Gate 2 - South Access',
     notes: 'Turnstile Exit Gate 2 - Verified',
   },
   {
@@ -584,6 +590,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-16T17:30:19+08:00',
     type: 'OUT',
     verified: true,
+    device_id: 'TURNSTILE-GATE-01A',
+    location_tag: 'Main Turnstile Gate 1 - North Checkpoint',
     notes: 'Turnstile Exit Gate 1 - Verified',
   },
   {
@@ -595,6 +603,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-16T17:30:02+08:00',
     type: 'OUT',
     verified: true,
+    device_id: 'TURNSTILE-GATE-01A',
+    location_tag: 'Main Turnstile Gate 1 - North Checkpoint',
     notes: 'Turnstile Exit Gate 1 - Verified',
   },
   {
@@ -606,6 +616,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-16T17:28:40+08:00',
     type: 'OUT',
     verified: true,
+    device_id: 'TURNSTILE-GATE-02B',
+    location_tag: 'Fabrication Yard Gate 2 - South Access',
     notes: 'Turnstile Exit Gate 2 - Verified',
   },
   {
@@ -617,6 +629,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-16T17:40:22+08:00',
     type: 'OUT',
     verified: true,
+    device_id: 'TURNSTILE-GATE-01A',
+    location_tag: 'Main Turnstile Gate 1 - North Checkpoint',
     notes: 'Turnstile Exit Gate 1 - Verified',
   },
   {
@@ -628,6 +642,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-16T07:01:14+08:00',
     type: 'IN',
     verified: true,
+    device_id: 'TURNSTILE-GATE-01A',
+    location_tag: 'Main Turnstile Gate 1 - North Checkpoint',
     notes: 'Morning Turnstile Clock-In',
   },
   {
@@ -639,6 +655,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-16T07:03:05+08:00',
     type: 'IN',
     verified: true,
+    device_id: 'TURNSTILE-GATE-01A',
+    location_tag: 'Main Turnstile Gate 1 - North Checkpoint',
     notes: 'Morning Turnstile Clock-In',
   },
   {
@@ -650,6 +668,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-16T07:03:50+08:00',
     type: 'IN',
     verified: true,
+    device_id: 'TURNSTILE-GATE-01A',
+    location_tag: 'Main Turnstile Gate 1 - North Checkpoint',
     notes: 'Morning Turnstile Clock-In',
   },
   {
@@ -661,6 +681,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-16T07:05:12+08:00',
     type: 'IN',
     verified: true,
+    device_id: 'TURNSTILE-GATE-02B',
+    location_tag: 'Fabrication Yard Gate 2 - South Access',
     notes: 'Morning Turnstile Clock-In',
   },
   {
@@ -672,6 +694,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-16T07:05:48+08:00',
     type: 'IN',
     verified: true,
+    device_id: 'TURNSTILE-GATE-02B',
+    location_tag: 'Fabrication Yard Gate 2 - South Access',
     notes: 'Morning Turnstile Clock-In',
   },
   {
@@ -683,6 +707,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-16T07:06:33+08:00',
     type: 'IN',
     verified: true,
+    device_id: 'TURNSTILE-GATE-01A',
+    location_tag: 'Main Turnstile Gate 1 - North Checkpoint',
     notes: 'Morning Turnstile Clock-In',
   },
   {
@@ -694,6 +720,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-16T07:00:15+08:00',
     type: 'IN',
     verified: true,
+    device_id: 'TURNSTILE-GATE-01A',
+    location_tag: 'Main Turnstile Gate 1 - North Checkpoint',
     notes: 'Morning Turnstile Clock-In',
   },
   {
@@ -705,6 +733,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-16T08:00:22+08:00',
     type: 'IN',
     verified: true,
+    device_id: 'KIOSK-HQ-RECEPT-01',
+    location_tag: 'HQ Administrative Reception Desk',
     notes: 'HQ Office Entrance Tablet QR',
   },
   {
@@ -716,6 +746,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-16T08:02:10+08:00',
     type: 'IN',
     verified: true,
+    device_id: 'KIOSK-HQ-RECEPT-01',
+    location_tag: 'HQ Administrative Reception Desk',
     notes: 'HQ Office Entrance Tablet QR',
   },
   {
@@ -727,6 +759,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-15T17:30:45+08:00',
     type: 'OUT',
     verified: true,
+    device_id: 'TURNSTILE-GATE-01A',
+    location_tag: 'Main Turnstile Gate 1 - North Checkpoint',
     notes: 'Evening Turnstile Clock-Out',
   },
   {
@@ -738,6 +772,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-15T17:30:12+08:00',
     type: 'OUT',
     verified: true,
+    device_id: 'TURNSTILE-GATE-02B',
+    location_tag: 'Fabrication Yard Gate 2 - South Access',
     notes: 'Evening Turnstile Clock-Out',
   },
   {
@@ -749,6 +785,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-15T17:30:01+08:00',
     type: 'OUT',
     verified: true,
+    device_id: 'TURNSTILE-GATE-01A',
+    location_tag: 'Main Turnstile Gate 1 - North Checkpoint',
     notes: 'Evening Turnstile Clock-Out',
   },
   {
@@ -760,6 +798,8 @@ export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [
     timestamp: '2026-10-15T17:33:18+08:00',
     type: 'OUT',
     verified: true,
+    device_id: 'MOBILE-SCAN-TAB-03',
+    location_tag: 'Pier 3 Mobile Patrol Checkpoint',
     notes: 'Evening Turnstile Clock-Out',
   },
 ];

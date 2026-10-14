@@ -65,7 +65,7 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
   const [siteId, setSiteId] = useState('SITE-001');
   const [amount, setAmount] = useState<number>(5000);
   const [purpose, setPurpose] = useState('');
-  const [ceoPin, setCeoPin] = useState('Emerita0279');
+  const [ceoPin, setCeoPin] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notificationMsg, setNotificationMsg] = useState<string | null>(null);
 
@@ -562,6 +562,7 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
                 <input
                   type="password"
                   required
+                  placeholder="Enter CEO PIN (Emerita0279)"
                   value={ceoPin}
                   onChange={(e) => setCeoPin(e.target.value)}
                   className="w-full px-3 py-2 bg-[#080f0d] border border-[#234338] rounded-lg text-white font-mono text-xs focus:outline-none focus:border-[#a3e635]"

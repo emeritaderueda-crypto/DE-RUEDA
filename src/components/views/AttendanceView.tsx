@@ -26,6 +26,8 @@ import {
   ShieldCheck,
   TrendingUp,
   Table,
+  Activity,
+  Image as ImageIcon,
 } from 'lucide-react';
 import {
   BarChart,
@@ -40,6 +42,9 @@ import {
 import { WeeklyDTRReportModal } from '../modals/WeeklyDTRReportModal';
 import { TurnstileQrScannerModal } from '../modals/TurnstileQrScannerModal';
 import { AttendanceCalendarHeatmap } from '../attendance/AttendanceCalendarHeatmap';
+import { downloadReportPDF } from '../../utils/exporters';
+import { EmployeeQrBadgeExportModal } from '../modals/EmployeeQrBadgeExportModal';
+import { SyncActivityLogModal } from '../modals/SyncActivityLogModal';
 
 export const AttendanceView: React.FC = () => {
   const {
@@ -73,6 +78,9 @@ export const AttendanceView: React.FC = () => {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isDTRReportModalOpen, setIsDTRReportModalOpen] = useState(false);
   const [dtrTargetEmployeeId, setDtrTargetEmployeeId] = useState<string | undefined>(undefined);
+  const [isQrBadgeExportModalOpen, setIsQrBadgeExportModalOpen] = useState<boolean>(false);
+  const [selectedQrExportEmpId, setSelectedQrExportEmpId] = useState<string | null>(null);
+  const [isSyncLogModalOpen, setIsSyncLogModalOpen] = useState<boolean>(false);
 
   // Selected item for correction
   const [correctingRecord, setCorrectingRecord] = useState<{
@@ -204,7 +212,9 @@ export const AttendanceView: React.FC = () => {
         const matchesName = item.employee_name?.toLowerCase().includes(q);
         const matchesId = item.employee_id?.toLowerCase().includes(q);
         const matchesNotes = item.notes?.toLowerCase().includes(q);
-        if (!matchesName && !matchesId && !matchesNotes) return false;
+        const matchesDevice = item.device_id?.toLowerCase().includes(q);
+        const matchesLocation = item.location_tag?.toLowerCase().includes(q);
+        if (!matchesName && !matchesId && !matchesNotes && !matchesDevice && !matchesLocation) return false;
       }
       return true;
     });
@@ -280,13 +290,79 @@ export const AttendanceView: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  // Export Weekly Summary Table to Formatted PDF
+  const handleExportSummaryPDF = () => {
+    const siteObj = sites.find((s) => s.site_id === siteFilter);
+    const siteLabel = siteFilter === 'ALL' ? 'All Active Project Sites (Consolidated)' : `${siteObj?.code} - ${siteObj?.name}`;
+    const filename = `DRC_Weekly_Attendance_Summary_${selectedWeekKey}_${siteFilter === 'ALL' ? 'ALL_SITES' : siteObj?.code || siteFilter}.pdf`;
+
+    const headers = [
+      '#',
+      'Worker ID',
+      'Employee Name',
+      'Category',
+      'Position / Trade',
+      'Site',
+      'Days Worked',
+      'Regular Hrs',
+      'OT Hrs',
+      'Total Hrs',
+      'Daily Rate',
+      'Est. Gross Wage',
+      'Status',
+    ];
+
+    const rows: (string | number)[][] = weeklySummaryRoster.map((r) => [
+      r.seq,
+      r.employee.employee_id,
+      r.employee.name,
+      r.employee.category || 'Site-Based',
+      r.employee.position,
+      r.employee.site_id,
+      `${r.daysWorked} days`,
+      r.regularHours.toFixed(1),
+      r.otHours.toFixed(1),
+      r.totalHours.toFixed(1),
+      `P${r.employee.daily_rate.toLocaleString()}`,
+      `P${r.estGross.toLocaleString()}`,
+      r.complianceStatus,
+    ]);
+
+    // Compute aggregation summary totals for the footer row
+    const totalDaysWorked = weeklySummaryRoster.reduce((sum, r) => sum + r.daysWorked, 0);
+    const totalRegHours = weeklySummaryRoster.reduce((sum, r) => sum + r.regularHours, 0);
+    const totalOtHours = weeklySummaryRoster.reduce((sum, r) => sum + r.otHours, 0);
+    const totalGrossPayout = weeklySummaryRoster.reduce((sum, r) => sum + r.estGross, 0);
+
+    rows.push([
+      'TOTALS',
+      '-',
+      `${filteredEmployees.length} Workers (${activeWorkersCount} Active)`,
+      '-',
+      '-',
+      '-',
+      `${totalDaysWorked} shifts`,
+      totalRegHours.toFixed(1),
+      totalOtHours.toFixed(1),
+      totalWeeklyHoursSum.toFixed(1),
+      '-',
+      `P${totalGrossPayout.toLocaleString()}`,
+      'AUDITED',
+    ]);
+
+    const title = 'WEEKLY ATTENDANCE SUMMARY & 7-DAY AGGREGATION REPORT';
+    const subtitle = `Cycle Week: ${selectedWeekKey} (${activeWeek?.date_start} to ${activeWeek?.date_end}) | Project: ${siteLabel} | Active Personnel: ${activeWorkersCount} of ${filteredEmployees.length} | Exported: ${new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Manila' })} (PHT)`;
+
+    downloadReportPDF(filename, title, subtitle, headers, rows, true);
+  };
+
   // Export Last 20 QR Scan Logs to CSV
   const handleDownloadScanLogsCSV = () => {
     const filename = `DRC_QR_Scan_Logs_AdminRef_${new Date().toISOString().substring(0, 10)}.csv`;
     const lines: string[] = [];
     lines.push('DE RUEDA CONSTRUCTION BUILDERS - ADMINISTRATIVE QR SCAN LOG AUDIT');
     lines.push(`Exported At,${new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' })} (PHT)`);
-    lines.push('Log ID,Scan Timestamp,Scan Type,Employee ID,Employee Name,Site ID,Location / Terminal Notes,Verification Status');
+    lines.push('Log ID,Scan Timestamp,Scan Type,Employee ID,Employee Name,Site ID,Device ID / Terminal,Location Tag / Checkpoint,Location / Terminal Notes,Verification Status,Anti-Duplicate Check');
 
     displayedScanLogs.forEach((item) => {
       lines.push(
@@ -297,8 +373,11 @@ export const AttendanceView: React.FC = () => {
           item.employee_id,
           `"${item.employee_name.replace(/"/g, '""')}"`,
           item.site_id,
+          `"${(item.device_id || 'TURNSTILE-GATE-01A').replace(/"/g, '""')}"`,
+          `"${(item.location_tag || 'Main Gate Turnstile 1').replace(/"/g, '""')}"`,
           `"${(item.notes || 'Turnstile Scanner').replace(/"/g, '""')}"`,
           item.verified ? 'Verified Active QR' : 'Unverified',
+          item.duplicate_prevented ? 'DUPLICATE PREVENTED' : 'UNIQUE SCAN VERIFIED',
         ].join(',')
       );
     });
@@ -389,6 +468,33 @@ export const AttendanceView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleExportSummaryPDF}
+            className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Export Weekly Summary Report to formatted PDF"
+          >
+            <FileText className="w-4 h-4 text-white" />
+            <span>Export to PDF</span>
+          </button>
+          <button
+            onClick={() => {
+              setSelectedQrExportEmpId(null);
+              setIsQrBadgeExportModalOpen(true);
+            }}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Export individual employee QR codes as image files (.png) for physical badge printing and distribution"
+          >
+            <QrCode className="w-4 h-4 text-white" />
+            <span>Export QR Badges</span>
+          </button>
+          <button
+            onClick={() => setIsSyncLogModalOpen(true)}
+            className="px-3 py-2 bg-[#13241f] border border-[#234338] hover:border-cyan-400 text-cyan-300 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+            title="Inspect detailed synchronization service push/pull activity logs"
+          >
+            <Activity className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Sync Activity Log</span>
+          </button>
           <button
             onClick={activeTab === 'weekly_summary' ? handleDownloadSummaryCSV : handleDownloadAttendanceCSV}
             className="px-3.5 py-2 bg-[#a3e635] text-[#080f0d] hover:bg-[#84cc16] font-extrabold text-xs rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
@@ -657,17 +763,30 @@ export const AttendanceView: React.FC = () => {
                           {empTotalHours.toFixed(1)} hrs
                         </td>
                         <td className="p-2.5 text-center whitespace-nowrap">
-                          <button
-                            onClick={() => {
-                              setDtrTargetEmployeeId(emp.employee_id);
-                              setIsDTRReportModalOpen(true);
-                            }}
-                            title={`Generate & Export Weekly DTR for ${emp.name} (PDF/CSV)`}
-                            className="px-2.5 py-1 bg-[#13241f] hover:bg-[#10b981] hover:text-white border border-[#234338] hover:border-[#10b981] text-emerald-300 text-[11px] font-bold rounded-md transition-all flex items-center gap-1.5 mx-auto shadow-xs cursor-pointer"
-                          >
-                            <FileText className="w-3.5 h-3.5 text-[#a3e635]" />
-                            <span>Export DTR</span>
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => {
+                                setDtrTargetEmployeeId(emp.employee_id);
+                                setIsDTRReportModalOpen(true);
+                              }}
+                              title={`Generate & Export Weekly DTR for ${emp.name} (PDF/CSV)`}
+                              className="px-2 py-1 bg-[#13241f] hover:bg-[#10b981] hover:text-white border border-[#234338] hover:border-[#10b981] text-emerald-300 text-[11px] font-bold rounded-md transition-all flex items-center gap-1 shadow-xs cursor-pointer"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-[#a3e635]" />
+                              <span>DTR</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedQrExportEmpId(emp.employee_id);
+                                setIsQrBadgeExportModalOpen(true);
+                              }}
+                              title={`Export QR Code Image File (.png) for ${emp.name} (${emp.employee_id})`}
+                              className="px-2 py-1 bg-[#13241f] hover:bg-emerald-600 hover:text-white border border-[#234338] hover:border-emerald-500 text-[#a3e635] text-[11px] font-bold rounded-md transition-all flex items-center gap-1 shadow-xs cursor-pointer"
+                            >
+                              <QrCode className="w-3.5 h-3.5" />
+                              <span>QR Pass</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -801,13 +920,23 @@ export const AttendanceView: React.FC = () => {
                 </p>
               </div>
 
-              <button
-                onClick={handleDownloadSummaryCSV}
-                className="px-3 py-1.5 bg-[#a3e635] text-[#080f0d] hover:bg-[#84cc16] font-extrabold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5 text-[#080f0d]" />
-                <span>Export Summary CSV</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportSummaryPDF}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  title="Export Weekly Summary Report to formatted PDF"
+                >
+                  <FileText className="w-3.5 h-3.5 text-white" />
+                  <span>Export to PDF</span>
+                </button>
+                <button
+                  onClick={handleDownloadSummaryCSV}
+                  className="px-3 py-1.5 bg-[#a3e635] text-[#080f0d] hover:bg-[#84cc16] font-extrabold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-[#080f0d]" />
+                  <span>Export Summary CSV</span>
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -903,15 +1032,28 @@ export const AttendanceView: React.FC = () => {
                         </span>
                       </td>
                       <td className="p-2.5 text-center whitespace-nowrap">
-                        <button
-                          onClick={() => {
-                            setDtrTargetEmployeeId(row.employee.employee_id);
-                            setIsDTRReportModalOpen(true);
-                          }}
-                          className="px-2.5 py-1 bg-[#13241f] hover:bg-[#10b981] hover:text-white border border-[#234338] text-emerald-300 text-[11px] font-bold rounded-md transition-all cursor-pointer"
-                        >
-                          DTR Card
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              setDtrTargetEmployeeId(row.employee.employee_id);
+                              setIsDTRReportModalOpen(true);
+                            }}
+                            className="px-2 py-1 bg-[#13241f] hover:bg-[#10b981] hover:text-white border border-[#234338] text-emerald-300 text-[11px] font-bold rounded-md transition-all cursor-pointer"
+                          >
+                            DTR Card
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedQrExportEmpId(row.employee.employee_id);
+                              setIsQrBadgeExportModalOpen(true);
+                            }}
+                            title={`Export QR Code Image File for ${row.employee.name}`}
+                            className="px-2 py-1 bg-[#13241f] hover:bg-emerald-600 hover:text-white border border-[#234338] text-[#a3e635] text-[11px] font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer"
+                          >
+                            <QrCode className="w-3.5 h-3.5" />
+                            <span>QR Pass</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1004,15 +1146,16 @@ export const AttendanceView: React.FC = () => {
                     <th className="p-3">Exact Timestamp (PHT)</th>
                     <th className="p-3 text-center">Scan Type</th>
                     <th className="p-3">Worker ID &amp; Name</th>
+                    <th className="p-3">Device ID &amp; Terminal</th>
+                    <th className="p-3">Location Tag / Checkpoint</th>
                     <th className="p-3">Assigned Site</th>
-                    <th className="p-3">Turnstile Terminal / Notes</th>
-                    <th className="p-3 text-center">Verification</th>
+                    <th className="p-3 text-center">Accountability &amp; Anti-Duplicate</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#234338]/40">
                   {displayedScanLogs.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-slate-500">
+                      <td colSpan={8} className="p-8 text-center text-slate-500">
                         No QR scan logs matched the selected filter criteria.
                       </td>
                     </tr>
@@ -1078,17 +1221,35 @@ export const AttendanceView: React.FC = () => {
                               </div>
                             </div>
                           </td>
+                          <td className="p-3 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-2 py-0.5 rounded bg-[#13241f] border border-[#234338] text-[#a3e635] font-mono font-bold text-[11px]">
+                                {log.device_id || 'TURNSTILE-GATE-01A'}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">{log.notes || 'Biometric Sensor'}</div>
+                          </td>
+                          <td className="p-3 whitespace-nowrap">
+                            <div className="text-slate-200 font-semibold text-xs">
+                              {log.location_tag || 'Main Gate Turnstile 1'}
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-mono">Geofenced Site Checkpoint</div>
+                          </td>
                           <td className="p-3 font-mono text-slate-300 whitespace-nowrap">
                             {log.site_name || log.site_id}
                           </td>
-                          <td className="p-3 text-slate-300 whitespace-nowrap">
-                            <div className="text-xs">{log.notes || 'Turnstile Gate #1 Scanner'}</div>
-                          </td>
                           <td className="p-3 text-center whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                              <ShieldCheck className="w-3 h-3" />
-                              <span>Verified QR</span>
-                            </span>
+                            {log.duplicate_prevented ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                                <AlertTriangle className="w-3 h-3 text-amber-400" />
+                                <span>Duplicate Prevented</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                                <ShieldCheck className="w-3 h-3" />
+                                <span>Unique Registered</span>
+                              </span>
+                            )}
                           </td>
                         </tr>
                       );
@@ -1437,6 +1598,19 @@ export const AttendanceView: React.FC = () => {
         onClose={() => setIsDTRReportModalOpen(false)}
         preselectedEmployeeId={dtrTargetEmployeeId}
         preselectedWeekKey={selectedWeekKey}
+      />
+
+      {/* Employee QR Badge & Image File Exporter Modal */}
+      <EmployeeQrBadgeExportModal
+        isOpen={isQrBadgeExportModalOpen}
+        onClose={() => setIsQrBadgeExportModalOpen(false)}
+        initialEmployeeId={selectedQrExportEmpId}
+      />
+
+      {/* Synchronization Service Push/Pull Activity Log Modal */}
+      <SyncActivityLogModal
+        isOpen={isSyncLogModalOpen}
+        onClose={() => setIsSyncLogModalOpen(false)}
       />
     </div>
   );

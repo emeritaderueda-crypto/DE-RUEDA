@@ -13,6 +13,7 @@ import { LaborCapacityWidget } from '../dashboard/LaborCapacityWidget';
 import { EquipmentSchedulerWidget } from '../dashboard/EquipmentSchedulerWidget';
 import { ManagerApprovalsWidget } from '../dashboard/ManagerApprovalsWidget';
 import { RealtimeGcashStreamWidget } from '../dashboard/RealtimeGcashStreamWidget';
+import { SyncHealthMonitorWidget } from '../dashboard/SyncHealthMonitorWidget';
 import { CeoPasswordModal } from '../modals/CeoPasswordModal';
 import {
   Users,
@@ -724,6 +725,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           setGanttStatusFilter('Critical');
           setGanttCriticalOnly(true);
         }}
+      />
+      {/* ==================================================== */}
+      {/* SYNC HEALTH MONITOR WIDGET                          */}
+      {/* Real-time status of the synchronization service,    */}
+      {/* active connection, and elapsed time since last sync */}
+      {/* ==================================================== */}
+      <SyncHealthMonitorWidget
+        onNavigateToSettings={() => onNavigate('settings')}
       />
 
       {/* KPI Stats Grid */}

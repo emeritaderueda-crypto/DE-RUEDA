@@ -12,10 +12,12 @@ import {
   WifiOff,
   UtensilsCrossed,
   ShieldCheck,
+  Activity,
 } from 'lucide-react';
 import { OfflineSyncModal } from '../modals/OfflineSyncModal';
 import { CanteenOfflineQueueModal } from '../modals/CanteenOfflineQueueModal';
 import { RoadmapComplianceModal } from '../modals/RoadmapComplianceModal';
+import { SyncActivityLogModal } from '../modals/SyncActivityLogModal';
 
 interface NavbarProps {
   onOpenSearch: () => void;
@@ -46,6 +48,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isOfflineModalOpen, setIsOfflineModalOpen] = useState(false);
   const [isCanteenQueueModalOpen, setIsCanteenQueueModalOpen] = useState(false);
   const [isRoadmapModalOpen, setIsRoadmapModalOpen] = useState(false);
+  const [isSyncLogModalOpen, setIsSyncLogModalOpen] = useState(false);
 
   return (
     <>
@@ -77,34 +80,59 @@ export const Navbar: React.FC<NavbarProps> = ({
             </select>
           </div>
 
-          {/* Construction Site Network / Offline Cache Indicator */}
+          {/* Attendance Data Synchronization State Indicator (Remote Construction Sites) */}
           <button
             onClick={() => setIsOfflineModalOpen(true)}
             className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
               isOnline
-                ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-400'
-                : 'bg-amber-950/30 border-amber-500 text-amber-300 ring-2 ring-amber-400/40 animate-pulse'
+                ? 'bg-emerald-950/25 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-400'
+                : 'bg-amber-950/35 border-amber-500 text-amber-300 ring-2 ring-amber-400/40 animate-pulse'
             }`}
-            title="Inspect site network connection & local ERP caching"
+            title={
+              isOnline
+                ? `Attendance Data: Synchronized Online · Turnstile scans & biometric logs synced in real-time with central server (${offlineStats.cachedAttendanceCount} cached records available).`
+                : `Attendance Data: Offline Mode · Working at remote construction site. ${offlineStats.cachedAttendanceCount} attendance logs stored in device storage (${offlineStats.pendingQueueCount} pending auto-sync).`
+            }
           >
+            <span className="relative flex h-2 w-2 shrink-0">
+              {isOnline ? (
+                <>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+                </>
+              ) : (
+                <>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400" />
+                </>
+              )}
+            </span>
             {isOnline ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="hidden md:inline text-[11px]">Site Online</span>
-              </>
+              <Wifi className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             ) : (
-              <>
-                <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0 animate-ping" />
-                <WifiOff className="w-3.5 h-3.5 text-amber-400" />
-                <span className="text-[11px] font-bold">Cached Mode</span>
-                {offlineStats.pendingQueueCount > 0 && (
-                  <span className="px-1 rounded bg-amber-500/40 font-mono text-[9px] font-black">
-                    {offlineStats.pendingQueueCount}
-                  </span>
-                )}
-              </>
+              <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             )}
+            <span className="text-[11px] font-bold whitespace-nowrap flex items-center gap-1">
+              <span className="hidden sm:inline">Attendance:</span>
+              <span className={isOnline ? 'text-emerald-300' : 'text-amber-300'}>
+                {isOnline ? 'Online' : 'Offline'}
+              </span>
+            </span>
+            {!isOnline && (
+              <span className="px-1.5 py-0.2 rounded bg-amber-500/30 text-amber-200 font-mono text-[9px] font-bold">
+                {offlineStats.pendingQueueCount > 0 ? `${offlineStats.pendingQueueCount} Queued` : 'Site Cache'}
+              </span>
+            )}
+          </button>
+
+          {/* Detailed Synchronization Service Activity Log Button */}
+          <button
+            onClick={() => setIsSyncLogModalOpen(true)}
+            className="px-2.5 py-1 rounded-lg border border-[#234338] bg-[#13241f] hover:border-cyan-400 text-cyan-300 hover:text-white text-xs font-semibold hidden md:flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Inspect Push/Pull Synchronization Activity Log"
+          >
+            <Activity className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="text-[11px] font-bold">Sync Log</span>
           </button>
 
           {/* Canteen Offline Pending Queue Badge Button */}
@@ -225,6 +253,12 @@ export const Navbar: React.FC<NavbarProps> = ({
     <RoadmapComplianceModal
       isOpen={isRoadmapModalOpen}
       onClose={() => setIsRoadmapModalOpen(false)}
+    />
+
+    {/* Detailed Synchronization Service Activity Log Modal */}
+    <SyncActivityLogModal
+      isOpen={isSyncLogModalOpen}
+      onClose={() => setIsSyncLogModalOpen(false)}
     />
   </>
   );

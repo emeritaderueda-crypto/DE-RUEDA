@@ -15,7 +15,9 @@ import {
   AlertTriangle,
   Send,
   Trash2,
+  Activity,
 } from 'lucide-react';
+import { SyncActivityLogModal } from './SyncActivityLogModal';
 
 interface OfflineSyncModalProps {
   isOpen: boolean;
@@ -33,6 +35,7 @@ export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({ isOpen, onCl
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
 
   if (!isOpen) return null;
 
@@ -240,14 +243,24 @@ export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({ isOpen, onCl
           )}
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-between pt-2 border-t border-[#234338]">
-            <button
-              onClick={handleRefreshCache}
-              className="px-3 py-2 bg-[#13241f] border border-[#234338] hover:border-[#10b981] text-slate-300 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-[#a3e635]" />
-              Refresh Cache Now
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#234338]">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRefreshCache}
+                className="px-3 py-2 bg-[#13241f] border border-[#234338] hover:border-[#10b981] text-slate-300 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-[#a3e635]" />
+                Refresh Cache
+              </button>
+
+              <button
+                onClick={() => setIsLogModalOpen(true)}
+                className="px-3 py-2 bg-[#13241f] border border-[#234338] hover:border-cyan-400 text-cyan-300 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Sync Activity Log</span>
+              </button>
+            </div>
 
             <div className="flex items-center gap-2">
               <button
@@ -262,6 +275,12 @@ export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({ isOpen, onCl
           </div>
         </div>
       </div>
+
+      {/* Detailed Push/Pull Activity Log Modal */}
+      <SyncActivityLogModal
+        isOpen={isLogModalOpen}
+        onClose={() => setIsLogModalOpen(false)}
+      />
     </div>
   );
 };

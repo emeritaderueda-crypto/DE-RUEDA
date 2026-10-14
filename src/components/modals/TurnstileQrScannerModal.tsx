@@ -15,8 +15,16 @@ import {
   Sparkles,
   QrCode,
   Zap,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import {
+  isTurnstileSoundEnabled,
+  setTurnstileSoundEnabled,
+  playSuccessChime,
+  playFailureChime,
+} from '../../utils/audioChime';
 
 interface TurnstileQrScannerModalProps {
   isOpen: boolean;
@@ -58,6 +66,15 @@ export const TurnstileQrScannerModal: React.FC<TurnstileQrScannerModalProps> = (
   const [activeSite, setActiveSite] = useState<string>(targetSiteId || currentSite || 'SITE-001');
   const [manualBadgeInput, setManualBadgeInput] = useState<string>('');
   const [torchOn, setTorchOn] = useState<boolean>(false);
+  const [terminalDeviceId, setTerminalDeviceId] = useState<string>('TURNSTILE-GATE-01A');
+  const [terminalLocationTag, setTerminalLocationTag] = useState<string>('Main Turnstile Gate 1 - North Checkpoint');
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => isTurnstileSoundEnabled());
+
+  const handleToggleSound = () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    setTurnstileSoundEnabled(next);
+  };
 
   // Stop camera media tracks cleanly
   const stopCamera = useCallback(() => {
@@ -135,35 +152,33 @@ export const TurnstileQrScannerModal: React.FC<TurnstileQrScannerModalProps> = (
         return;
       }
 
-      // Dispatch to AppContext attendance timekeeper
-      const res = scanAttendanceQr(employeeId, qrVersion, effectiveSite);
+      // Dispatch to AppContext attendance timekeeper with device & location accountability
+      const res = scanAttendanceQr(
+        employeeId,
+        qrVersion,
+        effectiveSite,
+        undefined,
+        terminalDeviceId,
+        terminalLocationTag
+      );
       setScanResult({
         success: res.success,
         message: res.message,
         employeeName: emp?.name,
       });
 
-      // Beep audio indicator on device if web audio is supported
-      try {
-        const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.type = res.success ? 'sine' : 'square';
-        osc.frequency.setValueAtTime(res.success ? 880 : 320, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-        osc.start();
-        osc.stop(audioCtx.currentTime + (res.success ? 0.15 : 0.3));
-      } catch {
-        // audio not allowed without user gesture or unsupported
+      // Chime audio indicator (respects operator toggle and plays distinct success vs failure chimes)
+      if (res.success) {
+        playSuccessChime();
+      } else {
+        playFailureChime();
       }
 
       setTimeout(() => {
         setIsProcessing(false);
       }, 1000);
     },
-    [activeSite, employees, scanAttendanceQr]
+    [activeSite, employees, scanAttendanceQr, terminalDeviceId, terminalLocationTag]
   );
 
   // Scan frame loop using jsQR
@@ -399,15 +414,29 @@ export const TurnstileQrScannerModal: React.FC<TurnstileQrScannerModalProps> = (
               </p>
             </div>
           </div>
-          <button
-            onClick={() => {
-              stopCamera();
-              onClose();
-            }}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleToggleSound}
+              title={soundEnabled ? 'Chime sound enabled (Click to mute)' : 'Chime sound muted (Click to enable)'}
+              className={`p-1.5 rounded-lg border text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
+                soundEnabled
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+                  : 'bg-[#13241f] border-[#234338] text-slate-400 hover:text-white'
+              }`}
+            >
+              {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+              <span className="hidden sm:inline text-[10px] font-mono">{soundEnabled ? 'Chime ON' : 'Muted'}</span>
+            </button>
+            <button
+              onClick={() => {
+                stopCamera();
+                onClose();
+              }}
+              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Content */}

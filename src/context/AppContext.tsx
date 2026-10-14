@@ -153,7 +153,14 @@ interface AppContextType {
   addSite: (site: Omit<Site, 'site_id' | 'created_at'>) => Site;
   updateSite: (id: string, data: Partial<Site>) => void;
 
-  scanAttendanceQr: (employee_id: string, qr_version: number, site_id: string, work_date?: string) => { success: boolean; message: string; record?: AttendanceRecord };
+  scanAttendanceQr: (
+    employee_id: string,
+    qr_version: number,
+    site_id: string,
+    work_date?: string,
+    device_id?: string,
+    location_tag?: string
+  ) => { success: boolean; message: string; record?: AttendanceRecord; duplicate_prevented?: boolean };
   recordManualAttendance: (data: { employee_id: string; site_id: string; work_date: string; time_in: string; time_out?: string; break_minutes?: number }) => AttendanceRecord;
   correctAttendance: (attendance_id: string, time_in: string, time_out: string, reason: string) => void;
   rolloverWeek: (nextWeekKey: string, dateStart: string, dateEnd: string) => void;
@@ -176,7 +183,7 @@ interface AppContextType {
 
   // Last 20 QR Scan Log Entries
   qrScanLogs: QrScanLogItem[];
-  recordQrScanLog: (log: Omit<QrScanLogItem, 'id' | 'timestamp'>) => void;
+  recordQrScanLog: (log: Omit<QrScanLogItem, 'id' | 'timestamp'> & { device_id?: string; location_tag?: string }) => void;
 
   // CEO GCash Session Management
   gcashSessionStatus: 'Connected' | 'Reconnecting' | 'Expired' | 'Disconnected';
@@ -548,11 +555,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   }, [qrScanLogs]);
 
-  const recordQrScanLog = (logData: Omit<QrScanLogItem, 'id' | 'timestamp'>) => {
+  const recordQrScanLog = (logData: Omit<QrScanLogItem, 'id' | 'timestamp'> & { device_id?: string; location_tag?: string }) => {
     const newLog: QrScanLogItem = {
       ...logData,
-      id: `SCAN-${Date.now()}`,
+      id: `SCAN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       timestamp: new Date().toISOString(),
+      device_id: logData.device_id || 'TURNSTILE-GATE-01A',
+      location_tag: logData.location_tag || 'Main Turnstile Gate 1 - North Checkpoint',
+      duplicate_prevented: Boolean(logData.duplicate_prevented),
     };
     setQrScanLogs((prev) => [newLog, ...prev].slice(0, 20));
   };
@@ -1109,9 +1119,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     employee_id: string,
     qr_version: number,
     site_id: string,
-    work_date?: string
-  ): { success: boolean; message: string; record?: AttendanceRecord } => {
+    work_date?: string,
+    device_id?: string,
+    location_tag?: string
+  ): { success: boolean; message: string; record?: AttendanceRecord; duplicate_prevented?: boolean } => {
     const emp = employees.find((e) => e.employee_id === employee_id);
+    const siteObj = sites.find((s) => s.site_id === site_id);
+    const activeDeviceId = device_id || 'TURNSTILE-GATE-01A';
+    const activeLocationTag = location_tag || `${siteObj?.name || site_id} - Main Turnstile Gate`;
+
     if (!emp) {
       return { success: false, message: `Employee ID ${employee_id} not found in system masterlist.` };
     }
@@ -1155,8 +1171,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updated_at: new Date().toISOString(),
       };
       setAttendance((prev) => [newAtt, ...prev]);
-      addAuditLog('QR_SCAN', 'ATTENDANCE', newAtt.attendance_id, `Time In: ${currentTimeStr} for ${emp.name}`);
-      return { success: true, message: `TIME IN Recorded: ${emp.name} at ${currentTimeStr} (${site_id})`, record: newAtt };
+      addAuditLog('QR_SCAN', 'ATTENDANCE', newAtt.attendance_id, `Time In: ${currentTimeStr} for ${emp.name} via ${activeDeviceId} (${activeLocationTag})`);
+      recordQrScanLog({
+        employee_id,
+        employee_name: emp.name,
+        site_id,
+        site_name: siteObj?.name || site_id,
+        type: 'IN',
+        verified: true,
+        device_id: activeDeviceId,
+        location_tag: activeLocationTag,
+        duplicate_prevented: false,
+        notes: `Verified Clock-In from ${activeDeviceId}`,
+      });
+      return { success: true, message: `TIME IN Recorded: ${emp.name} at ${currentTimeStr} via ${activeDeviceId}`, record: newAtt };
     }
 
     // Already timed in: check anti-duplicate window
@@ -1165,9 +1193,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const curTotalM = now.getHours() * 60 + now.getMinutes();
 
     if (curTotalM - inTotalM < settings.anti_duplicate_minutes && !existing.time_out) {
+      recordQrScanLog({
+        employee_id,
+        employee_name: emp.name,
+        site_id,
+        site_name: siteObj?.name || site_id,
+        type: 'IN',
+        verified: false,
+        device_id: activeDeviceId,
+        location_tag: activeLocationTag,
+        duplicate_prevented: true,
+        notes: `Duplicate registration blocked: Scanned within ${settings.anti_duplicate_minutes}m anti-duplicate window on ${activeDeviceId}`,
+      });
       return {
         success: false,
-        message: `Anti-duplicate: Scanned within ${settings.anti_duplicate_minutes} minutes of Time In. Please wait before scanning again.`,
+        message: `Duplicate Registration Prevented: ${emp.name} scanned within ${settings.anti_duplicate_minutes} minutes of Time In on ${activeDeviceId}. Registration blocked to preserve site integrity.`,
+        duplicate_prevented: true,
+      };
+    }
+
+    // If already timed out today, prevent duplicate re-registration
+    if (existing.time_out) {
+      recordQrScanLog({
+        employee_id,
+        employee_name: emp.name,
+        site_id,
+        site_name: siteObj?.name || site_id,
+        type: 'OUT',
+        verified: false,
+        device_id: activeDeviceId,
+        location_tag: activeLocationTag,
+        duplicate_prevented: true,
+        notes: `Duplicate registration blocked: Worker already completed shift (${existing.time_out}) on ${activeDeviceId}`,
+      });
+      return {
+        success: false,
+        message: `Duplicate Prevented: Worker ${emp.name} already completed shift and clocked out at ${existing.time_out}. Duplicate scan blocked.`,
+        duplicate_prevented: true,
       };
     }
 
@@ -1188,10 +1250,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setAttendance((prev) => prev.map((a) => (a.attendance_id === existing.attendance_id ? updatedAtt : a)));
-    addAuditLog('QR_SCAN', 'ATTENDANCE', existing.attendance_id, `Time Out: ${currentTimeStr}. Actual work: ${netWorkHours}h`);
+    addAuditLog('QR_SCAN', 'ATTENDANCE', existing.attendance_id, `Time Out: ${currentTimeStr} for ${emp.name} via ${activeDeviceId}. Work: ${netWorkHours}h`);
+    recordQrScanLog({
+      employee_id,
+      employee_name: emp.name,
+      site_id,
+      site_name: siteObj?.name || site_id,
+      type: 'OUT',
+      verified: true,
+      device_id: activeDeviceId,
+      location_tag: activeLocationTag,
+      duplicate_prevented: false,
+      notes: `Verified Clock-Out from ${activeDeviceId} (${netWorkHours}h shift)`,
+    });
     return {
       success: true,
-      message: `TIME OUT Recorded: ${emp.name} at ${currentTimeStr}. Total: ${netWorkHours} work hours (less 1.5h breaks).`,
+      message: `TIME OUT Recorded: ${emp.name} at ${currentTimeStr}. Total: ${netWorkHours} work hours via ${activeDeviceId}.`,
       record: updatedAtt,
     };
   };

@@ -5,6 +5,7 @@ import {
   PayrollRecord,
   OfflineActionItem,
   OfflineCacheStats,
+  SyncActivityLogEntry,
 } from '../types';
 
 const PREFIX = 'DRC_ERP_OFFLINE_';
@@ -16,6 +17,7 @@ const KEYS = {
   QUEUE: `${PREFIX}ACTION_QUEUE`,
   LAST_SYNC: `${PREFIX}LAST_SYNC_TS`,
   SIMULATE_OFFLINE: `${PREFIX}SIMULATE_OFFLINE`,
+  SYNC_LOGS: `${PREFIX}SYNC_LOGS`,
 };
 
 // Safe localStorage access
@@ -89,17 +91,164 @@ export function getLastSyncTimestamp(): string {
   }
 }
 
-// 2. Offline Action Mutation Queue
+// 2. Offline Action Mutation Queue & Payload Sizing
+export function getPayloadSizeBytes(payload: any): number {
+  try {
+    const serialized = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    return new TextEncoder().encode(serialized).length;
+  } catch {
+    return 256;
+  }
+}
+
+export const INITIAL_SAMPLE_QUEUE: OfflineActionItem[] = [
+  {
+    id: 'QUEUE-TX-101',
+    type: 'ATTENDANCE_SCAN',
+    payload: {
+      employee_id: 'DRC-EMP-2024-000001',
+      employee_name: 'Juan Dela Cruz',
+      event_type: 'TIME_IN',
+      clock_time: '06:48 AM',
+      site_id: 'SITE-001',
+      device_id: 'TURNSTILE-GATE-01A',
+      location_tag: 'Main Turnstile North',
+      qr_version: 1,
+      security_hash: 'SHA256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069',
+      turnstile_mode: 'High-Volume Optical Offline Pass',
+    },
+    timestamp: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
+    synced: false,
+    retryCount: 2,
+    maxRetries: 5,
+    lastError: 'HTTP 504 Gateway Timeout: Turnstile cellular router dropped connection during burst POST.',
+    site_id: 'SITE-001',
+    device_id: 'TURNSTILE-GATE-01A',
+    status: 'RETRYING',
+    payloadSizeBytes: 584,
+  },
+  {
+    id: 'QUEUE-TX-102',
+    type: 'DEDUCTION_ADD',
+    payload: {
+      charge_id: 'CANTEEN-CHG-9921',
+      employee_id: 'DRC-EMP-2024-000004',
+      employee_name: 'Rodrigo Santos',
+      week_key: 'Week 41',
+      meal_items: [
+        { item: 'Pork Sinigang with Rice', qty: 1, price: 95 },
+        { item: 'Bottled Mineral Water 500ml', qty: 1, price: 20 },
+      ],
+      amount: 115,
+      site_id: 'SITE-002',
+      payment_method: 'Payroll Deduction Chit',
+      canteen_pos_id: 'CANTEEN-POS-02',
+      authorized_by: 'Canteen Supervisor Gloria',
+    },
+    timestamp: new Date(Date.now() - 1000 * 60 * 24).toISOString(),
+    synced: false,
+    retryCount: 1,
+    maxRetries: 5,
+    lastError: 'HTTP 408 Request Timeout: Upstream payroll ledger lock busy.',
+    site_id: 'SITE-002',
+    device_id: 'CANTEEN-POS-02',
+    status: 'PENDING',
+    payloadSizeBytes: 712,
+  },
+  {
+    id: 'QUEUE-TX-103',
+    type: 'GCASH_PAY',
+    payload: {
+      payroll_id: 'PR-2026-W41-002',
+      employee_id: 'DRC-EMP-2024-000002',
+      employee_name: 'Eduardo Manalo',
+      gcash_number: '0917-889-4321',
+      amount: 5250.0,
+      reference_no: 'GCASH-OFF-20261014-8841',
+      transaction_mode: 'Site Offline Emergency Voucher',
+      receipt_file: 'GCash_Receipt_Eduardo_Manalo_8841.svg',
+      authorized_by: 'Engr. De Rueda (CEO)',
+    },
+    timestamp: new Date(Date.now() - 1000 * 60 * 14).toISOString(),
+    synced: false,
+    retryCount: 3,
+    maxRetries: 5,
+    lastError: 'HTTP 429 Rate Limit Exceeded: Upstream GCash gateway backoff required before retry.',
+    site_id: 'SITE-001',
+    device_id: 'TABLET-DISBURSE-01',
+    status: 'FAILED',
+    payloadSizeBytes: 648,
+  },
+  {
+    id: 'QUEUE-TX-104',
+    type: 'ATTENDANCE_SCAN',
+    payload: {
+      employee_id: 'DRC-EMP-2024-000008',
+      employee_name: 'Danilo Reyes',
+      event_type: 'TIME_OUT',
+      clock_time: '05:02 PM',
+      site_id: 'SITE-003',
+      device_id: 'TURNSTILE-GATE-03',
+      location_tag: 'Depot Gate East',
+      qr_version: 1,
+      security_hash: 'SHA256:d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35',
+      turnstile_mode: 'Autonomous Turnstile Camera',
+    },
+    timestamp: new Date(Date.now() - 1000 * 60 * 6).toISOString(),
+    synced: false,
+    retryCount: 0,
+    maxRetries: 5,
+    site_id: 'SITE-003',
+    device_id: 'TURNSTILE-GATE-03',
+    status: 'PENDING',
+    payloadSizeBytes: 540,
+  },
+  {
+    id: 'QUEUE-TX-105',
+    type: 'PAYROLL_VERIFY',
+    payload: {
+      verification_id: 'VERIFY-W41-S01',
+      payroll_batch_id: 'BATCH-2026-W41',
+      verified_by: 'Admin 1 (Timekeeper)',
+      verified_workers_count: 24,
+      total_gross_wages: 104500.0,
+      total_statutory_deductions: 9405.0,
+      compliance_seal: 'DOLE-PHIL-APPROVED',
+      site_id: 'SITE-001',
+    },
+    timestamp: new Date(Date.now() - 1000 * 60 * 2).toISOString(),
+    synced: false,
+    retryCount: 0,
+    maxRetries: 5,
+    site_id: 'SITE-001',
+    device_id: 'ADMIN-CONSOLE-01',
+    status: 'PENDING',
+    payloadSizeBytes: 890,
+  },
+];
+
 export function queueOfflineAction(
-  action: Omit<OfflineActionItem, 'id' | 'timestamp' | 'synced' | 'retryCount'>
+  action: Omit<OfflineActionItem, 'id' | 'timestamp' | 'synced' | 'retryCount'> & {
+    retryCount?: number;
+    maxRetries?: number;
+    lastError?: string;
+    site_id?: string;
+    device_id?: string;
+    payloadSizeBytes?: number;
+    status?: 'PENDING' | 'RETRYING' | 'FAILED' | 'COMMITTED';
+  }
 ): OfflineActionItem {
   const queue = getOfflineQueue();
+  const calculatedSize = action.payloadSizeBytes || getPayloadSizeBytes(action.payload);
   const newItem: OfflineActionItem = {
     ...action,
     id: `QUEUE-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     timestamp: new Date().toISOString(),
     synced: false,
-    retryCount: 0,
+    retryCount: action.retryCount || 0,
+    maxRetries: action.maxRetries || 5,
+    payloadSizeBytes: calculatedSize,
+    status: action.status || 'PENDING',
   };
   const updated = [newItem, ...queue];
   safeSet(KEYS.QUEUE, updated);
@@ -107,7 +256,18 @@ export function queueOfflineAction(
 }
 
 export function getOfflineQueue(): OfflineActionItem[] {
-  return safeGet<OfflineActionItem[]>(KEYS.QUEUE, []);
+  const stored = safeGet<OfflineActionItem[]>(KEYS.QUEUE, []);
+  if (stored.length === 0) {
+    safeSet(KEYS.QUEUE, INITIAL_SAMPLE_QUEUE);
+    return INITIAL_SAMPLE_QUEUE;
+  }
+  return stored;
+}
+
+export function updateOfflineQueueItem(id: string, updates: Partial<OfflineActionItem>): void {
+  const queue = getOfflineQueue();
+  const updated = queue.map((item) => (item.id === id ? { ...item, ...updates } : item));
+  safeSet(KEYS.QUEUE, updated);
 }
 
 export function removeOfflineQueueItem(id: string): void {
@@ -117,6 +277,94 @@ export function removeOfflineQueueItem(id: string): void {
 
 export function clearOfflineQueue(): void {
   safeSet(KEYS.QUEUE, []);
+}
+
+export function seedSampleOfflineQueue(): OfflineActionItem[] {
+  safeSet(KEYS.QUEUE, INITIAL_SAMPLE_QUEUE);
+  return INITIAL_SAMPLE_QUEUE;
+}
+
+// 2b. Detailed Synchronization Service Activity Logger
+const INITIAL_SAMPLE_SYNC_LOGS: SyncActivityLogEntry[] = [
+  {
+    id: 'SYNC-LOG-001',
+    timestamp: new Date(Date.now() - 1000 * 60 * 18).toISOString(),
+    direction: 'PULL',
+    service: 'MASTERLIST_CACHE',
+    status: 'SUCCESS',
+    records_count: 24,
+    payload_summary: 'Pulled 24 active employee biometric master records & credentials from central cloud database',
+    site_id: 'SITE-001',
+    device_id: 'TURNSTILE-GATE-01A',
+    latency_ms: 142,
+    details: 'HTTP 200 OK · Cloud Firestore / REST endpoint replica synced',
+  },
+  {
+    id: 'SYNC-LOG-002',
+    timestamp: new Date(Date.now() - 1000 * 60 * 14).toISOString(),
+    direction: 'PUSH',
+    service: 'ATTENDANCE_QUEUE',
+    status: 'SUCCESS',
+    records_count: 8,
+    payload_summary: 'Pushed 8 morning shift turnstile attendance clock-in scans from local SQLite/localStorage cache',
+    site_id: 'SITE-001',
+    device_id: 'TURNSTILE-GATE-01A',
+    latency_ms: 89,
+    details: 'Batch POST /api/attendance/sync committed with anti-duplicate validation',
+  },
+  {
+    id: 'SYNC-LOG-003',
+    timestamp: new Date(Date.now() - 1000 * 60 * 9).toISOString(),
+    direction: 'PUSH',
+    service: 'CANTEEN_CHITS',
+    status: 'SUCCESS',
+    records_count: 4,
+    payload_summary: 'Pushed 4 canteen meal subsidy deduction tickets stored during offline network drop',
+    site_id: 'SITE-002',
+    device_id: 'CANTEEN-POS-01',
+    latency_ms: 110,
+    details: 'IndexedDB buffer flushed successfully to payroll deduction register',
+  },
+  {
+    id: 'SYNC-LOG-004',
+    timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+    direction: 'HEARTBEAT',
+    service: 'SYSTEM_STATE',
+    status: 'SUCCESS',
+    records_count: 1,
+    payload_summary: 'Keep-alive connectivity ping to DRC primary API gateway',
+    site_id: 'SITE-001',
+    device_id: 'GATE-MONITOR-02',
+    latency_ms: 38,
+    details: 'Round-trip 38ms · Uplink healthy (LTE/Fiber redundant link)',
+  },
+];
+
+export function getSyncActivityLogs(): SyncActivityLogEntry[] {
+  const stored = safeGet<SyncActivityLogEntry[]>(KEYS.SYNC_LOGS, []);
+  if (!stored || stored.length === 0) {
+    safeSet(KEYS.SYNC_LOGS, INITIAL_SAMPLE_SYNC_LOGS);
+    return INITIAL_SAMPLE_SYNC_LOGS;
+  }
+  return stored;
+}
+
+export function addSyncActivityLog(
+  entry: Omit<SyncActivityLogEntry, 'id' | 'timestamp'> & { timestamp?: string }
+): SyncActivityLogEntry {
+  const currentLogs = getSyncActivityLogs();
+  const newLog: SyncActivityLogEntry = {
+    ...entry,
+    id: `SYNC-LOG-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    timestamp: entry.timestamp || new Date().toISOString(),
+  };
+  const updated = [newLog, ...currentLogs].slice(0, 200); // keep up to 200 recent entries
+  safeSet(KEYS.SYNC_LOGS, updated);
+  return newLog;
+}
+
+export function clearSyncActivityLogs(): void {
+  safeSet(KEYS.SYNC_LOGS, []);
 }
 
 // 3. Network & Simulation Helpers

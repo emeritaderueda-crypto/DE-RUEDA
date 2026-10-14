@@ -28,6 +28,7 @@ import { LandingPagePreviewView } from './components/views/LandingPagePreviewVie
 import { CeoMonitoringView } from './components/views/CeoMonitoringView';
 import { CeoGcashDashboardView } from './components/views/CeoGcashDashboardView';
 import { CanteenView } from './components/views/CanteenView';
+import { NetworkSyncToast } from './components/common/NetworkSyncToast';
 
 const MainAppContent: React.FC = () => {
   const { currentUser, logout } = useApp();
@@ -95,6 +96,7 @@ const MainAppContent: React.FC = () => {
   if (!currentUser || isPublicView) {
     return (
       <>
+        <NetworkSyncToast />
         <PublicWebsiteView
           onOpenLogin={() => {
             setIsAuthOpen(true);
@@ -200,6 +202,7 @@ const MainAppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#080f0d] text-[#f3f4f6] flex">
+      <NetworkSyncToast />
       {/* Sidebar Navigation */}
       <Sidebar
         currentPage={currentPage}

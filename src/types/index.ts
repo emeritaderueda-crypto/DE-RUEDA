@@ -41,6 +41,9 @@ export interface QrScanLogItem {
   type: 'IN' | 'OUT';
   verified: boolean;
   notes?: string;
+  device_id: string; // e.g. 'TURNSTILE-GATE-01A'
+  location_tag: string; // e.g. 'Main Gate Turnstile 1'
+  duplicate_prevented?: boolean;
 }
 
 export interface CanteenPdfExtractionItem {
@@ -391,6 +394,12 @@ export interface OfflineActionItem {
   timestamp: string;
   synced: boolean;
   retryCount: number;
+  maxRetries?: number;
+  lastError?: string;
+  site_id?: string;
+  device_id?: string;
+  payloadSizeBytes?: number;
+  status?: 'PENDING' | 'RETRYING' | 'FAILED' | 'COMMITTED';
 }
 
 export interface OfflineCacheStats {
@@ -403,6 +412,21 @@ export interface OfflineCacheStats {
   pendingQueueCount: number;
   lastSyncTimestamp: string;
   storageUsageBytes: number;
+}
+
+export interface SyncActivityLogEntry {
+  id: string;
+  timestamp: string; // ISO string
+  direction: 'PUSH' | 'PULL' | 'HEARTBEAT';
+  service: 'ATTENDANCE_QUEUE' | 'CANTEEN_CHITS' | 'MASTERLIST_CACHE' | 'PAYROLL_VOUCHERS' | 'SYSTEM_STATE';
+  status: 'SUCCESS' | 'FAILED' | 'IN_PROGRESS' | 'RETRY';
+  records_count: number;
+  payload_summary: string;
+  site_id?: string;
+  device_id?: string;
+  latency_ms: number;
+  details?: string;
+  error_message?: string;
 }
 
 export interface EquipmentResource {

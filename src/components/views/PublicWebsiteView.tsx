@@ -17,7 +17,9 @@ import {
   ArrowRight,
   LogOut,
   LayoutDashboard,
+  QrCode,
 } from 'lucide-react';
+import { PublicQrCodeGenerator } from '../common/PublicQrCodeGenerator';
 
 interface PublicWebsiteViewProps {
   onOpenLogin: () => void;
@@ -115,6 +117,13 @@ export const PublicWebsiteView: React.FC<PublicWebsiteViewProps> = ({
           <a href="#projects" className="hover:text-[#a3e635] transition-colors whitespace-nowrap shrink-0">Projects</a>
           <a href="#careers" className="hover:text-[#a3e635] transition-colors whitespace-nowrap shrink-0">Careers & Hiring</a>
           <a href="#inquiry" className="hover:text-[#a3e635] transition-colors whitespace-nowrap shrink-0">Business Inquiry</a>
+          <a
+            href="#qr-generator"
+            className="text-[#a3e635] hover:text-white transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 font-bold"
+          >
+            <QrCode className="w-3.5 h-3.5" />
+            <span>Worker QR Badge</span>
+          </a>
         </nav>
 
         <div className="flex items-center gap-2.5 shrink-0">
@@ -180,6 +189,13 @@ export const PublicWebsiteView: React.FC<PublicWebsiteViewProps> = ({
               className="px-5 py-2.5 bg-[#a3e635] text-[#080f0d] hover:bg-[#84cc16] font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5"
             >
               Request Project Consultation
+            </a>
+            <a
+              href="#qr-generator"
+              className="px-5 py-2.5 bg-[#13241f] border border-[#a3e635]/50 text-[#a3e635] hover:bg-[#a3e635]/15 font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5"
+            >
+              <QrCode className="w-3.5 h-3.5" />
+              <span>Get Turnstile QR Badge</span>
             </a>
             <a
               href="#careers"
@@ -435,95 +451,117 @@ export const PublicWebsiteView: React.FC<PublicWebsiteViewProps> = ({
         </div>
       </section>
 
-      {/* Business Consultation Inquiry Form */}
+      {/* Business Consultation Inquiry & Employee QR Code Generator */}
       <section id="inquiry" className="py-16 px-6 lg:px-12 border-b border-[#234338]">
-        <div className="max-w-2xl mx-auto">
-          <div className="text-center mb-8 space-y-2">
-            <div className="text-xs font-bold uppercase tracking-wider text-emerald-400">Client Proposals</div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-white">Project Consultation & Subcontracting Inquiry</h2>
-            <p className="text-xs text-slate-400">
-              Engage De Rueda Construction as your General Contractor or tender subcontracting cooperation.
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-10 space-y-2">
+            <div className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+              Direct Access Portals &bull; Zero Login Friction
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
+              Project Consultation & Worker QR Gate Access
+            </h2>
+            <p className="text-xs text-slate-400 max-w-2xl mx-auto">
+              Submit commercial client proposals or generate your official De Rueda Construction field turnstile badge immediately without needing system login credentials.
             </p>
           </div>
 
-          <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-6 shadow-xl">
-            {inquirySuccess && (
-              <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-xs font-bold text-emerald-400 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Proposal received! Our project estimation engineering department will review and contact you.</span>
-              </div>
-            )}
-
-            <form onSubmit={handleInquirySubmit} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Company / Representative Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={inquiryForm.name}
-                    onChange={(e) => setInquiryForm({ ...inquiryForm, name: e.target.value })}
-                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-2 text-white"
-                    placeholder="e.g. Engr. Gabriel Santos"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Inquiry Category *</label>
-                  <select
-                    value={inquiryForm.inquiry_type}
-                    onChange={(e) => setInquiryForm({ ...inquiryForm, inquiry_type: e.target.value })}
-                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-2 text-white"
-                  >
-                    <option value="Customer Inquiry">Customer Inquiry (Client Project Request)</option>
-                    <option value="Business Cooperation">Business Cooperation (Subcontractor / Supplier)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Official Email *</label>
-                  <input
-                    type="email"
-                    required
-                    value={inquiryForm.email}
-                    onChange={(e) => setInquiryForm({ ...inquiryForm, email: e.target.value })}
-                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-2 text-white"
-                    placeholder="client@company.ph"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Contact Phone *</label>
-                  <input
-                    type="tel"
-                    required
-                    value={inquiryForm.contact_number}
-                    onChange={(e) => setInquiryForm({ ...inquiryForm, contact_number: e.target.value })}
-                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-2 text-white font-mono"
-                    placeholder="+63 917 123 4567"
-                  />
-                </div>
-              </div>
-
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+            {/* Left Column: Business Consultation Inquiry Form */}
+            <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-6 shadow-xl flex flex-col justify-between">
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Scope of Project & Cooperation Details *</label>
-                <textarea
-                  required
-                  value={inquiryForm.business_motive}
-                  onChange={(e) => setInquiryForm({ ...inquiryForm, business_motive: e.target.value })}
-                  className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-2 text-white h-24 placeholder-slate-500"
-                  placeholder="Describe location, proposed square meters, target timeline, steel framing specs, or materials supply agreement..."
-                />
-              </div>
+                <div className="pb-4 mb-4 border-b border-[#234338] flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-emerald-400">Client Proposals</div>
+                    <h3 className="text-lg font-black text-white">Project Consultation & Subcontracting</h3>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    GENERAL CONTRACTING
+                  </span>
+                </div>
 
-              <button
-                type="submit"
-                className="w-full py-2.5 bg-[#10b981] text-white hover:bg-[#059669] font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5"
-              >
-                <Send className="w-4 h-4" />
-                Submit Project Consultation
-              </button>
-            </form>
+                {inquirySuccess && (
+                  <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-xs font-bold text-emerald-400 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>Proposal received! Our project estimation engineering department will review and contact you.</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleInquirySubmit} className="space-y-4 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Company / Representative Name *</label>
+                      <input
+                        type="text"
+                        required
+                        value={inquiryForm.name}
+                        onChange={(e) => setInquiryForm({ ...inquiryForm, name: e.target.value })}
+                        className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-2 text-white"
+                        placeholder="e.g. Engr. Gabriel Santos"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Inquiry Category *</label>
+                      <select
+                        value={inquiryForm.inquiry_type}
+                        onChange={(e) => setInquiryForm({ ...inquiryForm, inquiry_type: e.target.value })}
+                        className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-2 text-white"
+                      >
+                        <option value="Customer Inquiry">Customer Inquiry (Client Project Request)</option>
+                        <option value="Business Cooperation">Business Cooperation (Subcontractor / Supplier)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Official Email *</label>
+                      <input
+                        type="email"
+                        required
+                        value={inquiryForm.email}
+                        onChange={(e) => setInquiryForm({ ...inquiryForm, email: e.target.value })}
+                        className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-2 text-white"
+                        placeholder="client@company.ph"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Contact Phone *</label>
+                      <input
+                        type="tel"
+                        required
+                        value={inquiryForm.contact_number}
+                        onChange={(e) => setInquiryForm({ ...inquiryForm, contact_number: e.target.value })}
+                        className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-2 text-white font-mono"
+                        placeholder="+63 917 123 4567"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Scope of Project & Cooperation Details *</label>
+                    <textarea
+                      required
+                      value={inquiryForm.business_motive}
+                      onChange={(e) => setInquiryForm({ ...inquiryForm, business_motive: e.target.value })}
+                      className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-2 text-white h-24 placeholder-slate-500"
+                      placeholder="Describe location, proposed square meters, target timeline, steel framing specs, or materials supply agreement..."
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-[#10b981] text-white hover:bg-[#059669] font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Send className="w-4 h-4" />
+                    Submit Project Consultation
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {/* Right Column: Worker Turnstile QR Code Generator (No Login Required) */}
+            <PublicQrCodeGenerator />
           </div>
         </div>
       </section>
