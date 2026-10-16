@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useServiceWorkerSyncStatus } from '../../utils/registerServiceWorker';
 import {
   Search,
   Building2,
@@ -13,6 +14,8 @@ import {
   UtensilsCrossed,
   ShieldCheck,
   Activity,
+  RefreshCw,
+  CloudUpload,
 } from 'lucide-react';
 import { OfflineSyncModal } from '../modals/OfflineSyncModal';
 import { CanteenOfflineQueueModal } from '../modals/CanteenOfflineQueueModal';
@@ -42,13 +45,22 @@ export const Navbar: React.FC<NavbarProps> = ({
     setCurrentSite,
     sites,
     isOnline,
+    isSyncing,
+    totalPendingChanges,
     offlineStats,
     pendingOfflineCanteenQueue,
+    syncAllPendingChanges,
   } = useApp();
+
+  const swStatus = useServiceWorkerSyncStatus();
   const [isOfflineModalOpen, setIsOfflineModalOpen] = useState(false);
   const [isCanteenQueueModalOpen, setIsCanteenQueueModalOpen] = useState(false);
   const [isRoadmapModalOpen, setIsRoadmapModalOpen] = useState(false);
   const [isSyncLogModalOpen, setIsSyncLogModalOpen] = useState(false);
+
+  // Derive real-time effective synchronization state
+  const isCurrentlySyncing = isSyncing || swStatus.swSyncing;
+  const totalPending = totalPendingChanges ?? ((offlineStats.pendingQueueCount || 0) + pendingOfflineCanteenQueue.length);
 
   return (
     <>
@@ -80,50 +92,120 @@ export const Navbar: React.FC<NavbarProps> = ({
             </select>
           </div>
 
-          {/* Attendance Data Synchronization State Indicator (Remote Construction Sites) */}
-          <button
-            onClick={() => setIsOfflineModalOpen(true)}
-            className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-              isOnline
-                ? 'bg-emerald-950/25 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-400'
-                : 'bg-amber-950/35 border-amber-500 text-amber-300 ring-2 ring-amber-400/40 animate-pulse'
-            }`}
-            title={
-              isOnline
-                ? `Attendance Data: Synchronized Online · Turnstile scans & biometric logs synced in real-time with central server (${offlineStats.cachedAttendanceCount} cached records available).`
-                : `Attendance Data: Offline Mode · Working at remote construction site. ${offlineStats.cachedAttendanceCount} attendance logs stored in device storage (${offlineStats.pendingQueueCount} pending auto-sync).`
-            }
-          >
-            <span className="relative flex h-2 w-2 shrink-0">
-              {isOnline ? (
-                <>
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
-                </>
+          {/* Real-time Service Worker Status & Pending Sync Indicator */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setIsOfflineModalOpen(true)}
+              className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-2 transition-all duration-300 cursor-pointer shadow-sm select-none ${
+                !isOnline
+                  ? 'bg-amber-950/40 border-amber-500/60 text-amber-300 ring-1 ring-amber-400/40 hover:bg-amber-900/40'
+                  : isCurrentlySyncing
+                  ? 'bg-cyan-950/40 border-cyan-500/60 text-cyan-300 ring-1 ring-cyan-400/40 hover:bg-cyan-900/40 animate-pulse'
+                  : totalPending > 0
+                  ? 'bg-amber-950/30 border-amber-500/40 text-amber-300 hover:bg-amber-900/30 ring-1 ring-amber-500/20'
+                  : 'bg-emerald-950/25 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-400'
+              }`}
+              title={
+                !isOnline
+                  ? `Offline Mode Active · Service Worker cache running (${swStatus.cacheVersion}). ${totalPending} local change(s) stored on device waiting for database upload.`
+                  : isCurrentlySyncing
+                  ? `Syncing in Progress · Service Worker uploading ${totalPending} pending record(s) to central ERP database...`
+                  : totalPending > 0
+                  ? `Online · ${totalPending} local change(s) pending database upload. Click to sync or view details.`
+                  : `Online & Synchronized · Service Worker registration active (${swStatus.cacheVersion}) · All local changes synchronized with central database.`
+              }
+            >
+              {/* Status Ping Dot */}
+              <span className="relative flex h-2 w-2 shrink-0">
+                {!isOnline ? (
+                  <>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400" />
+                  </>
+                ) : isCurrentlySyncing ? (
+                  <>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400" />
+                  </>
+                ) : totalPending > 0 ? (
+                  <>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400" />
+                  </>
+                ) : (
+                  <>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+                  </>
+                )}
+              </span>
+
+              {/* Status Icon */}
+              {!isOnline ? (
+                <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              ) : isCurrentlySyncing ? (
+                <RefreshCw className="w-3.5 h-3.5 text-cyan-400 shrink-0 animate-spin" />
+              ) : totalPending > 0 ? (
+                <CloudUpload className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               ) : (
-                <>
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400" />
-                </>
+                <Wifi className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               )}
-            </span>
-            {isOnline ? (
-              <Wifi className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            ) : (
-              <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            )}
-            <span className="text-[11px] font-bold whitespace-nowrap flex items-center gap-1">
-              <span className="hidden sm:inline">Attendance:</span>
-              <span className={isOnline ? 'text-emerald-300' : 'text-amber-300'}>
-                {isOnline ? 'Online' : 'Offline'}
+
+              {/* Primary Status Label: Displays 'Offline' or 'Syncing' or 'Online' */}
+              <span className="text-[11px] font-bold tracking-wide whitespace-nowrap">
+                {!isOnline ? (
+                  <span className="text-amber-300">Offline</span>
+                ) : isCurrentlySyncing ? (
+                  <span className="text-cyan-300">Syncing</span>
+                ) : totalPending > 0 ? (
+                  <span className="text-amber-300">Pending Sync</span>
+                ) : (
+                  <span className="text-emerald-300">Online</span>
+                )}
               </span>
-            </span>
-            {!isOnline && (
-              <span className="px-1.5 py-0.2 rounded bg-amber-500/30 text-amber-200 font-mono text-[9px] font-bold">
-                {offlineStats.pendingQueueCount > 0 ? `${offlineStats.pendingQueueCount} Queued` : 'Site Cache'}
-              </span>
+
+              {/* Visual Feedback for Pending Local Changes */}
+              {!isOnline && totalPending > 0 && (
+                <span className="px-1.5 py-0.5 rounded bg-amber-500/25 border border-amber-500/40 text-amber-200 font-mono text-[9px] font-bold flex items-center gap-1 shadow-inner">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  {totalPending} Pending
+                </span>
+              )}
+
+              {isCurrentlySyncing && (
+                <span className="px-1.5 py-0.5 rounded bg-cyan-500/25 border border-cyan-500/40 text-cyan-200 font-mono text-[9px] font-bold flex items-center gap-1 shadow-inner">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+                  {totalPending > 0 ? `${totalPending} Uploading` : 'Uploading...'}
+                </span>
+              )}
+
+              {isOnline && !isCurrentlySyncing && totalPending > 0 && (
+                <span className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/30 text-amber-300 font-mono text-[9px] font-bold">
+                  {totalPending} Queued
+                </span>
+              )}
+
+              {isOnline && !isCurrentlySyncing && totalPending === 0 && (
+                <span className="hidden xl:inline text-[9px] font-mono text-emerald-400/80 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                  Synced
+                </span>
+              )}
+            </button>
+
+            {/* Quick-Sync Button when Online with Pending Changes */}
+            {isOnline && !isCurrentlySyncing && totalPending > 0 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  syncAllPendingChanges();
+                }}
+                className="p-1.5 rounded-lg border border-cyan-500/50 bg-cyan-950/30 hover:bg-cyan-500/20 text-cyan-300 hover:text-white transition-all cursor-pointer"
+                title={`Upload ${totalPending} pending change(s) to database now`}
+              >
+                <CloudUpload className="w-3.5 h-3.5 animate-bounce text-cyan-400" />
+              </button>
             )}
-          </button>
+          </div>
 
           {/* Detailed Synchronization Service Activity Log Button */}
           <button

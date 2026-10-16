@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { CeoPasswordModal } from '../modals/CeoPasswordModal';
+import { HubUnlockModal } from '../modals/HubUnlockModal';
 import { CanteenGcashPayoutModal } from '../modals/CanteenGcashPayoutModal';
+import { EmbeddedGcashWallet } from '../gcash/EmbeddedGcashWallet';
+import { RealGcashBusinessGatewayModal } from '../gcash/RealGcashBusinessGatewayModal';
 import { PageId } from '../layout/Sidebar';
-import { GCashTransactionRecord, Site } from '../../types';
+import { GCashTransactionRecord, Site, GcashHubType } from '../../types';
 import {
   Wallet,
   Shield,
@@ -13,6 +16,7 @@ import {
   Building,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Receipt,
   FileCheck2,
   DollarSign,
@@ -29,6 +33,9 @@ import {
   Edit,
   Save,
   Phone,
+  Layers,
+  ShieldCheck,
+  Globe,
 } from 'lucide-react';
 
 interface CeoGcashDashboardViewProps {
@@ -47,9 +54,34 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
     updateSite,
     isCeoUnlocked,
     lockCeoVault,
+    hubSessions,
+    unlockHub,
+    lockHub,
+    isHubUnlocked,
+    getHubSession,
+    currentUser,
+    currentSite,
+    gcashGatewayConfig,
+    refreshGcashLiveBalance,
   } = useApp();
 
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(!isCeoUnlocked);
+  const userRole = currentUser?.access_point || 'ceo';
+  const defaultHub: GcashHubType =
+    userRole === 'admin 1'
+      ? 'exec_distribution_hub'
+      : userRole === 'admin 2'
+      ? 'admin2_distribution_hub'
+      : 'ceo_hub';
+
+  const [activeHub, setActiveHub] = useState<GcashHubType>(defaultHub);
+  const [isHubUnlockModalOpen, setIsHubUnlockModalOpen] = useState(false);
+  const [hubViewMode, setHubViewMode] = useState<'enterprise' | 'embedded_wallet'>('enterprise');
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const [isGatewayModalOpen, setIsGatewayModalOpen] = useState(false);
+
+  const needsReconciliationCount = gcashTransactions.filter(
+    (t) => t.status === 'NEEDS_RECONCILIATION' || t.status === 'PROCESSING' || t.status === 'PENDING'
+  ).length;
 
   // Canteen Payout Modal States
   const [selectedCanteenSite, setSelectedCanteenSite] = useState<Site | null>(null);
@@ -76,8 +108,47 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
   // Receipt Modal State
   const [selectedReceiptTx, setSelectedReceiptTx] = useState<GCashTransactionRecord | null>(null);
 
-  // Pending payroll records
-  const pendingPayroll = payroll.filter((p) => p.payment_status === 'Pending');
+  // 3 GCash Operations Hubs Metadata & Role Permissions (Sec 2 & 3)
+  const hubMeta = {
+    ceo_hub: {
+      name: 'CEO Dedicated GCash Operations Hub',
+      shortName: 'CEO Vault',
+      roleRequirement: 'Strictly Restricted to CEO Account (Emerita)',
+      allowedRoles: ['ceo'],
+      badge: 'EMERITA RESTRICTED',
+    },
+    exec_distribution_hub: {
+      name: 'Executive Operations GCash Distribution Hub',
+      shortName: 'Executive Hub',
+      roleRequirement: 'CEO & Admin 1 (HR Lead)',
+      allowedRoles: ['ceo', 'admin 1'],
+      badge: 'HR EXECUTIVE',
+    },
+    admin2_distribution_hub: {
+      name: 'Time & Payroll Engine Site GCash Hub',
+      shortName: 'Site Ops Hub',
+      roleRequirement: 'CEO & Site-Scoped Admin 2',
+      allowedRoles: ['ceo', 'admin 2'],
+      badge: 'SITE OPS (ISOLATED)',
+    },
+  };
+
+  const isRolePermittedForHub = hubMeta[activeHub].allowedRoles.includes(userRole);
+  const currentHubSession = getHubSession(activeHub);
+  const isCurrentHubUnlocked =
+    (activeHub === 'ceo_hub' && isCeoUnlocked) || Boolean(currentHubSession?.isUnlocked);
+
+  // Site Isolation enforcement for Admin 2 (Sec 8)
+  const assignedSiteList = userRole === 'admin 2' ? currentUser?.assigned_sites || ['SITE-001'] : ['ALL'];
+
+  // Pending payroll records (strictly filtered to assigned site if in site hub)
+  const pendingPayroll = payroll.filter((p) => {
+    if (p.payment_status !== 'Pending') return false;
+    if (activeHub === 'admin2_distribution_hub' && !assignedSiteList.includes('ALL')) {
+      return assignedSiteList.includes(p.site_id);
+    }
+    return true;
+  });
 
   // Single payroll disburse handler
   const handleDisbursePayroll = async (payrollId: string) => {
@@ -203,41 +274,121 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
     setIsCanteenModalOpen(true);
   };
 
-  // If locked, present security challenge
-  if (!isCeoUnlocked) {
-    return (
-      <div className="min-h-[80vh] flex items-center justify-center p-4">
-        <div className="bg-[#0e1a16] border border-[#234338] rounded-2xl max-w-lg w-full p-8 text-center space-y-6 shadow-2xl relative overflow-hidden">
-          <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-amber-400 mx-auto shadow-inner">
-            <Lock className="w-8 h-8" />
-          </div>
+  // Hub Switcher Tabs Component
+  const renderHubSwitcherTabs = () => (
+    <div className="flex items-center gap-2 border-b border-[#234338] pb-1 overflow-x-auto">
+      {(['ceo_hub', 'exec_distribution_hub', 'admin2_distribution_hub'] as GcashHubType[]).map((hId) => {
+        const meta = hubMeta[hId];
+        const isActive = activeHub === hId;
+        const isPermitted = meta.allowedRoles.includes(userRole);
+        const unlocked = isHubUnlocked(hId) || (hId === 'ceo_hub' && isCeoUnlocked);
 
-          <div className="space-y-2">
-            <div className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase">
-              Restricted Financial Gate
-            </div>
-            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-              CEO Dedicated GCash Operations Hub
-            </h1>
-            <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-              Authorized direct execution of corporate GCash disbursements for weekly worker salaries and site operations. Access is strictly restricted.
-            </p>
-          </div>
-
+        return (
           <button
-            onClick={() => setIsPasswordModalOpen(true)}
-            className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-[#080f0d] font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+            key={hId}
+            onClick={() => setActiveHub(hId)}
+            className={`px-3.5 py-2 text-xs font-bold rounded-t-lg transition-colors flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+              isActive
+                ? 'bg-[#0e1a16] text-[#a3e635] border-t-2 border-[#a3e635] border-x border-[#234338]'
+                : 'text-slate-400 hover:text-white hover:bg-[#13241f]'
+            }`}
           >
-            <Lock className="w-4 h-4" />
-            <span>Unlock GCash Terminal</span>
+            <Wallet className={`w-3.5 h-3.5 ${isActive ? 'text-[#a3e635]' : 'text-slate-500'}`} />
+            <span>{meta.shortName}</span>
+            <span
+              className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold ${
+                !isPermitted
+                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                  : unlocked
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+              }`}
+            >
+              {!isPermitted ? 'RESTRICTED' : unlocked ? 'UNLOCKED' : 'LOCKED'}
+            </span>
           </button>
+        );
+      })}
+    </div>
+  );
 
-          <CeoPasswordModal
-            isOpen={isPasswordModalOpen}
-            onClose={() => setIsPasswordModalOpen(false)}
-            onSuccess={() => setIsPasswordModalOpen(false)}
-            targetDashboardName="CEO GCash Operations Hub"
-          />
+  // If role is strictly denied for selected hub (Specification Section 3)
+  if (!isRolePermittedForHub) {
+    return (
+      <div className="space-y-6">
+        {renderHubSwitcherTabs()}
+        <div className="min-h-[60vh] flex items-center justify-center p-4">
+          <div className="bg-[#0e1a16] border border-rose-500/40 rounded-2xl max-w-lg w-full p-8 text-center space-y-5 shadow-2xl relative">
+            <div className="w-14 h-14 rounded-2xl bg-rose-500/15 border border-rose-500/40 flex items-center justify-center text-rose-400 mx-auto">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+            <div>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 uppercase">
+                Access Denied (403 Forbidden)
+              </span>
+              <h2 className="text-xl font-black text-white mt-2">
+                Unauthorized Hub Entry Attempt
+              </h2>
+              <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                Role <strong className="text-amber-300 uppercase">'{userRole}'</strong> is not authorized to access <strong className="text-white">{hubMeta[activeHub].name}</strong>.
+              </p>
+              <div className="p-3 bg-[#13241f] border border-[#234338] rounded-xl text-left text-xs text-slate-300 mt-4 space-y-1">
+                <div className="font-bold text-white text-[11px] uppercase tracking-wider">Required Authorization:</div>
+                <div className="text-emerald-400 font-semibold">{hubMeta[activeHub].roleRequirement}</div>
+                <div className="text-[10px] text-slate-400">Audit violation logged under ACCESS_CONTROL policy.</div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setActiveHub(defaultHub)}
+              className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-[#10b981] hover:from-emerald-500 hover:to-[#059669] text-[#080f0d] font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer"
+            >
+              Switch to My Authorized Hub ({hubMeta[defaultHub].shortName})
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If hub is locked, present security challenge for this specific hub
+  if (!isCurrentHubUnlocked) {
+    return (
+      <div className="space-y-6">
+        {renderHubSwitcherTabs()}
+        <div className="min-h-[60vh] flex items-center justify-center p-4">
+          <div className="bg-[#0e1a16] border border-[#234338] rounded-2xl max-w-lg w-full p-8 text-center space-y-6 shadow-2xl relative overflow-hidden">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-amber-400 mx-auto shadow-inner">
+              <Lock className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <div className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase">
+                {hubMeta[activeHub].badge}
+              </div>
+              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                {hubMeta[activeHub].name}
+              </h1>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+                Authorized direct execution of corporate GCash disbursements. Verification uses your account credentials with a 5-minute inactivity session.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setIsHubUnlockModalOpen(true)}
+              className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-[#080f0d] font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Lock className="w-4 h-4" />
+              <span>Unlock {hubMeta[activeHub].shortName} Terminal</span>
+            </button>
+
+            <HubUnlockModal
+              isOpen={isHubUnlockModalOpen}
+              onClose={() => setIsHubUnlockModalOpen(false)}
+              onSuccess={() => setIsHubUnlockModalOpen(false)}
+              targetHubId={activeHub}
+            />
+          </div>
         </div>
       </div>
     );
@@ -259,6 +410,9 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
+      {/* 3 GCash Operations Hub Switcher (Sec 2 & 3) */}
+      {renderHubSwitcherTabs()}
+
       {/* Header Bar */}
       <div className="bg-[#0e1a16] border border-[#234338] rounded-2xl p-5 shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
@@ -268,59 +422,305 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight uppercase">
-                CEO Dedicated GCash Operations Hub
+                {hubMeta[activeHub].name}
               </h1>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                EMERITA ZERO TWO
+                {hubMeta[activeHub].badge}
               </span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                REAL-TIME SYNCED
+                SESSION ACTIVE
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              Direct corporate disbursement terminal for weekly salaries and site operations &bull; Automatic receipt generation & immutable audit ledger
+              {activeHub === 'admin2_distribution_hub'
+                ? `Site-Scoped Field Distribution Terminal · Bound to [${assignedSiteList.join(', ')}] · Automatic receipt generation & SMS notifications`
+                : 'Direct corporate disbursement terminal for weekly salaries and site operations · Automatic receipt generation & immutable audit ledger'}
             </p>
           </div>
         </div>
 
         {/* Header Controls */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Mode Switcher: Enterprise vs Embedded Smartphone Wallet */}
+          <div className="flex items-center bg-[#13241f] border border-[#234338] p-1 rounded-xl">
+            <button
+              onClick={() => setHubViewMode('enterprise')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                hubViewMode === 'enterprise'
+                  ? 'bg-[#10b981] text-[#080f0d] shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Enterprise Hub</span>
+            </button>
+            <button
+              onClick={() => setHubViewMode('embedded_wallet')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                hubViewMode === 'embedded_wallet'
+                  ? 'bg-[#005ce6] text-white shadow-sm ring-1 ring-blue-400'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Smartphone className="w-3.5 h-3.5 text-blue-400" />
+              <span>Embedded GCash App</span>
+              <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full">LIVE</span>
+            </button>
+          </div>
+
           <button
-            onClick={() => onNavigate('ceo_monitoring')}
-            className="px-3.5 py-2 bg-[#13241f] border border-[#234338] hover:border-[#a3e635] text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            onClick={() => setIsGatewayModalOpen(true)}
+            className="px-3 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Configure Official GCash Business Gateway, Live Balance & Reconciliation Workbench"
           >
-            <Shield className="w-4 h-4 text-[#a3e635]" />
-            <span>CEO Monitoring Hub</span>
+            <Globe className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Business Gateway &amp; Reconciliation</span>
+            {needsReconciliationCount > 0 && (
+              <span className="bg-amber-500 text-black text-[9px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
+                {needsReconciliationCount}
+              </span>
+            )}
           </button>
 
           <button
-            onClick={() => lockCeoVault()}
+            onClick={() => setIsWalletModalOpen(true)}
+            className="px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Open Interactive Smartphone Popup"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden sm:inline">Launch App Popup</span>
+          </button>
+
+          {userRole === 'ceo' && (
+            <button
+              onClick={() => onNavigate('ceo_monitoring')}
+              className="px-3.5 py-2 bg-[#13241f] border border-[#234338] hover:border-[#a3e635] text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Shield className="w-4 h-4 text-[#a3e635]" />
+              <span>CEO Monitoring Hub</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => {
+              lockHub(activeHub);
+              if (activeHub === 'ceo_hub') lockCeoVault();
+            }}
             className="px-3 py-2 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Lock CEO Vault immediately"
+            title={`Lock ${hubMeta[activeHub].shortName} immediately`}
           >
             <Lock className="w-3.5 h-3.5 text-rose-400" />
-            <span>Lock Vault</span>
+            <span>Lock {hubMeta[activeHub].shortName}</span>
           </button>
         </div>
       </div>
 
-      {/* Corporate GCash Wallet & Liquidity Status Bar */}
-      <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
-        <div>
-          <div className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-            <Smartphone className="w-4 h-4 text-[#38bdf8]" />
-            Corporate GCash Merchant Balance
-          </div>
-          <div className="flex items-baseline gap-2 mt-1">
-            <div className="text-3xl sm:text-4xl font-black font-mono text-white tabular-nums">
-              ₱{gcashWalletBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+      {hubViewMode === 'embedded_wallet' ? (
+        <div className="bg-[#0e1a16] border border-[#234338] rounded-2xl p-4 sm:p-6 shadow-2xl relative space-y-6 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between pb-4 border-b border-[#234338] flex-wrap gap-3">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-base sm:text-lg font-black text-white uppercase tracking-tight">
+                  Embedded GCash Wallet &bull; {hubMeta[activeHub].name}
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#005ce6]/25 text-blue-300 border border-[#005ce6]/40">
+                  AUTHENTIC GCASH SIMULATION
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Active corporate merchant account with real-time balance sync, one-click laborer payroll disbursements, instant Cash In, and DOLE electronic receipt generation.
+              </p>
             </div>
-            <span className="text-xs text-emerald-400 font-bold">● Active & Regulated</span>
+
+            <button
+              onClick={() => setHubViewMode('enterprise')}
+              className="px-3.5 py-2 bg-[#13241f] border border-[#234338] hover:border-[#10b981] text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Layers className="w-3.5 h-3.5 text-[#10b981]" />
+              <span>Return to Enterprise Ledger</span>
+            </button>
           </div>
-          <div className="text-[11px] text-slate-400 mt-0.5">
-            Merchant: De Rueda Construction Corp &bull; Account: 0917-582-9104 &bull; Daily Limit: ₱1,000,000.00
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            {/* Left/Center Column: Smartphone GCash Wallet */}
+            <div className="lg:col-span-5 flex justify-center">
+              <EmbeddedGcashWallet hubId={activeHub} />
+            </div>
+
+            {/* Right Column: Active Hub Telemetry & Quick Laborer Payout Actions */}
+            <div className="lg:col-span-7 space-y-4">
+              {/* Hub Profile Badge Card */}
+              <div className="bg-[#13241f] border border-[#234338] rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-[#a3e635]" />
+                    {hubMeta[activeHub].shortName} Terminal Profile
+                  </h4>
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-mono text-[10px] font-bold border border-emerald-500/30">
+                    LIVE SESSION
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="p-3 bg-[#0e1a16] border border-[#234338] rounded-xl">
+                    <div className="text-[10px] text-slate-400">Security Clearance</div>
+                    <div className="font-bold text-white text-xs mt-0.5 truncate">{hubMeta[activeHub].badge}</div>
+                  </div>
+                  <div className="p-3 bg-[#0e1a16] border border-[#234338] rounded-xl">
+                    <div className="text-[10px] text-slate-400">Merchant Float</div>
+                    <div className="font-mono font-bold text-emerald-400 text-xs mt-0.5">
+                      ₱{gcashWalletBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div className="p-3 bg-[#0e1a16] border border-[#234338] rounded-xl">
+                    <div className="text-[10px] text-slate-400">Default MPIN</div>
+                    <div className="font-mono font-bold text-amber-300 text-xs mt-0.5">
+                      {activeHub === 'ceo_hub' ? '0279' : activeHub === 'exec_distribution_hub' ? '1122' : '2233'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-xs text-slate-300 leading-relaxed bg-[#0e1a16] p-3.5 rounded-xl border border-[#234338] space-y-1.5">
+                  <div className="font-bold text-white text-[11px] uppercase tracking-wider flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-[#a3e635]" />
+                    <span>How to Use the Embedded GCash Wallet:</span>
+                  </div>
+                  <ul className="list-disc pl-4 space-y-1 text-slate-400 text-[11px]">
+                    <li><strong>Send Money:</strong> Tap "Send Money" on the smartphone to disburse funds to any mobile number or select a pending worker below.</li>
+                    <li><strong>Cash In:</strong> Tap the "(+)" button beside the balance or the "Cash In" tile to top up float from BDO, BPI, or UnionBank.</li>
+                    <li><strong>Receipts &amp; Audit:</strong> Tap "Activity" in the bottom navigation to inspect all completed transactions and download official SVG vouchers.</li>
+                    <li><strong>Quick Demo MPIN:</strong> If logged out, tap the "Demo" fingerprint button on the keypad to log in with 1 tap.</li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Quick Worker Payout Queue for this Hub */}
+              <div className="bg-[#13241f] border border-[#234338] rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <Users className="w-4 h-4 text-[#38bdf8]" />
+                      Unpaid Laborer Salaries for this Hub ({pendingPayroll.length})
+                    </h4>
+                    <span className="text-[10px] text-slate-400">
+                      Disbursements made here or via the phone automatically record in the master ledger
+                    </span>
+                  </div>
+                  {pendingPayroll.length > 0 && (
+                    <button
+                      onClick={handleBatchDisbursePayroll}
+                      disabled={isSubmitting}
+                      className="px-3 py-1.5 bg-[#005ce6] hover:bg-blue-600 text-white font-bold text-xs rounded-xl shadow-md transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Batch Disburse All ({pendingPayroll.length})</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                  {pendingPayroll.map((p) => {
+                    const emp = employees.find((e) => e.employee_id === p.employee_id);
+                    return (
+                      <div
+                        key={p.payroll_id}
+                        className="p-3 bg-[#0e1a16] border border-[#234338] rounded-xl flex items-center justify-between text-xs hover:border-[#005ce6] transition-colors"
+                      >
+                        <div>
+                          <div className="font-bold text-white">{emp?.name || p.employee_id}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            {p.week_key} &bull; {p.site_id} &bull; {emp?.position || 'Laborer'} &bull; {emp?.gcash_number || '0918-234-5671'}
+                          </div>
+                        </div>
+                        <div className="text-right flex items-center gap-3">
+                          <div className="font-mono font-bold text-emerald-400 text-sm">
+                            ₱{p.net_pay.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </div>
+                          <button
+                            onClick={() => handleDisbursePayroll(p.payroll_id)}
+                            disabled={isSubmitting}
+                            className="px-3 py-1.5 bg-[#005ce6] hover:bg-blue-600 active:scale-95 text-white text-xs font-bold rounded-lg shadow-xs transition-all cursor-pointer"
+                          >
+                            Disburse
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {pendingPayroll.length === 0 && (
+                    <div className="text-center py-6 text-xs text-slate-400 bg-[#0e1a16] rounded-xl border border-[#234338]">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto mb-1" />
+                      All worker salaries for this hub are 100% disbursed!
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
+      ) : (
+        <>
+          {/* Corporate GCash Wallet & Liquidity Status Bar (Section 6 Compliance) */}
+          <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
+            <div>
+              <div className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5 flex-wrap">
+                <Globe className="w-4 h-4 text-[#38bdf8]" />
+                <span>Real GCash Merchant Balance (Authorized Business Endpoint)</span>
+                <span
+                  className={`px-2 py-0.2 rounded-full text-[10px] font-mono font-bold border ${
+                    gcashGatewayConfig.connection_status === 'CONNECTED'
+                      ? gcashGatewayConfig.environment === 'production'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                        : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                      : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  }`}
+                >
+                  {gcashGatewayConfig.connection_status === 'CONNECTED'
+                    ? `${gcashGatewayConfig.environment.toUpperCase()} CONNECTED`
+                    : 'GATEWAY DISCONNECTED'}
+                </span>
+              </div>
+
+              {gcashGatewayConfig.connection_status === 'CONNECTED' && gcashGatewayConfig.live_balance !== null ? (
+                <div className="flex items-baseline gap-2 mt-1">
+                  <div className="text-3xl sm:text-4xl font-black font-mono text-white tabular-nums">
+                    ₱{gcashGatewayConfig.live_balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </div>
+                  <span className="text-xs text-emerald-400 font-bold">● Active &amp; Regulated Endpoint</span>
+                </div>
+              ) : (
+                <div className="flex items-baseline gap-2 mt-1">
+                  <div className="text-2xl sm:text-3xl font-black font-mono text-amber-300 tabular-nums">
+                    ₱{gcashWalletBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </div>
+                  <span className="text-xs text-amber-400 font-bold">● Standby Cache (Live API Reconnect Required)</span>
+                </div>
+              )}
+
+              <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                <span>Merchant: De Rueda Construction Inc. &bull; ID: {gcashGatewayConfig.merchant_id} &bull; Daily Limit: ₱1,000,000.00</span>
+                {gcashGatewayConfig.live_balance_last_updated && (
+                  <span className="text-slate-400 font-mono text-[10px] bg-[#13241f] px-1.5 py-0.2 rounded border border-[#234338]">
+                    Last Updated: {gcashGatewayConfig.live_balance_last_updated}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+              <button
+                onClick={() => setIsGatewayModalOpen(true)}
+                className="px-3 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 hover:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <FileCheck2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Reconciliation Console</span>
+                {needsReconciliationCount > 0 && (
+                  <span className="bg-amber-500 text-black text-[9px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
+                    {needsReconciliationCount}
+                  </span>
+                )}
+              </button>
+            </div>
 
         <div className="flex items-center gap-3 self-start md:self-auto text-xs text-slate-300 font-mono">
           <div className="p-2.5 bg-[#13241f] border border-[#234338] rounded-lg">
@@ -830,18 +1230,19 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
             <thead>
               <tr className="border-b border-[#234338] text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
                 <th className="py-2.5 px-3">Reference No</th>
-                <th className="py-2.5 px-3">Recipient & Mobile</th>
+                <th className="py-2.5 px-3">Recipient &amp; Mobile</th>
                 <th className="py-2.5 px-3">Category</th>
                 <th className="py-2.5 px-3">Project Site</th>
                 <th className="py-2.5 px-3">Amount</th>
+                <th className="py-2.5 px-3">Status</th>
                 <th className="py-2.5 px-3">Timestamp</th>
-                <th className="py-2.5 px-3 text-right">Receipt & Actions</th>
+                <th className="py-2.5 px-3 text-right">Receipt &amp; Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#234338]/60">
               {filteredTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-500 text-xs">
+                  <td colSpan={8} className="py-8 text-center text-slate-500 text-xs">
                     No transactions match the selected filter.
                   </td>
                 </tr>
@@ -866,6 +1267,19 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
                     <td className="py-3 px-3 font-mono font-bold text-emerald-400 text-sm">
                       ₱{tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
+                    <td className="py-3 px-3">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                          tx.status === 'PAID' || tx.status === 'COMPLETED'
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : tx.status === 'NEEDS_RECONCILIATION' || tx.status === 'PROCESSING' || tx.status === 'PENDING'
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
+                            : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                        }`}
+                      >
+                        {tx.status}
+                      </span>
+                    </td>
                     <td className="py-3 px-3 text-[10px] font-mono text-slate-400">
                       {tx.timestamp}
                     </td>
@@ -888,6 +1302,8 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
           </table>
         </div>
       </div>
+        </>
+      )}
 
       {/* Official Receipt Modal */}
       {selectedReceiptTx && (
@@ -947,6 +1363,29 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
           }}
         />
       )}
+
+      {/* Interactive Smartphone GCash Popup Modal */}
+      {isWalletModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 animate-in fade-in duration-150">
+          <div className="relative max-w-sm w-full">
+            <button
+              onClick={() => setIsWalletModalOpen(false)}
+              className="absolute -top-10 right-0 px-3 py-1 bg-[#13241f] border border-[#234338] hover:border-rose-400 text-slate-300 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+              <span>Close Phone</span>
+            </button>
+            <EmbeddedGcashWallet hubId={activeHub} />
+          </div>
+        </div>
+      )}
+
+      {/* Official GCash for Business Gateway & Reconciliation Console (Compliance Specs) */}
+      <RealGcashBusinessGatewayModal
+        isOpen={isGatewayModalOpen}
+        onClose={() => setIsGatewayModalOpen(false)}
+        onOpenSmsLogs={() => onNavigate('payroll')}
+      />
     </div>
   );
 };

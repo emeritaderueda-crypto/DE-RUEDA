@@ -4,6 +4,9 @@ export interface UserSession {
   session_id: string;
   access_point: AccessPointRole;
   email: string;
+  name?: string;
+  assigned_sites?: string[]; // e.g. ['SITE-001'] or ['ALL']
+  mfa_verified?: boolean;
   created_at: string;
   updated_at: string;
   expires_at: string;
@@ -21,7 +24,7 @@ export interface Employee {
   gcash_number: string;
   daily_rate: number;
   site_id: string;
-  category?: 'Site-Based' | 'Office-Based';
+  category?: 'Site-Based' | 'Office-Based' | 'Office Based Staff (HQ)';
   photo_url?: string;
   status: 'active' | 'archived' | 'on_leave';
   qr_version: number;
@@ -493,10 +496,47 @@ export interface WeeklyPayrollApprovalDoc {
   notes: string;
 }
 
+export type GCashCategory =
+  | 'Weekly Salary'
+  | 'Site Operations (Fuel/Emergency)'
+  | 'Subcontractor Spot Payment'
+  | 'Materials Spot Cash'
+  | 'Materials & Vendor Payout'
+  | 'Site Canteen Payout'
+  | 'Treasury Top-Up';
+
+export type GCashPayoutStatus =
+  | 'DRAFT'
+  | 'PENDING_APPROVAL'
+  | 'APPROVED'
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'PAID'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'NEEDS_RECONCILIATION';
+
+export interface GCashGatewayConfig {
+  provider_type: 'direct_gcash_business' | 'paymongo' | 'xendit' | 'maya_business';
+  environment: 'sandbox' | 'production';
+  connection_status: 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'LOCKED' | 'SESSION_EXPIRED' | 'ERROR';
+  merchant_id: string;
+  client_id: string;
+  api_key_masked: string;
+  webhook_secret_masked: string;
+  live_balance: number | null;
+  live_balance_last_updated: string | null;
+  daily_disbursement_limit: number;
+  daily_disbursed_today: number;
+  last_error_message?: string | null;
+  last_connected_at?: string | null;
+}
+
 export interface GCashTransactionRecord {
   transaction_id: string;
   reference_no: string;
-  category: 'Weekly Salary' | 'Site Operations (Fuel/Emergency)' | 'Subcontractor Spot Payment' | 'Materials Spot Cash' | 'Site Canteen Payout';
+  category: GCashCategory;
   site_id: string;
   site_name: string;
   recipient_name: string;
@@ -504,11 +544,16 @@ export interface GCashTransactionRecord {
   amount: number;
   fee: number;
   purpose: string;
-  status: 'COMPLETED' | 'PENDING' | 'FAILED';
+  status: GCashPayoutStatus;
   receipt_url: string;
   receipt_file_name?: string;
   initiated_by: string;
   timestamp: string;
+  idempotency_key?: string;
+  reconciliation_notes?: string;
+  disbursement_batch_id?: string;
+  provider_reference?: string;
+  sms_payslip_dispatched?: boolean;
 }
 
 export interface CanteenMenuItem {
@@ -629,5 +674,75 @@ export interface CanteenAggregationSiteSummary {
   total_gcash_settled: number;
   net_outstanding_balance: number;
   workers: CanteenAggregationWorkerLine[];
+}
+
+// ----------------------------------------------------
+// Agreed Upgrade Types: GCash Hubs, RBAC & SMS Payslips
+// ----------------------------------------------------
+
+export type GcashHubType =
+  | 'ceo_hub'
+  | 'exec_distribution_hub'
+  | 'admin2_distribution_hub';
+
+export interface HubSessionState {
+  hubId: GcashHubType;
+  isUnlocked: boolean;
+  unlockedBy?: string;
+  unlockedRole?: AccessPointRole;
+  unlockedAt?: string;
+  expiresAt?: string;
+  timeoutMinutes: number;
+}
+
+export interface AdminUserAccount {
+  id: string;
+  email: string;
+  name: string;
+  role: AccessPointRole;
+  assignedSites: string[]; // e.g. ['SITE-001'] or ['ALL']
+  mfaEnabled: boolean;
+  mfaSecret?: string;
+  backupCodes?: string[];
+  status: 'active' | 'suspended';
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt?: string;
+}
+
+export interface SmsPayslipLogEntry {
+  id: string;
+  payroll_id: string;
+  employee_id: string;
+  employee_name: string;
+  mobile_number: string;
+  week_key: string;
+  site_id: string;
+  gross_pay: number;
+  deductions_total: number;
+  net_pay: number;
+  payout_ref: string;
+  idempotency_key: string;
+  status: 'DELIVERED' | 'SENT' | 'FAILED' | 'RETRY_QUEUED';
+  provider_ref: string;
+  sms_body: string;
+  failure_reason?: string;
+  retry_count: number;
+  sent_at: string;
+  delivered_at?: string;
+}
+
+export interface GcashWalletInfo {
+  merchant_id: string;
+  account_name: string;
+  available_balance: number;
+  daily_disbursement_limit: number;
+  daily_disbursed_today: number;
+  status: 'ACTIVE' | 'PENDING_ONBOARDING' | 'SANDBOX_STAGING';
+  settlement_currency: string;
+  last_topup_date: string;
+  network_provider: string;
+  is_official_live_api: boolean;
+  api_disclaimer?: string;
 }
 

@@ -252,35 +252,45 @@ export function queueOfflineAction(
   };
   const updated = [newItem, ...queue];
   safeSet(KEYS.QUEUE, updated);
+  window.dispatchEvent(new CustomEvent('drc:queue-change', { detail: { count: updated.length } }));
   return newItem;
 }
 
 export function getOfflineQueue(): OfflineActionItem[] {
-  const stored = safeGet<OfflineActionItem[]>(KEYS.QUEUE, []);
-  if (stored.length === 0) {
-    safeSet(KEYS.QUEUE, INITIAL_SAMPLE_QUEUE);
-    return INITIAL_SAMPLE_QUEUE;
+  try {
+    const raw = localStorage.getItem(KEYS.QUEUE);
+    if (raw === null) {
+      safeSet(KEYS.QUEUE, INITIAL_SAMPLE_QUEUE);
+      return INITIAL_SAMPLE_QUEUE;
+    }
+    return JSON.parse(raw) || [];
+  } catch {
+    return [];
   }
-  return stored;
 }
 
 export function updateOfflineQueueItem(id: string, updates: Partial<OfflineActionItem>): void {
   const queue = getOfflineQueue();
   const updated = queue.map((item) => (item.id === id ? { ...item, ...updates } : item));
   safeSet(KEYS.QUEUE, updated);
+  window.dispatchEvent(new CustomEvent('drc:queue-change', { detail: { count: updated.length } }));
 }
 
 export function removeOfflineQueueItem(id: string): void {
   const queue = getOfflineQueue();
-  safeSet(KEYS.QUEUE, queue.filter((item) => item.id !== id));
+  const updated = queue.filter((item) => item.id !== id);
+  safeSet(KEYS.QUEUE, updated);
+  window.dispatchEvent(new CustomEvent('drc:queue-change', { detail: { count: updated.length } }));
 }
 
 export function clearOfflineQueue(): void {
   safeSet(KEYS.QUEUE, []);
+  window.dispatchEvent(new CustomEvent('drc:queue-change', { detail: { count: 0 } }));
 }
 
 export function seedSampleOfflineQueue(): OfflineActionItem[] {
   safeSet(KEYS.QUEUE, INITIAL_SAMPLE_QUEUE);
+  window.dispatchEvent(new CustomEvent('drc:queue-change', { detail: { count: INITIAL_SAMPLE_QUEUE.length } }));
   return INITIAL_SAMPLE_QUEUE;
 }
 

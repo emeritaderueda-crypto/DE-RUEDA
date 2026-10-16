@@ -83,7 +83,10 @@ export const EmployeesView: React.FC = () => {
       emp.position.toLowerCase().includes(q);
 
     const matchesSite = siteFilter === 'ALL' || emp.site_id === siteFilter;
-    const matchesCategory = categoryFilter === 'ALL' || (emp.category || 'Site-Based') === categoryFilter;
+    const isEmpOffice = (emp.category || '').toLowerCase().includes('office');
+    const matchesCategory =
+      categoryFilter === 'ALL' ||
+      (categoryFilter === 'Office-Based' ? isEmpOffice : !isEmpOffice);
     const matchesStatus = statusFilter === 'ALL' || emp.status === statusFilter;
 
     return matchesQ && matchesSite && matchesCategory && matchesStatus;
@@ -467,13 +470,13 @@ export const EmployeesView: React.FC = () => {
                       </div>
                     </td>
                     <td className="p-3 whitespace-nowrap">
-                      {emp.category === 'Office-Based' ? (
+                      {(emp.category || '').toLowerCase().includes('office') ? (
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                          Office-Based
+                          Office-Based (HQ)
                         </span>
                       ) : (
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                          Site-Based
+                          Site-Based (Field)
                         </span>
                       )}
                     </td>

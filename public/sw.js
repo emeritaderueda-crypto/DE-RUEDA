@@ -146,3 +146,49 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+// 4. Client Communication & Background Sync Handlers
+self.addEventListener('message', (event) => {
+  if (!event.data) return;
+
+  if (event.data.type === 'CHECK_SW_STATUS') {
+    if (event.source) {
+      event.source.postMessage({
+        type: 'SW_STATUS_RESPONSE',
+        version: CACHE_NAME,
+        status: 'active',
+        isOfflineReady: true,
+        timestamp: Date.now(),
+      });
+    }
+  } else if (event.data.type === 'NOTIFY_SYNC_STATE') {
+    self.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then((clients) => {
+      clients.forEach((client) => {
+        client.postMessage({
+          type: 'SW_SYNC_STATE_CHANGED',
+          isSyncing: event.data.isSyncing,
+          pendingCount: event.data.pendingCount,
+          timestamp: Date.now(),
+        });
+      });
+    });
+  }
+});
+
+// 5. Background Sync Event (Standard Service Worker Sync Registration)
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'drc-offline-sync' || (event.tag && event.tag.startsWith('drc-sync'))) {
+    event.waitUntil(
+      self.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({
+            type: 'SW_TRIGGER_SYNC',
+            tag: event.tag,
+            timestamp: Date.now(),
+          });
+        });
+      })
+    );
+  }
+});
+

@@ -45,8 +45,11 @@ import {
   saveStoredPassword,
   resetCredentialsToDefault,
   DEFAULT_CREDENTIALS,
+  saveUserSpecificPassword,
+  getUserSpecificPassword,
+  generateBackupCodes,
 } from '../../utils/credentials';
-import { AccessPointRole, SyncActivityLogEntry, OfflineActionItem } from '../../types';
+import { AccessPointRole, SyncActivityLogEntry, OfflineActionItem, AdminUserAccount } from '../../types';
 import {
   getSyncActivityLogs,
   addSyncActivityLog,
@@ -59,6 +62,7 @@ import {
   getPayloadSizeBytes,
   queueOfflineAction,
 } from '../../utils/offlineStorage';
+import { AdminAccountsSecurityTab } from '../settings/AdminAccountsSecurityTab';
 
 export const SettingsView: React.FC = () => {
   const {
@@ -71,10 +75,14 @@ export const SettingsView: React.FC = () => {
     offlineStats,
     syncOfflineQueue,
     currentSite,
+    adminAccounts,
+    updateAdminAccount,
+    createAdminAccount,
+    sites,
   } = useApp();
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<'sync_history' | 'sync_queue' | 'operational'>('sync_history');
+  const [activeTab, setActiveTab] = useState<'sync_history' | 'sync_queue' | 'operational' | 'accounts_security'>('sync_history');
 
   // Operational Settings Form
   const [companyForm, setCompanyForm] = useState({
@@ -638,6 +646,21 @@ export const SettingsView: React.FC = () => {
         >
           <Settings className="w-4 h-4 text-slate-400" />
           <span>Operational &amp; Security Policy</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('accounts_security')}
+          className={`px-4 py-2 text-xs font-bold rounded-t-lg transition-colors flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+            activeTab === 'accounts_security'
+              ? 'bg-[#0e1a16] text-[#a3e635] border-t-2 border-[#a3e635] border-x border-[#234338]'
+              : 'text-slate-400 hover:text-white hover:bg-[#13241f]'
+          }`}
+        >
+          <Shield className="w-4 h-4 text-amber-400" />
+          <span>Admin Accounts &amp; Site Isolation (Sec 8)</span>
+          <span className="text-[10px] px-1.5 py-0.2 bg-[#13241f] border border-[#234338] text-amber-300 rounded font-mono">
+            {adminAccounts.length}
+          </span>
         </button>
       </div>
 
@@ -1942,6 +1965,9 @@ export const SettingsView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* TAB 4: MULTIPLE ADMIN ACCOUNTS & SITE ISOLATION (SPECIFICATION SEC 8) */}
+      {activeTab === 'accounts_security' && <AdminAccountsSecurityTab />}
     </div>
   );
 };

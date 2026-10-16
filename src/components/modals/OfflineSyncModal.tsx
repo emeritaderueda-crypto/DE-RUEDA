@@ -18,6 +18,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { SyncActivityLogModal } from './SyncActivityLogModal';
+import { useServiceWorkerSyncStatus } from '../../utils/registerServiceWorker';
 
 interface OfflineSyncModalProps {
   isOpen: boolean;
@@ -27,27 +28,36 @@ interface OfflineSyncModalProps {
 export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({ isOpen, onClose }) => {
   const {
     isOnline,
+    isSyncing: isAppSyncing,
+    totalPendingChanges,
     offlineStats,
-    syncOfflineQueue,
+    pendingOfflineCanteenQueue,
+    syncAllPendingChanges,
     toggleSimulateOffline,
     forceRefreshOfflineCache,
   } = useApp();
 
-  const [isSyncing, setIsSyncing] = useState(false);
+  const swStatus = useServiceWorkerSyncStatus();
+  const [isLocalSyncing, setIsLocalSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+
+  const isSyncing = isLocalSyncing || isAppSyncing || swStatus.swSyncing;
+  const totalPending = totalPendingChanges ?? ((offlineStats.pendingQueueCount || 0) + pendingOfflineCanteenQueue.length);
 
   if (!isOpen) return null;
 
   const handleManualSync = async () => {
-    setIsSyncing(true);
+    setIsLocalSyncing(true);
     setSyncMessage(null);
     try {
-      const res = await syncOfflineQueue();
-      setIsSyncing(false);
-      setSyncMessage(`Successfully synchronized ${res.syncedCount} queued actions to server database.`);
+      // Trigger SW background sync registration if available
+      swStatus.requestBackgroundSync('drc-offline-sync');
+      const res = await syncAllPendingChanges();
+      setIsLocalSyncing(false);
+      setSyncMessage(res.message);
     } catch {
-      setIsSyncing(false);
+      setIsLocalSyncing(false);
       setSyncMessage('Sync failed. Please check network connectivity.');
     }
   };
@@ -173,9 +183,11 @@ export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({ isOpen, onCl
                 <Send className="w-3.5 h-3.5 text-amber-400" />
               </div>
               <div className="text-lg font-mono font-bold text-amber-400 mt-1">
-                {offlineStats.pendingQueueCount}
+                {totalPending}
               </div>
-              <span className="text-[10px] text-slate-500">Queued actions</span>
+              <span className="text-[10px] text-slate-500">
+                {offlineStats.pendingQueueCount} actions · {pendingOfflineCanteenQueue.length} chits
+              </span>
             </div>
           </div>
 
@@ -201,13 +213,23 @@ export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({ isOpen, onCl
               </span>
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between pb-2 border-b border-[#234338]">
               <span className="text-slate-400 flex items-center gap-1.5 font-semibold">
                 <Database className="w-3.5 h-3.5 text-emerald-400" />
                 Service Worker Status:
               </span>
               <span className="text-emerald-400 font-bold font-mono">
-                Active (drc-erp-cache-v1)
+                {swStatus.isRegistered ? `Registered (${swStatus.cacheVersion})` : 'Registering...'}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 flex items-center gap-1.5 font-semibold">
+                <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                Background Sync &amp; Scope:
+              </span>
+              <span className="text-cyan-300 font-mono text-[11px]">
+                {swStatus.registration ? `${swStatus.registration.scope} (${swStatus.backgroundSyncSupported ? 'Sync API Active' : 'Real-time Event Bridge'})` : 'Scope: /'}
               </span>
             </div>
           </div>
@@ -265,11 +287,11 @@ export const OfflineSyncModal: React.FC<OfflineSyncModalProps> = ({ isOpen, onCl
             <div className="flex items-center gap-2">
               <button
                 onClick={handleManualSync}
-                disabled={isSyncing || offlineStats.pendingQueueCount === 0}
+                disabled={isSyncing || totalPending === 0}
                 className="px-3.5 py-2 bg-[#a3e635] text-[#080f0d] hover:bg-[#84cc16] font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
-                {isSyncing ? 'Syncing...' : `Flush Sync Queue (${offlineStats.pendingQueueCount})`}
+                {isSyncing ? 'Syncing...' : `Flush Sync Queue (${totalPending})`}
               </button>
             </div>
           </div>

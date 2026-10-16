@@ -13,7 +13,7 @@ interface ToastData {
 }
 
 export const NetworkSyncToast: React.FC = () => {
-  const { isOnline, offlineStats, syncOfflineQueue } = useApp();
+  const { isOnline, offlineStats, totalPendingChanges, syncAllPendingChanges } = useApp();
   const [toast, setToast] = useState<ToastData | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const prevOnlineRef = useRef<boolean>(isOnline);
@@ -42,13 +42,13 @@ export const NetworkSyncToast: React.FC = () => {
 
       if (isNowOnline) {
         // Transitioned from Offline to Online
-        const pendingCount = offlineStats.pendingQueueCount || 0;
+        const pendingCount = totalPendingChanges ?? ((offlineStats.pendingQueueCount || 0));
         setToast({
           id: `toast-online-${Date.now()}`,
           type: 'online',
           title: 'Online Synchronized',
           message: pendingCount > 0
-            ? `Connection restored. Auto-synchronizing ${pendingCount} remote site attendance record${pendingCount > 1 ? 's' : ''}...`
+            ? `Connection restored. Auto-synchronizing ${pendingCount} remote site queued change${pendingCount > 1 ? 's' : ''}...`
             : 'Turnstile attendance & meal disbursements are now synchronizing in real time with the central database.',
           details: `Cached Masterlist: ${offlineStats.cachedAttendanceCount} records · Server link operational`,
           timestamp: timeStr,
@@ -58,7 +58,7 @@ export const NetworkSyncToast: React.FC = () => {
         // If there were pending records, automatically trigger sync
         if (pendingCount > 0) {
           setIsSyncing(true);
-          syncOfflineQueue().finally(() => {
+          syncAllPendingChanges().finally(() => {
             setIsSyncing(false);
           });
         }
@@ -85,7 +85,7 @@ export const NetworkSyncToast: React.FC = () => {
         }, 7000);
       }
     }
-  }, [isOnline, offlineStats, syncOfflineQueue]);
+  }, [isOnline, offlineStats, totalPendingChanges, syncAllPendingChanges]);
 
   const handleDismiss = () => {
     if (timeoutRef.current) {
@@ -98,7 +98,7 @@ export const NetworkSyncToast: React.FC = () => {
     if (isSyncing || !isOnline) return;
     setIsSyncing(true);
     try {
-      await syncOfflineQueue();
+      await syncAllPendingChanges();
     } finally {
       setIsSyncing(false);
     }

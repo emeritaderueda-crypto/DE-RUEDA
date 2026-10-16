@@ -79,9 +79,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         },
         {
           id: 'ceo_gcash' as PageId,
-          label: 'CEO GCash Operations',
+          label: currentUser?.access_point === 'admin 1' ? 'Executive GCash Hub' : currentUser?.access_point === 'admin 2' ? 'Site GCash Hub' : 'CEO GCash Operations',
           icon: Wallet,
-          badge: 'RESTRICTED',
+          badge: currentUser?.access_point === 'admin 1' ? 'HR' : currentUser?.access_point === 'admin 2' ? 'SITE OPS' : 'RESTRICTED',
         },
       ],
     },
@@ -91,6 +91,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'dashboard' as PageId, label: 'Dashboard', icon: LayoutDashboard },
         { id: 'employees' as PageId, label: 'Employees / HR', icon: Users },
         { id: 'sites' as PageId, label: 'Sites & Projects', icon: Building },
+        ...(currentUser?.access_point === 'admin 1'
+          ? [{ id: 'ceo_gcash' as PageId, label: 'Executive GCash Hub', icon: Wallet, badge: 'HR' }]
+          : []),
       ],
     },
     {
@@ -100,6 +103,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'deductions' as PageId, label: 'Deductions & Advances', icon: BadgePercent },
         { id: 'canteen' as PageId, label: 'Canteen Weekly Stipend', icon: UtensilsCrossed, badge: 'GCASH' },
         { id: 'payroll' as PageId, label: 'Weekly Payroll', icon: Banknote },
+        ...(currentUser?.access_point === 'admin 2'
+          ? [{ id: 'ceo_gcash' as PageId, label: 'Site GCash Hub', icon: Wallet, badge: 'SITE OPS' }]
+          : []),
         { id: 'cashflow' as PageId, label: 'Cash Flow Disbursements', icon: TrendingDown },
         { id: 'payslips' as PageId, label: 'Payslips Hub (6/Page)', icon: FileSpreadsheet },
       ],

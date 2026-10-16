@@ -20,8 +20,10 @@ import {
   Sparkles,
   Download,
   FileSpreadsheet,
+  MessageSquare,
 } from 'lucide-react';
 import { GCashPaymentModal } from '../modals/GCashPaymentModal';
+import { SmsPayslipLogsModal } from '../modals/SmsPayslipLogsModal';
 import { downloadReportPDF, downloadCSV } from '../../utils/exporters';
 
 interface PayrollViewProps {
@@ -39,11 +41,16 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
     verifyPayrollProof,
     triggerBatchGcashPayment,
     isOnline,
+    smsPayslipLogs,
   } = useApp();
 
   const [selectedWeek, setSelectedWeek] = useState(dtrWeeks[0]?.week_key || '2026-W40');
   const [siteFilter, setSiteFilter] = useState(currentSite);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'Pending' | 'Verified'>('ALL');
+
+  // SMS Payslip Delivery Logs Modal
+  const [isSmsLogsOpen, setIsSmsLogsOpen] = useState(false);
+  const failedSmsCount = smsPayslipLogs.filter((l) => l.status === 'FAILED').length;
 
   // Individual GCash Payment Modal State
   const [gcashModalRecord, setGcashModalRecord] = useState<PayrollRecord | null>(null);
@@ -272,11 +279,11 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
 
     const siteBased = filtered.filter((p) => {
       const emp = employees.find((e) => e.employee_id === p.employee_id);
-      return (emp?.category || 'Site-Based') === 'Site-Based';
+      return !((emp?.category || '').toLowerCase().includes('office'));
     });
     const officeBased = filtered.filter((p) => {
       const emp = employees.find((e) => e.employee_id === p.employee_id);
-      return emp?.category === 'Office-Based';
+      return (emp?.category || '').toLowerCase().includes('office');
     });
 
     const calcGroup = (group: typeof filtered) => ({
@@ -370,6 +377,22 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
           >
             <FileSpreadsheet className="w-4 h-4 text-sky-400" />
             <span>Site/Office PDF</span>
+          </button>
+
+          <button
+            onClick={() => setIsSmsLogsOpen(true)}
+            className="px-3 py-2 bg-[#13241f] border border-[#234338] text-white hover:border-emerald-400 font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer relative"
+            title="Inspect Automated SMS Payslip Delivery Logs & HR Exception Queue"
+          >
+            <MessageSquare className="w-4 h-4 text-emerald-400" />
+            <span>SMS Payslips</span>
+            {failedSmsCount > 0 ? (
+              <span className="px-1.5 py-0.2 bg-rose-500 text-white rounded-full text-[9px] font-mono font-black animate-pulse">
+                {failedSmsCount}
+              </span>
+            ) : (
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            )}
           </button>
 
           {pendingGcashItems.length > 0 && (
@@ -788,6 +811,12 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
         isOpen={Boolean(gcashModalRecord)}
         onClose={() => setGcashModalRecord(null)}
         payrollRecord={gcashModalRecord}
+      />
+
+      {/* Automated SMS Payslip Logs & HR Exception Queue Modal */}
+      <SmsPayslipLogsModal
+        isOpen={isSmsLogsOpen}
+        onClose={() => setIsSmsLogsOpen(false)}
       />
     </div>
   );
