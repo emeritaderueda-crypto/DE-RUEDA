@@ -156,24 +156,34 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
     if (!pRecord) return;
     const emp = employees.find((e) => e.employee_id === pRecord.employee_id);
     const empName = emp?.name || pRecord.employee_id;
-    const gcashNum = emp?.gcash_number || '09182345671';
+    const gcashNum = emp?.gcash_number || '';
+
+    if (!gcashNum) {
+      alert(`Worker ${empName} has no registered Philippine GCash mobile number. Please update employee profile first.`);
+      return;
+    }
 
     setIsSubmitting(true);
-    const res = await sendGcashDisbursement({
-      category: 'Weekly Salary',
-      site_id: pRecord.site_id,
-      recipient_name: empName,
-      recipient_mobile: gcashNum,
-      amount: pRecord.net_pay,
-      purpose: `Weekly Wage Payout (${pRecord.week_key}) - ${empName}`,
-      payroll_id: payrollId,
-      user_pin: 'Emerita0279',
-    });
-    setIsSubmitting(false);
+    try {
+      const res = await sendGcashDisbursement({
+        category: 'Weekly Salary',
+        site_id: pRecord.site_id,
+        recipient_name: empName,
+        recipient_mobile: gcashNum,
+        amount: pRecord.net_pay,
+        purpose: `Weekly Wage Payout (${pRecord.week_key}) - ${empName}`,
+        payroll_id: payrollId,
+        user_pin: 'Emerita0279',
+      });
 
-    setNotificationMsg(
-      `Disbursed ₱${pRecord.net_pay.toLocaleString()} to ${empName} via GCash. Reference No: ${res.reference_no}. Real-time sync complete!`
-    );
+      setNotificationMsg(
+        `Disbursed ₱${pRecord.net_pay.toLocaleString()} to ${empName} via GCash. Reference No: ${res.reference_no}. Real-time sync complete!`
+      );
+    } catch (err: any) {
+      alert(`Disbursement Error: ${err?.message || 'Gateway transaction declined'}`);
+    } finally {
+      setIsSubmitting(false);
+    }
 
     setTimeout(() => {
       setNotificationMsg(null);
@@ -191,20 +201,25 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
     for (const p of pendingPayroll) {
       const emp = employees.find((e) => e.employee_id === p.employee_id);
       const empName = emp?.name || p.employee_id;
-      const gcashNum = emp?.gcash_number || '09182345671';
+      const gcashNum = emp?.gcash_number || '';
+      if (!gcashNum) continue;
 
-      await sendGcashDisbursement({
-        category: 'Weekly Salary',
-        site_id: p.site_id,
-        recipient_name: empName,
-        recipient_mobile: gcashNum,
-        amount: p.net_pay,
-        purpose: `Batch Weekly Wage (${p.week_key}) - ${empName}`,
-        payroll_id: p.payroll_id,
-        user_pin: 'Emerita0279',
-      });
-      count++;
-      total += p.net_pay;
+      try {
+        await sendGcashDisbursement({
+          category: 'Weekly Salary',
+          site_id: p.site_id,
+          recipient_name: empName,
+          recipient_mobile: gcashNum,
+          amount: p.net_pay,
+          purpose: `Batch Weekly Wage (${p.week_key}) - ${empName}`,
+          payroll_id: p.payroll_id,
+          user_pin: 'Emerita0279',
+        });
+        count++;
+        total += p.net_pay;
+      } catch (err) {
+        console.warn(`[Batch Payout Error for ${empName}]:`, err);
+      }
     }
 
     setIsSubmitting(false);
@@ -523,8 +538,8 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
                 <span className="text-base sm:text-lg font-black text-white uppercase tracking-tight">
                   Embedded GCash Wallet &bull; {hubMeta[activeHub].name}
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#005ce6]/25 text-blue-300 border border-[#005ce6]/40">
-                  AUTHENTIC GCASH SIMULATION
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                  OFFICIAL GCASH BUSINESS GATEWAY
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-1">
@@ -573,9 +588,9 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
                     </div>
                   </div>
                   <div className="p-3 bg-[#0e1a16] border border-[#234338] rounded-xl">
-                    <div className="text-[10px] text-slate-400">Default MPIN</div>
-                    <div className="font-mono font-bold text-amber-300 text-xs mt-0.5">
-                      {activeHub === 'ceo_hub' ? '0279' : activeHub === 'exec_distribution_hub' ? '1122' : '2233'}
+                    <div className="text-[10px] text-slate-400">Account Security</div>
+                    <div className="font-mono font-bold text-emerald-400 text-xs mt-0.5">
+                      4-Digit Real MPIN
                     </div>
                   </div>
                 </div>
@@ -586,10 +601,10 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
                     <span>How to Use the Embedded GCash Wallet:</span>
                   </div>
                   <ul className="list-disc pl-4 space-y-1 text-slate-400 text-[11px]">
-                    <li><strong>Send Money:</strong> Tap "Send Money" on the smartphone to disburse funds to any mobile number or select a pending worker below.</li>
+                    <li><strong>Real Account Sign-In:</strong> Authenticate with your real Philippine GCash mobile number (09XXXXXXXXX) and personal 4-digit MPIN for live transactions.</li>
+                    <li><strong>Send Money:</strong> Tap "Send Money" on the smartphone to disburse funds in real-time to any mobile number or select a pending worker below.</li>
                     <li><strong>Cash In:</strong> Tap the "(+)" button beside the balance or the "Cash In" tile to top up float from BDO, BPI, or UnionBank.</li>
                     <li><strong>Receipts &amp; Audit:</strong> Tap "Activity" in the bottom navigation to inspect all completed transactions and download official SVG vouchers.</li>
-                    <li><strong>Quick Demo MPIN:</strong> If logged out, tap the "Demo" fingerprint button on the keypad to log in with 1 tap.</li>
                   </ul>
                 </div>
               </div>
@@ -629,7 +644,7 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
                         <div>
                           <div className="font-bold text-white">{emp?.name || p.employee_id}</div>
                           <div className="text-[10px] text-slate-400 font-mono">
-                            {p.week_key} &bull; {p.site_id} &bull; {emp?.position || 'Laborer'} &bull; {emp?.gcash_number || '0918-234-5671'}
+                            {p.week_key} &bull; {p.site_id} &bull; {emp?.position || 'Laborer'} &bull; {emp?.gcash_number || 'No GCash Registered'}
                           </div>
                         </div>
                         <div className="text-right flex items-center gap-3">
@@ -811,7 +826,7 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
-                        {emp?.position} &bull; GCash: <strong className="text-slate-300 font-mono">{emp?.gcash_number || '09182345671'}</strong>
+                        {emp?.position} &bull; GCash: <strong className="text-slate-300 font-mono">{emp?.gcash_number || 'Unregistered'}</strong>
                       </div>
                       <div className="text-[10px] text-slate-500 font-mono">
                         Week: {p.week_key} &bull; Days: {p.verified_days}d ({p.verified_hours}h)

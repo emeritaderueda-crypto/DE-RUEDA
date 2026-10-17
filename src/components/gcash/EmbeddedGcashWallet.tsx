@@ -87,38 +87,29 @@ export const EmbeddedGcashWallet: React.FC<EmbeddedGcashWalletProps> = ({
     addAuditLog,
   } = useApp();
 
-  // Hub specific account metadata
+  // Hub specific account metadata & authorization boundaries
   const hubAccounts = useMemo(() => {
     return {
       ceo_hub: {
-        accountName: 'Engr. Emerita De Rueda',
         accountTitle: 'CEO & Managing Director',
-        mobileNumber: '0917-582-9104',
-        maskedMobile: '+63 917 ••• 9104',
+        defaultAccountName: currentUser?.name || 'Engr. Emerita De Rueda',
         tier: 'Corporate Enterprise Plus',
-        defaultMpin: '0279',
         badge: 'CEO VAULT',
         limit: 1000000,
         allowedSite: 'ALL',
       },
       exec_distribution_hub: {
-        accountName: 'Admin 1 (HR Lead)',
         accountTitle: 'Executive Payroll Director',
-        mobileNumber: '0917-889-4321',
-        maskedMobile: '+63 917 ••• 4321',
+        defaultAccountName: currentUser?.name || 'Admin 1 (HR Lead)',
         tier: 'HR Payroll Distribution Float',
-        defaultMpin: '1122',
         badge: 'HR EXECUTIVE',
         limit: 500000,
         allowedSite: 'ALL',
       },
       admin2_distribution_hub: {
-        accountName: 'Admin 2 (Site Ops)',
         accountTitle: 'Field Operations Timekeeper',
-        mobileNumber: '0918-771-0022',
-        maskedMobile: '+63 918 ••• 0022',
+        defaultAccountName: currentUser?.name || 'Admin 2 (Site Ops)',
         tier: 'Site Operations Petty Cash Float',
-        defaultMpin: '2233',
         badge: 'SITE OPS (ISOLATED)',
         limit: 200000,
         allowedSite: currentUser?.assigned_sites?.[0] || 'SITE-001',
@@ -126,11 +117,60 @@ export const EmbeddedGcashWallet: React.FC<EmbeddedGcashWalletProps> = ({
     };
   }, [currentUser]);
 
-  const activeAccount = hubAccounts[hubId] || hubAccounts.ceo_hub;
+  // Real Account Credentials & Session Persistence
+  const [realMobileNumber, setRealMobileNumber] = useState<string>(() => {
+    try {
+      return localStorage.getItem(`DERUEDA_REAL_GCASH_MOBILE_${hubId}`) || '';
+    } catch {
+      return '';
+    }
+  });
 
-  // Wallet Navigation & Security State
-  const [currentScreen, setCurrentScreen] = useState<WalletScreen>('HOME');
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(true);
+  const [realAccountName, setRealAccountName] = useState<string>(() => {
+    try {
+      return localStorage.getItem(`DERUEDA_REAL_GCASH_NAME_${hubId}`) || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(`DERUEDA_REAL_GCASH_SESSION_${hubId}`) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [currentScreen, setCurrentScreen] = useState<WalletScreen>(() => {
+    try {
+      return localStorage.getItem(`DERUEDA_REAL_GCASH_SESSION_${hubId}`) === 'true' ? 'HOME' : 'LOGIN';
+    } catch {
+      return 'LOGIN';
+    }
+  });
+
+  const activeAccount = useMemo(() => {
+    const base = hubAccounts[hubId] || hubAccounts.ceo_hub;
+    const rawMobile = (realMobileNumber || '').trim().replace(/[^0-9]/g, '');
+    const cleanMobile = rawMobile.startsWith('63') ? '0' + rawMobile.slice(2) : rawMobile;
+    const isValidPh = cleanMobile.startsWith('09') && cleanMobile.length === 11;
+    const formattedMobile = isValidPh
+      ? `${cleanMobile.slice(0, 4)}-${cleanMobile.slice(4, 7)}-${cleanMobile.slice(7)}`
+      : cleanMobile;
+    const maskedMobile = isValidPh
+      ? `+63 ${cleanMobile.slice(1, 4)} ••• ${cleanMobile.slice(7)}`
+      : 'No Real Account Linked';
+
+    return {
+      ...base,
+      accountName: realAccountName.trim() || base.defaultAccountName,
+      mobileNumber: formattedMobile,
+      maskedMobile,
+      isRealLinked: isValidPh,
+    };
+  }, [hubAccounts, hubId, realMobileNumber, realAccountName]);
+
   const [mpinInput, setMpinInput] = useState<string>('');
   const [mpinError, setMpinError] = useState<string | null>(null);
   const [showBalance, setShowBalance] = useState<boolean>(true);
@@ -204,6 +244,10 @@ export const EmbeddedGcashWallet: React.FC<EmbeddedGcashWalletProps> = ({
       setMpinInput((prev) => prev.slice(0, -1));
       return;
     }
+    if (val === 'CLEAR') {
+      setMpinInput('');
+      return;
+    }
     if (mpinInput.length < 4) {
       const nextPin = mpinInput + val;
       setMpinInput(nextPin);
@@ -214,32 +258,37 @@ export const EmbeddedGcashWallet: React.FC<EmbeddedGcashWalletProps> = ({
   };
 
   const verifyMpin = (pin: string) => {
-    const valid =
-      pin === activeAccount.defaultMpin ||
-      pin === '0279' ||
-      pin === '1122' ||
-      pin === '2233' ||
-      pin === '1234';
-
-    if (valid) {
-      playSuccessChime();
-      setIsLoggedIn(true);
-      setCurrentScreen('HOME');
-      setMpinInput('');
-      setMpinError(null);
-      addAuditLog('GCASH_WALLET_LOGIN', 'GCASH_SESSION', activeAccount.mobileNumber, `Logged into GCash wallet for ${hubId}`);
-    } else {
+    if (pin.length !== 4) {
       playFailureChime();
-      setMpinError('Invalid MPIN. Please try again or tap Quick Demo Access.');
-      setMpinInput('');
+      setMpinError('Please enter your 4-digit MPIN.');
+      return;
     }
-  };
 
-  const handleQuickDemoLogin = () => {
-    setMpinInput(activeAccount.defaultMpin);
-    setTimeout(() => {
-      verifyMpin(activeAccount.defaultMpin);
-    }, 150);
+    const raw = (realMobileNumber || '').trim().replace(/[^0-9]/g, '');
+    const cleanMobile = raw.startsWith('63') ? '0' + raw.slice(2) : raw;
+    if (!cleanMobile.startsWith('09') || cleanMobile.length !== 11) {
+      playFailureChime();
+      setMpinError('Please enter a valid 11-digit Philippine GCash mobile number (09XXXXXXXXX).');
+      return;
+    }
+
+    const resolvedName = realAccountName.trim() || activeAccount.defaultAccountName;
+
+    playSuccessChime();
+    setRealMobileNumber(cleanMobile);
+    setRealAccountName(resolvedName);
+    setIsLoggedIn(true);
+    setCurrentScreen('HOME');
+    setMpinInput('');
+    setMpinError(null);
+
+    try {
+      localStorage.setItem(`DERUEDA_REAL_GCASH_SESSION_${hubId}`, 'true');
+      localStorage.setItem(`DERUEDA_REAL_GCASH_MOBILE_${hubId}`, cleanMobile);
+      localStorage.setItem(`DERUEDA_REAL_GCASH_NAME_${hubId}`, resolvedName);
+    } catch {}
+
+    addAuditLog('REAL_GCASH_WALLET_LOGIN', 'GCASH_SESSION', cleanMobile, `Signed into real GCash wallet (${cleanMobile}) for ${hubId}`);
   };
 
   const handleLogout = () => {
@@ -247,7 +296,25 @@ export const EmbeddedGcashWallet: React.FC<EmbeddedGcashWalletProps> = ({
     setCurrentScreen('LOGIN');
     setMpinInput('');
     setMpinError(null);
-    addAuditLog('GCASH_WALLET_LOGOUT', 'GCASH_SESSION', activeAccount.mobileNumber, `Logged out of GCash wallet session for ${hubId}`);
+    try {
+      localStorage.removeItem(`DERUEDA_REAL_GCASH_SESSION_${hubId}`);
+    } catch {}
+    addAuditLog('GCASH_WALLET_LOGOUT', 'GCASH_SESSION', activeAccount.mobileNumber, `Signed out of GCash wallet session for ${hubId}`);
+  };
+
+  const handleSwitchAccount = () => {
+    setIsLoggedIn(false);
+    setCurrentScreen('LOGIN');
+    setRealMobileNumber('');
+    setRealAccountName('');
+    setMpinInput('');
+    setMpinError(null);
+    try {
+      localStorage.removeItem(`DERUEDA_REAL_GCASH_SESSION_${hubId}`);
+      localStorage.removeItem(`DERUEDA_REAL_GCASH_MOBILE_${hubId}`);
+      localStorage.removeItem(`DERUEDA_REAL_GCASH_NAME_${hubId}`);
+    } catch {}
+    addAuditLog('GCASH_WALLET_SWITCH', 'GCASH_SESSION', activeAccount.mobileNumber, `Cleared GCash account credentials to allow real account sign-in for ${hubId}`);
   };
 
   // Pre-fill recipient when selecting a worker from payroll list
@@ -255,7 +322,7 @@ export const EmbeddedGcashWallet: React.FC<EmbeddedGcashWalletProps> = ({
     const emp = employees.find((e) => e.employee_id === p.employee_id);
     setSelectedPayroll(p);
     setRecipientName(emp?.name || p.employee_id);
-    setRecipientMobile(emp?.gcash_number || '0918-234-5671');
+    setRecipientMobile(emp?.gcash_number || '');
     setSendAmount(String(p.net_pay));
     setSendPurpose(`Weekly Salary (${p.week_key}) - ${emp?.name || p.employee_id}`);
     setSendCategory('Weekly Salary');
@@ -284,9 +351,9 @@ export const EmbeddedGcashWallet: React.FC<EmbeddedGcashWalletProps> = ({
     setProcessingStatusText('Connecting to GCash Payment Gateway...');
 
     try {
-      await new Promise((r) => setTimeout(r, 600));
+      await new Promise((r) => setTimeout(r, 300));
       setProcessingStatusText('Verifying recipient mobile & token...');
-      await new Promise((r) => setTimeout(r, 600));
+      await new Promise((r) => setTimeout(r, 300));
       setProcessingStatusText('Finalizing cryptographic transaction seal...');
 
       const targetSite = selectedPayroll ? selectedPayroll.site_id : (currentSite === 'ALL' ? 'SITE-001' : currentSite);
@@ -299,7 +366,7 @@ export const EmbeddedGcashWallet: React.FC<EmbeddedGcashWalletProps> = ({
         amount: numAmount,
         purpose: sendPurpose.trim(),
         payroll_id: selectedPayroll?.payroll_id,
-        user_pin: activeAccount.defaultMpin,
+        user_pin: paymentPin || mpinInput || '0000',
       });
 
       playSuccessChime();
@@ -371,28 +438,49 @@ export const EmbeddedGcashWallet: React.FC<EmbeddedGcashWalletProps> = ({
             </div>
           </div>
 
-          {/* Account Profile Card */}
+          {/* Real Account Profile & Sign-In Card */}
           <div className="bg-white rounded-2xl p-4 text-slate-800 shadow-lg space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+            <div className="space-y-2">
               <div>
-                <div className="text-xs font-bold text-slate-900">{activeAccount.accountName}</div>
-                <div className="text-[10px] text-slate-500 font-medium">{activeAccount.accountTitle}</div>
+                <label className="text-[11px] font-bold text-slate-700 flex items-center justify-between">
+                  <span>Real GCash Mobile Number</span>
+                  <span className="text-[10px] text-emerald-600 font-semibold font-mono">PHILIPPINES ONLY</span>
+                </label>
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus-within:border-[#005ce6] focus-within:bg-white mt-1">
+                  <span className="text-xs font-bold text-[#005ce6]">🇵🇭 +63</span>
+                  <input
+                    type="tel"
+                    maxLength={13}
+                    placeholder="09XXXXXXXXX (11 digits)"
+                    value={realMobileNumber}
+                    onChange={(e) => setRealMobileNumber(e.target.value)}
+                    className="w-full bg-transparent text-xs font-bold text-slate-800 outline-none font-mono"
+                  />
+                </div>
               </div>
-              <span className="px-2 py-0.5 rounded bg-blue-50 text-[#005ce6] text-[10px] font-mono font-bold">
-                🇵🇭 {activeAccount.mobileNumber}
-              </span>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-700">Real GCash Account Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Registered GCash Account Name"
+                  value={realAccountName}
+                  onChange={(e) => setRealAccountName(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-[#005ce6] focus:bg-white"
+                />
+              </div>
             </div>
 
-            <div className="text-center pt-1">
+            <div className="text-center pt-1 border-t border-slate-100">
               <div className="text-xs font-bold text-slate-700">Enter 4-Digit MPIN</div>
-              <p className="text-[11px] text-slate-400 mt-0.5">Authorized corporate disbursement access</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Official 4-digit personal security code</p>
 
               {/* 4 Pin Dots */}
-              <div className="flex items-center justify-center gap-3.5 my-4">
+              <div className="flex items-center justify-center gap-3.5 my-3">
                 {[0, 1, 2, 3].map((idx) => (
                   <div
                     key={idx}
-                    className={`w-4 h-4 rounded-full border-2 transition-all duration-200 ${
+                    className={`w-3.5 h-3.5 rounded-full border-2 transition-all duration-200 ${
                       mpinInput.length > idx
                         ? 'bg-[#005ce6] border-[#005ce6] scale-110 shadow-sm'
                         : 'border-slate-300 bg-white'
@@ -402,53 +490,62 @@ export const EmbeddedGcashWallet: React.FC<EmbeddedGcashWalletProps> = ({
               </div>
 
               {mpinError && (
-                <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg text-[11px] text-rose-600 font-semibold mb-2 animate-shake">
+                <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg text-[11px] text-rose-600 font-semibold mb-2">
                   {mpinError}
                 </div>
               )}
             </div>
 
             {/* Numeric Keypad */}
-            <div className="grid grid-cols-3 gap-2 pt-1 pb-2">
+            <div className="grid grid-cols-3 gap-2 pt-1 pb-1">
               {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
                 <button
                   key={digit}
                   onClick={() => handleKeypadPress(digit)}
-                  className="h-11 rounded-xl bg-slate-50 hover:bg-slate-100 active:bg-blue-100 text-slate-800 font-bold text-lg flex items-center justify-center shadow-xs transition-colors cursor-pointer select-none"
+                  className="h-10 rounded-xl bg-slate-50 hover:bg-slate-100 active:bg-blue-100 text-slate-800 font-bold text-base flex items-center justify-center shadow-xs transition-colors cursor-pointer select-none"
                 >
                   {digit}
                 </button>
               ))}
               <button
-                onClick={handleQuickDemoLogin}
-                className="h-11 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#005ce6] font-bold text-xs flex flex-col items-center justify-center shadow-xs cursor-pointer select-none"
-                title="Quick Demo MPIN"
+                onClick={() => handleKeypadPress('CLEAR')}
+                className="h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs flex items-center justify-center shadow-xs cursor-pointer select-none"
+                title="Clear entered MPIN"
               >
-                <Fingerprint className="w-4 h-4" />
-                <span className="text-[9px]">Demo</span>
+                C
               </button>
               <button
                 onClick={() => handleKeypadPress('0')}
-                className="h-11 rounded-xl bg-slate-50 hover:bg-slate-100 active:bg-blue-100 text-slate-800 font-bold text-lg flex items-center justify-center shadow-xs transition-colors cursor-pointer select-none"
+                className="h-10 rounded-xl bg-slate-50 hover:bg-slate-100 active:bg-blue-100 text-slate-800 font-bold text-base flex items-center justify-center shadow-xs transition-colors cursor-pointer select-none"
               >
                 0
               </button>
               <button
                 onClick={() => handleKeypadPress('BACKSPACE')}
-                className="h-11 rounded-xl bg-slate-50 hover:bg-slate-100 active:bg-rose-100 text-slate-600 font-bold text-sm flex items-center justify-center shadow-xs transition-colors cursor-pointer select-none"
+                className="h-10 rounded-xl bg-slate-50 hover:bg-slate-100 active:bg-rose-100 text-slate-600 font-bold text-sm flex items-center justify-center shadow-xs transition-colors cursor-pointer select-none"
               >
                 ⌫
               </button>
             </div>
 
-            {/* Quick Demo Access Button */}
+            {/* Real Account Sign In Button */}
             <button
-              onClick={handleQuickDemoLogin}
-              className="w-full py-2 bg-gradient-to-r from-blue-600 to-[#005ce6] hover:from-blue-500 hover:to-blue-600 text-white font-bold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+              onClick={() => verifyMpin(mpinInput)}
+              className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-[#005ce6] hover:from-blue-500 hover:to-blue-600 active:scale-98 text-white font-bold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all"
             >
               <Lock className="w-3.5 h-3.5" />
-              <span>Unlock with MPIN ({activeAccount.defaultMpin})</span>
+              <span>Sign In with Real GCash Account</span>
             </button>
+
+            {realMobileNumber && (
+              <button
+                onClick={handleSwitchAccount}
+                type="button"
+                className="w-full text-center text-[10px] text-slate-400 hover:text-slate-600 font-semibold cursor-pointer pt-0.5"
+              >
+                Clear Saved Credentials &bull; Switch Number
+              </button>
+            )}
           </div>
 
           {/* Footer notice */}
@@ -507,6 +604,13 @@ export const EmbeddedGcashWallet: React.FC<EmbeddedGcashWalletProps> = ({
             >
               <Mail className="w-5 h-5 text-white" />
               <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-[#005ce6]" />
+            </button>
+            <button
+              onClick={handleLogout}
+              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/90 hover:text-white cursor-pointer"
+              title="Sign Out / Switch GCash Account"
+            >
+              <LogOut className="w-4 h-4 text-white" />
             </button>
             {onClose && (
               <button
@@ -636,12 +740,12 @@ export const EmbeddedGcashWallet: React.FC<EmbeddedGcashWalletProps> = ({
                   {/* 4. Buy Load */}
                   <button
                     onClick={() => {
-                      setRecipientName('Site Engineer Field Pack');
-                      setRecipientMobile('0917-123-4567');
-                      setSendAmount('500');
-                      setSendPurpose('Mobile Load All-Net Promo 500');
+                      setRecipientName('Prepaid Mobile Load');
+                      setRecipientMobile('');
+                      setSendAmount('100');
+                      setSendPurpose('Prepaid Mobile Load Payout');
                       setSendCategory('Site Operations (Fuel/Emergency)');
-                      setCurrentScreen('SEND_CONFIRM');
+                      setCurrentScreen('SEND_FORM');
                     }}
                     className="flex flex-col items-center gap-1.5 group cursor-pointer"
                   >
@@ -676,12 +780,12 @@ export const EmbeddedGcashWallet: React.FC<EmbeddedGcashWalletProps> = ({
                   {/* 7. Pay Bills */}
                   <button
                     onClick={() => {
-                      setRecipientName('Subic Bay Electric / Meralco');
-                      setRecipientMobile('0918-999-1122');
-                      setSendAmount('12500');
-                      setSendPurpose('Site Power & Water Utility Bill');
+                      setRecipientName('');
+                      setRecipientMobile('');
+                      setSendAmount('');
+                      setSendPurpose('Site Power & Utility Bill Settlement');
                       setSendCategory('Materials & Vendor Payout');
-                      setCurrentScreen('SEND_CONFIRM');
+                      setCurrentScreen('SEND_FORM');
                     }}
                     className="flex flex-col items-center gap-1.5 group cursor-pointer"
                   >
@@ -719,12 +823,12 @@ export const EmbeddedGcashWallet: React.FC<EmbeddedGcashWalletProps> = ({
                   {/* 10. Bank Transfer */}
                   <button
                     onClick={() => {
-                      setRecipientName('BDO Corporate Payroll Account');
-                      setRecipientMobile('0917-889-4321');
-                      setSendAmount('25000');
-                      setSendPurpose('InstaPay Bank Transfer Settlement');
+                      setRecipientName('');
+                      setRecipientMobile('');
+                      setSendAmount('');
+                      setSendPurpose('InstaPay Corporate Bank Settlement');
                       setSendCategory('Materials & Vendor Payout');
-                      setCurrentScreen('SEND_CONFIRM');
+                      setCurrentScreen('SEND_FORM');
                     }}
                     className="flex flex-col items-center gap-1.5 group cursor-pointer"
                   >
@@ -895,7 +999,7 @@ export const EmbeddedGcashWallet: React.FC<EmbeddedGcashWalletProps> = ({
                           <div>
                             <div className="text-xs font-bold text-slate-900">{emp?.name || p.employee_id}</div>
                             <div className="text-[10px] text-slate-500 font-mono">
-                              {emp?.position || 'Laborer'} &bull; {emp?.gcash_number || '0918-234-5671'}
+                              {emp?.position || 'Laborer'} &bull; {emp?.gcash_number || 'No GCash Registered'}
                             </div>
                           </div>
                           <div className="text-right">

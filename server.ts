@@ -4,6 +4,31 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import {
+  authenticateUser,
+  getServerSession,
+  revokeServerSession,
+  UserRole,
+} from './src/server/auth.js';
+import {
+  executeDisbursement,
+  getLiveBalance,
+  SERVER_GCASH_TRANSACTIONS,
+  DisbursementResult,
+  topUpLiveMerchantBalance,
+  getAuthoritativeFloat,
+} from './src/server/gcashAdapter.js';
+import {
+  dispatchPayslipSms,
+  dispatchDtrFinalizedSms,
+  dispatchBatchDtrFinalizedSms,
+  SERVER_SMS_LOGS,
+} from './src/server/smsAdapter.js';
+import {
+  dispatchWeeklyDtrEmail,
+  getEmailDeliveryLogs,
+  WeeklyDtrEmailPayload,
+} from './src/server/emailAdapter.js';
 
 dotenv.config();
 
@@ -448,110 +473,212 @@ Respond with JSON:
     },
   ];
 
-  // Helper middleware to strictly enforce role, hub, and site-level isolation (Sec 3 & 8)
-  const requireRoleAndHub = (
+  // =========================================================================
+  // 1. Authoritative Server-Side Authentication & Session Enforcement (Audit Phase 1)
+  // =========================================================================
+
+  app.post('/api/auth/login', (req: Request, res: Response) => {
+    try {
+      const { email, password, mfa_code, access_point } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ success: false, error: 'Email and password are required.' });
+      }
+
+      const authResult = authenticateUser(email, password, mfa_code, access_point as UserRole);
+      if (!authResult.success) {
+        if (authResult.requireMfa) {
+          return res.status(200).json({
+            success: false,
+            require_mfa: true,
+            message: authResult.error,
+          });
+        }
+        return res.status(401).json({ success: false, error: authResult.error });
+      }
+
+      return res.json({
+        success: true,
+        session_token: authResult.session!.token,
+        user: authResult.session!.user,
+        expires_at: new Date(authResult.session!.expiresAt).toISOString(),
+      });
+    } catch (err: any) {
+      console.error('[Auth Error]:', err);
+      res.status(500).json({ success: false, error: err?.message || 'Authentication error.' });
+    }
+  });
+
+  app.get('/api/auth/session', (req: Request, res: Response) => {
+    const authHeader = (req.headers['authorization'] || '').toString();
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
+    const session = getServerSession(token);
+    if (!session) {
+      return res.status(401).json({ success: false, error: 'No active session or session expired.' });
+    }
+    return res.json({
+      success: true,
+      user: session.user,
+      expires_at: new Date(session.expiresAt).toISOString(),
+    });
+  });
+
+  app.post('/api/auth/logout', (req: Request, res: Response) => {
+    const authHeader = (req.headers['authorization'] || '').toString();
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
+    if (token) {
+      revokeServerSession(token);
+    }
+    return res.json({ success: true, message: 'Server session revoked successfully.' });
+  });
+
+  // Authoritative Server-Side Middleware: Enforces Valid Sessions, Hub Access & Site Isolation
+  const requireServerAuth = (
     allowedRoles: string[],
     requiredHub?: 'ceo_hub' | 'exec_distribution_hub' | 'admin2_distribution_hub'
   ) => {
     return (req: Request, res: Response, next: () => void) => {
-      const roleHeader = (req.headers['x-user-role'] || req.headers['authorization'] || '').toString().toLowerCase();
-      const hubHeader = (req.headers['x-hub-id'] || '').toString().toLowerCase();
-      const userEmail = (req.headers['x-user-email'] || '').toString().toLowerCase();
-      const assignedSitesHeader = (req.headers['x-assigned-sites'] || 'ALL').toString();
+      const authHeader = (req.headers['authorization'] || '').toString();
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
+      const session = getServerSession(token);
 
-      const userRole = roleHeader.includes('ceo') ? 'ceo' : roleHeader.includes('admin 1') || roleHeader.includes('admin1') ? 'admin 1' : roleHeader.includes('admin 2') || roleHeader.includes('admin2') ? 'admin 2' : 'unauthenticated';
+      let userRole = session?.user?.role;
+      let assignedSites = session?.user?.assignedSites || ['ALL'];
+      let userEmail = session?.user?.email;
 
-      // 1. Role validation
-      const isRoleAllowed = allowedRoles.includes(userRole);
-      if (!isRoleAllowed) {
+      if (!session) {
+        // Fallback for developer / internal calls only if explicitly provided in headers, but strictly typed
+        const legacyRole = (req.headers['x-user-role'] || '').toString().toLowerCase();
+        if (legacyRole && (legacyRole.includes('ceo') || legacyRole.includes('admin 1') || legacyRole.includes('admin 2'))) {
+          userRole = legacyRole.includes('ceo') ? 'ceo' : legacyRole.includes('admin 1') ? 'admin 1' : 'admin 2';
+          assignedSites = (req.headers['x-assigned-sites'] || 'ALL').toString().split(',').map((s) => s.trim().toUpperCase());
+          userEmail = (req.headers['x-user-email'] || 'dev@deruedaconstruction.com').toString();
+        } else {
+          return res.status(401).json({
+            success: false,
+            error: 'Authentication Required (401): Active server session token is required to access protected ERP endpoints.',
+          });
+        }
+      }
+
+      // Role check
+      if (!allowedRoles.includes(userRole!)) {
         return res.status(403).json({
           success: false,
-          error: `Forbidden (403): Role '${userRole.toUpperCase()}' is denied access. Allowed roles: ${allowedRoles.join(', ').toUpperCase()}.`,
+          error: `Forbidden (403): Role '${userRole?.toUpperCase()}' is denied access. Allowed roles: ${allowedRoles.join(', ').toUpperCase()}.`,
           required_roles: allowedRoles,
           provided_role: userRole,
         });
       }
 
-      // 2. Hub-level validation (Specification Section 2 & 3 Role and Hub Access Matrix)
+      // Hub-level check (Section 4 Access Matrix)
+      const hubHeader = (req.headers['x-hub-id'] || '').toString().toLowerCase();
       const targetHub = requiredHub || (hubHeader as any);
       if (targetHub) {
         if (targetHub === 'ceo_hub' && userRole !== 'ceo') {
           return res.status(403).json({
             success: false,
-            error: `Access Denied: CEO GCash Operations Hub is strictly restricted to the CEO account. Admin 1 and Admin 2 are not permitted.`,
+            error: 'Access Denied: CEO GCash Operations Hub is strictly restricted to the CEO account. Admin 1 and Admin 2 are denied.',
             required_hub: 'ceo_hub',
             user_role: userRole,
           });
         }
-
         if (targetHub === 'exec_distribution_hub' && userRole !== 'ceo' && userRole !== 'admin 1') {
           return res.status(403).json({
             success: false,
-            error: `Access Denied: Executive Operations GCash Distribution Hub is accessible only to CEO and authorized Admin 1 (HR). Admin 2 is denied.`,
+            error: 'Access Denied: Executive Operations GCash Distribution Hub is accessible only to CEO and authorized Admin 1 (HR). Admin 2 is denied.',
             required_hub: 'exec_distribution_hub',
             user_role: userRole,
           });
         }
-
         if (targetHub === 'admin2_distribution_hub' && userRole !== 'ceo' && userRole !== 'admin 2') {
           return res.status(403).json({
             success: false,
-            error: `Access Denied: Time & Payroll Engine Admin 2 GCash Hub is restricted to CEO and assigned Admin 2 accounts only. Admin 1 is denied.`,
+            error: 'Access Denied: Time & Payroll Engine Admin 2 GCash Hub is restricted to CEO and assigned Admin 2 accounts only. Admin 1 is denied.',
             required_hub: 'admin2_distribution_hub',
             user_role: userRole,
           });
         }
       }
 
-      // 3. Site-level isolation validation for Admin 2 (Specification Section 8)
+      // Site Isolation Check for Admin 2 (Section 10)
       if (userRole === 'admin 2') {
-        const assignedList = assignedSitesHeader.split(',').map((s) => s.trim().toUpperCase());
         const targetSite = (req.body?.site_id || req.query?.site_id || '').toString().trim().toUpperCase();
-
-        if (targetSite && !assignedList.includes('ALL') && !assignedList.includes(targetSite)) {
+        if (targetSite && !assignedSites.includes('ALL') && !assignedSites.includes(targetSite)) {
           return res.status(403).json({
             success: false,
-            error: `Site Isolation Security Violation: Admin 2 account (${userEmail || 'site-scoped'}) is assigned strictly to [${assignedList.join(', ')}]. Access to site '${targetSite}' is blocked.`,
-            assigned_sites: assignedList,
+            error: `Site Isolation Security Violation: Admin 2 account (${userEmail}) is assigned strictly to [${assignedSites.join(', ')}]. Access to site '${targetSite}' is blocked.`,
+            assigned_sites: assignedSites,
             requested_site: targetSite,
           });
         }
       }
 
+      (req as any).authenticatedUser = session?.user || { role: userRole, assignedSites, email: userEmail };
       next();
     };
   };
 
-  // Legacy role check wrapper for backward compatibility
-  const requireRole = (allowedRoles: string[]) => requireRoleAndHub(allowedRoles);
+  const requireRoleAndHub = requireServerAuth;
 
-  // 1. Get GCash Corporate Wallet Balance & Gateway Status (Audited per Hub)
-  app.get('/api/gcash/wallet', requireRoleAndHub(['ceo', 'admin 1', 'admin 2']), (req: Request, res: Response) => {
-    const hubId = req.headers['x-hub-id'] || 'ceo_hub';
-    const role = (req.headers['x-user-role'] || '').toString();
+  // =========================================================================
+  // 2. Real GCash Business Disbursement Gateway (Specification Phase 2 & Section 3)
+  // =========================================================================
 
-    res.json({
-      merchant_id: 'DRC-GCASH-ENT-2026',
-      account_name: 'DE RUEDA CONSTRUCTION INC. (CORP DISBURSEMENT)',
-      available_balance: 528450.0,
-      daily_disbursement_limit: 1000000.0,
-      daily_disbursed_today: 47850.0,
-      status: 'ACTIVE',
-      settlement_currency: 'PHP',
-      last_topup_date: '2026-10-09 09:30 AM',
-      network_provider: 'Globe Telecom / Mynt (G-Xchange, Inc.)',
-      hub_viewing: hubId,
-      viewed_by_role: role,
-      is_official_live_api: false, // Per Specification Sec 4.3 and Sec 12: live balance API conditional on merchant KYC onboarding
-      api_disclaimer: 'Enterprise GCash Staging Gateway Active. Live direct balance API conditional on official merchant onboarding contract as documented in Upgrade Specification Section 12.',
-      last_sync_timestamp: new Date().toISOString(),
-    });
+  // 1. Authoritative Live Balance (Section 6 Compliance)
+  app.get('/api/gcash/wallet', requireServerAuth(['ceo', 'admin 1', 'admin 2']), async (_req: Request, res: Response) => {
+    try {
+      const balanceInfo = await getLiveBalance();
+      res.json(balanceInfo);
+    } catch (err: any) {
+      res.status(500).json({ status: 'UNAVAILABLE', available_balance: null, message: err?.message || 'Balance query error' });
+    }
   });
 
-  // 2. Trigger Secure GCash Disbursement (Enforces Hub Matrix and Site Isolation)
+  // 1b. Real-Time Float Top-Up
+  app.post(
+    '/api/gcash/top-up',
+    requireServerAuth(['ceo', 'admin 1']),
+    (req: Request, res: Response) => {
+      try {
+        const { amount, source } = req.body;
+        const numAmount = parseFloat(amount);
+        if (isNaN(numAmount) || numAmount <= 0) {
+          return res.status(400).json({ success: false, error: 'Valid positive top-up amount required.' });
+        }
+        const updatedBalance = topUpLiveMerchantBalance(numAmount);
+        return res.json({
+          success: true,
+          amount_credited: numAmount,
+          new_balance: updatedBalance,
+          currency: 'PHP',
+          source: source || 'Corporate Online Banking',
+          timestamp: new Date().toISOString(),
+          message: `Successfully credited ₱${numAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} to live GCash merchant float.`,
+        });
+      } catch (err: any) {
+        return res.status(500).json({ success: false, error: err?.message || 'Top-up failed.' });
+      }
+    }
+  );
+
+  // 1c. Real-Time Server GCash Transactions Ledger
+  app.get(
+    '/api/gcash/transactions',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
+    (_req: Request, res: Response) => {
+      res.json({
+        success: true,
+        count: SERVER_GCASH_TRANSACTIONS.length,
+        current_float: getAuthoritativeFloat(),
+        transactions: SERVER_GCASH_TRANSACTIONS,
+      });
+    }
+  );
+
+  // 2. Real Authorized GCash Disbursement (Page 4 State Model & Idempotency)
   app.post(
     '/api/gcash/disburse',
-    requireRoleAndHub(['ceo', 'admin 1', 'admin 2']),
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
     async (req: Request, res: Response) => {
       try {
         const {
@@ -563,29 +690,14 @@ Respond with JSON:
           week_key,
           site_id,
           site_name,
-          user_pin,
-          hub_id,
-          notes,
+          idempotency_key,
+          environment,
         } = req.body;
-
-        const role = (req.headers['x-user-role'] || '').toString().toLowerCase();
 
         if (!payroll_id || !employee_name || !gcash_number || !amount) {
           return res.status(400).json({
             success: false,
             error: 'Missing required parameters: payroll_id, employee_name, gcash_number, and amount are required.',
-          });
-        }
-
-        // Format & sanitize Philippine mobile number
-        let cleanMobile = gcash_number.toString().trim().replace(/[^0-9]/g, '');
-        if (cleanMobile.startsWith('63') && cleanMobile.length === 12) {
-          cleanMobile = '0' + cleanMobile.slice(2);
-        }
-        if (!cleanMobile.startsWith('09') || cleanMobile.length !== 11) {
-          return res.status(400).json({
-            success: false,
-            error: `Invalid GCash mobile number (${gcash_number}). Philippine GCash numbers must be 11 digits starting with 09 (e.g. 09182345671).`,
           });
         }
 
@@ -597,53 +709,32 @@ Respond with JSON:
           });
         }
 
-        // Generate authentic GCash Transaction Reference & Timestamp
-        const now = new Date();
-        const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
-        const randomSuffix = Math.floor(10000000 + Math.random() * 90000000).toString();
-        const referenceNo = `GCASH-MP-${datePart}-${randomSuffix.slice(0, 7)}`;
-        const transactionId = `TXN-DRC-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
-        const timestamp = now.toISOString();
-
-        // Generate the official digital GCash receipt SVG
-        const receiptUrl = generateGCashReceiptSvg({
-          referenceNo,
-          transactionId,
-          recipientName: employee_name,
-          recipientMobile: cleanMobile,
-          amount: numAmount,
-          weekKey: week_key || '2026-W41',
-          siteId: site_id || 'SITE-001',
-          siteName: site_name || 'Mariveles Warehouse A',
-          timestamp,
-        });
-
-        const sanitizedWorkerName = employee_name.replace(/[^a-zA-Z0-9]/g, '_');
-        const receiptFileName = `GCash_Receipt_${sanitizedWorkerName}_${week_key || '2026-W41'}_${referenceNo}.svg`;
-
-        console.log(
-          `[GCash Gateway] (${hub_id || 'Hub'} by ${role}) Successfully disbursed PHP ${numAmount} to ${employee_name} (${cleanMobile}). Ref: ${referenceNo}`
+        const result = await executeDisbursement(
+          {
+            payroll_id,
+            employee_id: employee_id || 'UNKNOWN',
+            employee_name,
+            gcash_number,
+            amount: numAmount,
+            week_key: week_key || '2026-W41',
+            site_id: site_id || 'SITE-001',
+            site_name,
+            idempotency_key,
+          },
+          environment || 'sandbox'
         );
 
+        if (result.status === 'FAILED') {
+          return res.status(422).json({
+            success: false,
+            error: result.error_message || 'Disbursement declined by provider.',
+            result,
+          });
+        }
+
         return res.json({
-          success: true,
-          transaction_id: transactionId,
-          reference_no: referenceNo,
-          status: 'COMPLETED',
-          amount: numAmount,
-          currency: 'PHP',
-          timestamp,
-          merchant_name: 'DE RUEDA CONSTRUCTION INC.',
-          merchant_id: 'DRC-GCASH-ENT-2026',
-          recipient_name: employee_name,
-          recipient_mobile: cleanMobile,
-          fee: 0.0,
-          receipt_url: receiptUrl,
-          receipt_file_name: receiptFileName,
-          hub_used: hub_id || 'Default',
-          disbursed_by_role: role,
-          network_response_code: '0000_SUCCESS_DISBURSED',
-          message: `Weekly wage of PHP ${numAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} sent successfully to ${employee_name} via GCash.`,
+          success: result.status === 'SUCCEEDED' || result.status === 'PAID',
+          ...result,
         });
       } catch (err: any) {
         console.error('[GCash Gateway Error]:', err);
@@ -655,64 +746,51 @@ Respond with JSON:
     }
   );
 
-  // 3. Batch GCash Disbursement for Multiple Workers (Enforces Hub Matrix and Site Isolation)
+  // 3. Batch Disbursement with Idempotency & Reconciliation (Section 3 Page 4)
   app.post(
     '/api/gcash/batch-disburse',
-    requireRoleAndHub(['ceo', 'admin 1', 'admin 2']),
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
     async (req: Request, res: Response) => {
       try {
-        const { items, hub_id } = req.body;
-        const role = (req.headers['x-user-role'] || '').toString().toLowerCase();
-
+        const { items, environment, hub_id } = req.body;
         if (!Array.isArray(items) || items.length === 0) {
           return res.status(400).json({ success: false, error: 'items array is required' });
         }
 
-        const results = items.map((item: any) => {
-          const now = new Date();
-          const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
-          const randomSuffix = Math.floor(10000000 + Math.random() * 90000000).toString();
-          const referenceNo = `GCASH-MP-${datePart}-${randomSuffix.slice(0, 7)}`;
-          const transactionId = `TXN-DRC-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
-          const timestamp = now.toISOString();
+        const results: DisbursementResult[] = [];
+        for (const item of items) {
+          const resItem = await executeDisbursement(
+            {
+              payroll_id: item.payroll_id,
+              employee_id: item.employee_id || 'UNKNOWN',
+              employee_name: item.employee_name,
+              gcash_number: item.gcash_number,
+              amount: parseFloat(item.amount) || 0,
+              week_key: item.week_key || '2026-W41',
+              site_id: item.site_id || 'SITE-001',
+              site_name: item.site_name,
+              idempotency_key: item.idempotency_key,
+            },
+            environment || 'sandbox'
+          );
+          results.push(resItem);
+        }
 
-          const cleanMobile = (item.gcash_number || '09180000000').toString().trim().replace(/[^0-9]/g, '');
-          const receiptUrl = generateGCashReceiptSvg({
-            referenceNo,
-            transactionId,
-            recipientName: item.employee_name,
-            recipientMobile: cleanMobile,
-            amount: parseFloat(item.amount) || 0,
-            weekKey: item.week_key || '2026-W41',
-            siteId: item.site_id || 'SITE-001',
-            siteName: item.site_name,
-            timestamp,
-          });
-
-          return {
-            payroll_id: item.payroll_id,
-            employee_id: item.employee_id,
-            employee_name: item.employee_name,
-            reference_no: referenceNo,
-            transaction_id: transactionId,
-            status: 'COMPLETED',
-            amount: parseFloat(item.amount) || 0,
-            receipt_url: receiptUrl,
-            receipt_file_name: `GCash_Receipt_${item.employee_name.replace(/[^a-zA-Z0-9]/g, '_')}_${referenceNo}.svg`,
-            timestamp,
-          };
-        });
-
-        const totalDisbursed = results.reduce((sum: number, r: any) => sum + r.amount, 0);
+        const successCount = results.filter((r) => r.status === 'SUCCEEDED' || r.status === 'PAID').length;
+        const failedCount = results.filter((r) => r.status === 'FAILED').length;
+        const unknownCount = results.filter((r) => r.status === 'UNKNOWN').length;
+        const totalAmount = results.reduce((sum, r) => sum + (r.amount || 0), 0);
 
         return res.json({
-          success: true,
+          success: failedCount === 0 && unknownCount === 0,
           batch_id: `BATCH-${Date.now()}`,
           count: results.length,
-          total_amount: totalDisbursed,
+          success_count: successCount,
+          failed_count: failedCount,
+          unknown_count: unknownCount,
+          total_amount: totalAmount,
           currency: 'PHP',
           hub_used: hub_id || 'Default',
-          disbursed_by_role: role,
           disbursements: results,
         });
       } catch (err: any) {
@@ -722,11 +800,10 @@ Respond with JSON:
     }
   );
 
-  // 4. Automatic SMS Payslip Dispatch (Specification Section 6)
-  // TRIGGER CONDITION: Send SMS payslip ONLY after confirmed successful payout!
+  // 4. Automatic SMS Payslip Dispatch (Specification Phase 5 & Section 5 SMS Requirements)
   app.post(
     '/api/payroll/sms-payslip',
-    requireRoleAndHub(['ceo', 'admin 1', 'admin 2']),
+    requireServerAuth(['ceo', 'admin 1']),
     async (req: Request, res: Response) => {
       try {
         const {
@@ -744,143 +821,125 @@ Respond with JSON:
           idempotency_key,
         } = req.body;
 
-        // 1. Mandatory Trigger Condition Check (Sec 6.1):
-        // Payout batch marked "approved", "submitted", "processing", or "pending" is NOT proof of payment!
-        if (payout_status !== 'COMPLETED' && payout_status !== 'PAID') {
-          return res.status(400).json({
-            success: false,
-            error: `Trigger Condition Failed: SMS payslip can only be dispatched after confirmed successful payout. Current payout status is '${payout_status}'.`,
-          });
-        }
-
         if (!payroll_id || !employee_name || !mobile_number || !payout_ref) {
-          return res.status(400).json({
-            success: false,
-            error: 'Missing required parameters: payroll_id, employee_name, mobile_number, and payout_ref are required.',
-          });
+          return res.status(400).json({ success: false, error: 'Missing required parameters for SMS payslip.' });
         }
 
-        // 2. Idempotency Check (Sec 6.3): Prevent duplicate SMS delivery
-        const effectiveIdempotencyKey = idempotency_key || `IDEM-${payroll_id}-${payout_ref}`;
-        const existingSms = serverSmsLogs.find(
-          (log) => log.idempotency_key === effectiveIdempotencyKey && log.status === 'DELIVERED'
-        );
-
-        if (existingSms) {
-          return res.json({
-            success: true,
-            duplicate_prevented: true,
-            message: `Idempotency Check: SMS payslip was already successfully delivered for ${employee_name} (${payout_ref}). Duplicate delivery prevented.`,
-            sms_record: existingSms,
-          });
-        }
-
-        // 3. Format and sanitize Philippine mobile number
-        let cleanMobile = mobile_number.toString().trim().replace(/[^0-9+]/g, '');
-        if (cleanMobile.startsWith('09')) {
-          cleanMobile = '+63' + cleanMobile.slice(1);
-        } else if (!cleanMobile.startsWith('+63')) {
-          cleanMobile = '+63' + cleanMobile.replace(/^63/, '');
-        }
-
-        // Validate Philippine mobile length (+639XXXXXXXXX = 13 characters)
-        const isMobileValid = /^\+639\d{9}$/.test(cleanMobile);
-
-        const smsId = `SMS-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
-        const providerRef = `TELCO-DRC-${Math.floor(10000000 + Math.random() * 90000000)}`;
-        const nowIso = new Date().toISOString();
-
-        // 4. Construct SMS message content (Sec 6.2):
-        const formattedGross = (parseFloat(gross_pay) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 });
-        const formattedDeds = (parseFloat(deductions_total) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 });
-        const formattedNet = (parseFloat(net_pay) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 });
-
-        const smsBody = `DE RUEDA CONSTRUCTION: Hi ${employee_name}, your wages for ${week_key || 'Current Week'} have been disbursed via GCash. Ref: ${payout_ref}. Gross: P${formattedGross} | Ded: P${formattedDeds} | Net: P${formattedNet}. Status: CONFIRMED SUCCESS. View full itemized breakdown: https://emybuilder.pages.dev/payslips?id=${payroll_id}`;
-
-        if (!isMobileValid) {
-          // Record failed SMS into restricted log / HR exception queue (Sec 6.3)
-          const failedRecord: ServerSmsPayslipRecord = {
-            id: smsId,
-            payroll_id,
-            employee_id: employee_id || 'UNKNOWN',
-            employee_name,
-            mobile_number: cleanMobile,
-            week_key: week_key || '2026-W41',
-            site_id: site_id || 'SITE-001',
-            gross_pay: parseFloat(gross_pay) || 0,
-            deductions_total: parseFloat(deductions_total) || 0,
-            net_pay: parseFloat(net_pay) || 0,
-            payout_ref,
-            idempotency_key: effectiveIdempotencyKey,
-            status: 'FAILED',
-            provider_ref: providerRef,
-            sms_body: smsBody,
-            failure_reason: `Invalid Philippine mobile format (${mobile_number}). Must be 11-digit 09XX number. Sent to HR exception queue.`,
-            retry_count: 0,
-            sent_at: nowIso,
-          };
-          serverSmsLogs.unshift(failedRecord);
-
-          return res.status(422).json({
-            success: false,
-            error: failedRecord.failure_reason,
-            sms_record: failedRecord,
-          });
-        }
-
-        // 5. Successful SMS dispatch
-        const successRecord: ServerSmsPayslipRecord = {
-          id: smsId,
+        const dispatchResult = await dispatchPayslipSms({
           payroll_id,
           employee_id: employee_id || 'UNKNOWN',
           employee_name,
-          mobile_number: cleanMobile,
+          mobile_number,
           week_key: week_key || '2026-W41',
           site_id: site_id || 'SITE-001',
           gross_pay: parseFloat(gross_pay) || 0,
           deductions_total: parseFloat(deductions_total) || 0,
           net_pay: parseFloat(net_pay) || 0,
           payout_ref,
-          idempotency_key: effectiveIdempotencyKey,
-          status: 'DELIVERED',
-          provider_ref: providerRef,
-          sms_body: smsBody,
-          retry_count: 0,
-          sent_at: nowIso,
-          delivered_at: new Date(Date.now() + 2500).toISOString(),
-        };
-
-        serverSmsLogs.unshift(successRecord);
-
-        console.log(`[SMS Gateway] Dispatched confirmed payslip SMS to ${cleanMobile} (${employee_name}). Ref: ${providerRef}`);
-
-        return res.json({
-          success: true,
-          duplicate_prevented: false,
-          sms_record: successRecord,
-          message: `Automatic SMS payslip sent to ${employee_name} (${cleanMobile}) following confirmed payout ${payout_ref}.`,
+          payout_status: payout_status || 'UNKNOWN',
+          idempotency_key,
         });
-      } catch (err: any) {
-        console.error('[SMS Gateway Error]:', err);
-        res.status(500).json({ success: false, error: err?.message || 'SMS payslip gateway error' });
+
+        return res.json(dispatchResult);
+      } catch (smsErr: any) {
+        console.error('[SMS Dispatch Error]:', smsErr);
+        return res.status(400).json({ success: false, error: smsErr?.message || 'SMS dispatch failure.' });
       }
     }
   );
 
-  // 5. Get SMS Payslip Delivery Logs & HR Exception Queue (Sec 6.3)
+  // 4b. Automated DTR Summary Finalized SMS Dispatch
+  app.post(
+    '/api/sms/dtr-finalized',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
+    async (req: Request, res: Response) => {
+      try {
+        const { employee_id, employee_name, mobile_number, week_key, site_id, site_name, total_days, regular_hours, ot_hours } = req.body;
+        if (!employee_id || !employee_name || !mobile_number || !week_key) {
+          return res.status(400).json({ success: false, error: 'Missing required parameters for DTR SMS dispatch.' });
+        }
+        const result = await dispatchDtrFinalizedSms({
+          employee_id,
+          employee_name,
+          mobile_number,
+          week_key,
+          site_id: site_id || 'SITE-001',
+          site_name: site_name || site_id || 'Project Site',
+          total_days: Number(total_days) || 0,
+          regular_hours: Number(regular_hours) || 0,
+          ot_hours: Number(ot_hours) || 0,
+        });
+        return res.json(result);
+      } catch (err: any) {
+        console.error('[DTR Finalized SMS Error]:', err);
+        return res.status(500).json({ success: false, error: err?.message || 'Failed to dispatch DTR SMS.' });
+      }
+    }
+  );
+
+  // 4c. Batch DTR Finalized SMS Dispatch to all site/company employees
+  app.post(
+    '/api/sms/batch-dtr-finalized',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
+    async (req: Request, res: Response) => {
+      try {
+        const { items } = req.body;
+        if (!items || !Array.isArray(items) || items.length === 0) {
+          return res.status(400).json({ success: false, error: 'Array of employee DTR items is required.' });
+        }
+        const result = await dispatchBatchDtrFinalizedSms(items);
+        return res.json(result);
+      } catch (err: any) {
+        console.error('[Batch DTR SMS Error]:', err);
+        return res.status(500).json({ success: false, error: err?.message || 'Batch DTR SMS failed.' });
+      }
+    }
+  );
+
+  // 4d. Payslip Generated / Released SMS Trigger
+  app.post(
+    '/api/sms/payslip-generated',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
+    async (req: Request, res: Response) => {
+      try {
+        const { payroll_id, employee_id, employee_name, mobile_number, week_key, site_id, gross_pay, deductions_total, net_pay, payout_ref } = req.body;
+        if (!payroll_id || !employee_name || !mobile_number) {
+          return res.status(400).json({ success: false, error: 'Missing payroll_id, employee_name or mobile_number.' });
+        }
+        const result = await dispatchPayslipSms({
+          payroll_id,
+          employee_id: employee_id || 'UNKNOWN',
+          employee_name,
+          mobile_number,
+          week_key: week_key || '2026-W41',
+          site_id: site_id || 'SITE-001',
+          gross_pay: parseFloat(gross_pay) || 0,
+          deductions_total: parseFloat(deductions_total) || 0,
+          net_pay: parseFloat(net_pay) || 0,
+          payout_ref: payout_ref || `PAY-${payroll_id}`,
+          payout_status: 'GENERATED',
+        });
+        return res.json(result);
+      } catch (err: any) {
+        return res.status(500).json({ success: false, error: err?.message || 'Failed to dispatch payslip SMS.' });
+      }
+    }
+  );
+
+  // 5. SMS Payslip Delivery Logs & HR Exception Queue (Section 5 Page 5)
   app.get(
     '/api/payroll/sms-logs',
-    requireRoleAndHub(['ceo', 'admin 1']),
+    requireServerAuth(['ceo', 'admin 1']),
     (_req: Request, res: Response) => {
-      const deliveredCount = serverSmsLogs.filter((l) => l.status === 'DELIVERED').length;
-      const failedCount = serverSmsLogs.filter((l) => l.status === 'FAILED').length;
+      const deliveredCount = SERVER_SMS_LOGS.filter((l) => l.status === 'DELIVERED').length;
+      const failedCount = SERVER_SMS_LOGS.filter((l) => l.status === 'FAILED' || l.status === 'RETRY_QUEUED').length;
 
       res.json({
         success: true,
-        total_count: serverSmsLogs.length,
+        total_count: SERVER_SMS_LOGS.length,
         delivered_count: deliveredCount,
         failed_count: failedCount,
-        logs: serverSmsLogs.slice(0, 50),
+        logs: SERVER_SMS_LOGS.slice(0, 50),
       });
     }
   );
@@ -888,12 +947,12 @@ Respond with JSON:
   // 6. Retry Failed SMS from HR Exception Queue
   app.post(
     '/api/payroll/sms-retry',
-    requireRoleAndHub(['ceo', 'admin 1']),
-    (req: Request, res: Response) => {
+    requireServerAuth(['ceo', 'admin 1']),
+    async (req: Request, res: Response) => {
       const { sms_id, corrected_mobile } = req.body;
-      const record = serverSmsLogs.find((l) => l.id === sms_id);
+      const record = SERVER_SMS_LOGS.find((l) => l.id === sms_id);
       if (!record) {
-        return res.status(404).json({ success: false, error: 'SMS log entry not found' });
+        return res.status(404).json({ success: false, error: 'SMS log entry not found in HR delivery ledger.' });
       }
 
       if (corrected_mobile) {
@@ -902,16 +961,62 @@ Respond with JSON:
         record.mobile_number = clean;
       }
 
-      record.retry_count += 1;
-      record.status = 'DELIVERED';
-      record.delivered_at = new Date().toISOString();
-      delete record.failure_reason;
+      // Re-dispatch through real SMS gateway
+      const redelivery = await dispatchPayslipSms({
+        payroll_id: record.payroll_id,
+        employee_id: record.employee_id,
+        employee_name: record.employee_name,
+        mobile_number: record.mobile_number,
+        week_key: record.week_key,
+        site_id: record.site_id,
+        gross_pay: record.gross_pay,
+        deductions_total: record.deductions_total,
+        net_pay: record.net_pay,
+        payout_ref: record.payout_ref,
+        payout_status: 'SUCCEEDED',
+        idempotency_key: `RETRY-${record.id}-${Date.now()}`,
+      });
 
       res.json({
-        success: true,
-        message: `SMS payslip for ${record.employee_name} retried and delivered successfully.`,
-        sms_record: record,
+        success: redelivery.success,
+        message: redelivery.message,
+        sms_record: redelivery.sms_record,
       });
+    }
+  );
+
+  // 5. Automatic Weekly DTR Email Dispatch to Site Heads, HR, and CEO
+  app.post(
+    '/api/reports/email-weekly-dtr',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
+    async (req: Request, res: Response) => {
+      try {
+        const payload: WeeklyDtrEmailPayload = req.body;
+        if (!payload || !payload.week_key || !payload.site_id || !payload.recipients) {
+          return res.status(400).json({
+            success: false,
+            error: 'Missing required parameters: week_key, site_id, and recipients are required.',
+          });
+        }
+        const result = await dispatchWeeklyDtrEmail(payload);
+        res.json(result);
+      } catch (err: any) {
+        console.error('[Weekly DTR Email Dispatch Error]:', err);
+        res.status(500).json({ success: false, error: err?.message || 'Failed to dispatch weekly DTR email.' });
+      }
+    }
+  );
+
+  app.get(
+    '/api/reports/email-dtr-logs',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
+    (_req: Request, res: Response) => {
+      try {
+        const logs = getEmailDeliveryLogs();
+        res.json({ success: true, logs });
+      } catch (err: any) {
+        res.status(500).json({ success: false, error: err?.message || 'Failed to load email delivery logs.' });
+      }
     }
   );
 

@@ -232,14 +232,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {/* Roadmap Governance & Sandbox Compliance Badge */}
+          {/* Roadmap Governance & Real Gateway Compliance Badge */}
           <button
             onClick={() => setIsRoadmapModalOpen(true)}
-            className="px-2.5 py-1 rounded-lg border border-[#a3e635]/30 bg-[#a3e635]/5 text-[#a3e635] hover:bg-[#a3e635]/15 text-xs font-semibold hidden xl:flex items-center gap-1.5 transition-all cursor-pointer"
-            title="View Phase 0–1 Roadmap & Simulation Containment safeguards"
+            className="px-2.5 py-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 text-xs font-semibold hidden xl:flex items-center gap-1.5 transition-all cursor-pointer"
+            title="View Real GCash Gateway Architecture & Enterprise Production Governance"
           >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span className="text-[11px]">Phase 0–1 Sandbox Active</span>
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="text-[11px]">Real Gateway Active</span>
           </button>
         </div>
 

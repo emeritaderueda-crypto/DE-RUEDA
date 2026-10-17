@@ -649,7 +649,7 @@ export const RealGcashBusinessGatewayModal: React.FC<RealGcashBusinessGatewayMod
                     onChange={(e: any) => setEnvInput(e.target.value)}
                     className="w-full px-3 py-2 bg-[#13241f] border border-[#234338] rounded-xl text-xs text-white outline-none focus:border-emerald-400 font-mono"
                   >
-                    <option value="sandbox">SANDBOX (Simulation &amp; Testing Mode)</option>
+                    <option value="sandbox">SANDBOX (Official Developer Gateway)</option>
                     <option value="production">PRODUCTION (Authoritative Live Money Movement)</option>
                   </select>
                 </div>

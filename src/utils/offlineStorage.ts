@@ -260,8 +260,7 @@ export function getOfflineQueue(): OfflineActionItem[] {
   try {
     const raw = localStorage.getItem(KEYS.QUEUE);
     if (raw === null) {
-      safeSet(KEYS.QUEUE, INITIAL_SAMPLE_QUEUE);
-      return INITIAL_SAMPLE_QUEUE;
+      return [];
     }
     return JSON.parse(raw) || [];
   } catch {
@@ -352,11 +351,7 @@ const INITIAL_SAMPLE_SYNC_LOGS: SyncActivityLogEntry[] = [
 
 export function getSyncActivityLogs(): SyncActivityLogEntry[] {
   const stored = safeGet<SyncActivityLogEntry[]>(KEYS.SYNC_LOGS, []);
-  if (!stored || stored.length === 0) {
-    safeSet(KEYS.SYNC_LOGS, INITIAL_SAMPLE_SYNC_LOGS);
-    return INITIAL_SAMPLE_SYNC_LOGS;
-  }
-  return stored;
+  return stored || [];
 }
 
 export function addSyncActivityLog(

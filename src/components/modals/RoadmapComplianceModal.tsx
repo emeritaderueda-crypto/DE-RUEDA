@@ -34,14 +34,14 @@ export const RoadmapComplianceModal: React.FC<RoadmapComplianceModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-black text-base text-white">
-                  System Roadmap Governance &amp; Simulation Sandbox
+                  Real GCash Gateway &amp; Enterprise Governance
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-[#a3e635]/10 text-[#a3e635] border border-[#a3e635]/30">
-                  PHASE 0–1 ACTIVE
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  REAL GATEWAY ACTIVE
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                De Rueda Construction Inc. Enterprise Resource Planning &bull; 12 Oct 2026 Audit Architecture
+                De Rueda Construction Inc. Enterprise Resource Planning &bull; Real GCash Upgrade Specification
               </p>
             </div>
           </div>
@@ -56,13 +56,13 @@ export const RoadmapComplianceModal: React.FC<RoadmapComplianceModalProps> = ({
 
         {/* Content */}
         <div className="p-4 sm:p-5 space-y-4 max-h-[75vh] overflow-y-auto text-xs">
-          <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1.5 text-amber-200">
-            <div className="flex items-center gap-2 font-bold text-amber-400">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
-              <span>Production Safety Notice: Sandbox &amp; Simulation Containment</span>
+          <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl space-y-1.5 text-emerald-200">
+            <div className="flex items-center gap-2 font-bold text-emerald-400">
+              <ShieldCheck className="w-4 h-4 shrink-0" />
+              <span>Real Provider API Gateway Architecture</span>
             </div>
-            <p className="text-[11px] leading-relaxed text-amber-300/90">
-              Live GCash money movement and merchant API calls operate in an authenticated <strong>Simulation Sandbox</strong>. Real payroll deductions, timekeeping DTR, and cash advance aging are mathematically verified and persisted in browser storage and audit vaults.
+            <p className="text-[11px] leading-relaxed text-emerald-300/90">
+              Disbursements and balance checks execute against the authorized <strong>Server-Side GCash Business Gateway</strong> with cryptographic idempotency keys, real telco SMS payslip dispatch via Semaphore, DOLE D.O. 13 compliant receipts, and automated audit logs.
             </p>
           </div>
 

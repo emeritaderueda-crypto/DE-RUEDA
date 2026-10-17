@@ -85,6 +85,7 @@ export interface Site {
   location: string;
   project_status: 'Active' | 'In Progress' | 'On Hold' | 'Completed';
   supervisor: string;
+  supervisor_email?: string;
   start_date: string;
   end_date: string;
   notes: string;
@@ -710,6 +711,8 @@ export interface AdminUserAccount {
   lastLoginAt?: string;
 }
 
+export type SmsNotificationType = 'PAYSLIP' | 'DTR_FINALIZED';
+
 export interface SmsPayslipLogEntry {
   id: string;
   payroll_id: string;
@@ -730,6 +733,12 @@ export interface SmsPayslipLogEntry {
   retry_count: number;
   sent_at: string;
   delivered_at?: string;
+  notification_type?: SmsNotificationType;
+  dtr_details?: {
+    total_days: number;
+    regular_hours: number;
+    ot_hours: number;
+  };
 }
 
 export interface GcashWalletInfo {
@@ -744,5 +753,107 @@ export interface GcashWalletInfo {
   network_provider: string;
   is_official_live_api: boolean;
   api_disclaimer?: string;
+}
+
+export interface EmailDtrRecipient {
+  role: 'SITE_HEAD' | 'HR' | 'CEO' | 'CUSTOM';
+  name: string;
+  email: string;
+  site_id?: string;
+  selected: boolean;
+}
+
+export interface WeeklyDtrSummaryItem {
+  employee_id: string;
+  employee_name: string;
+  trade: string;
+  site_id: string;
+  regular_hours: number;
+  ot_hours: number;
+  total_days: number;
+  status: 'Verified' | 'Pending Review' | 'Flagged';
+}
+
+export interface WeeklyDtrEmailPayload {
+  week_key: string;
+  site_id: string;
+  site_name: string;
+  recipients: EmailDtrRecipient[];
+  sender_name: string;
+  sender_email: string;
+  sender_role: string;
+  notes?: string;
+  summary: {
+    total_workers: number;
+    total_regular_hours: number;
+    total_ot_hours: number;
+    total_shifts: number;
+    perfect_attendance_count: number;
+    flagged_punches_count: number;
+    items: WeeklyDtrSummaryItem[];
+  };
+}
+
+export interface EmailDeliveryRecord {
+  id: string;
+  week_key: string;
+  site_id: string;
+  recipient_email: string;
+  recipient_name: string;
+  recipient_role: string;
+  subject: string;
+  status: 'DELIVERED' | 'SENT' | 'FAILED';
+  message_id: string;
+  sent_at: string;
+  delivered_at?: string;
+  html_preview?: string;
+  failure_reason?: string;
+}
+
+export interface WeeklyDtrEmailSchedule {
+  enabled: boolean;
+  frequency: 'WEEKLY';
+  dispatch_day: 'FRIDAY' | 'SATURDAY' | 'SUNDAY' | 'MONDAY';
+  dispatch_time: string; // e.g. '18:00'
+  include_site_heads: boolean;
+  include_hr: boolean;
+  include_ceo: boolean;
+  auto_dispatch_on_cycle_finalize: boolean;
+  last_automated_run?: string;
+  next_scheduled_run?: string;
+}
+
+export interface SmsDtrFinalizedPayload {
+  employee_id: string;
+  employee_name: string;
+  mobile_number: string;
+  week_key: string;
+  site_id: string;
+  site_name: string;
+  total_days: number;
+  regular_hours: number;
+  ot_hours: number;
+  idempotency_key?: string;
+}
+
+export interface ProcurementTimelineItem {
+  id: string;
+  site_id: string;
+  site_name: string;
+  material_name: string;
+  category: 'Structural' | 'Civil Works' | 'Architectural' | 'MEPF' | 'Equipment';
+  supplier: string;
+  quantity: number;
+  unit: string;
+  unit_cost: number;
+  total_cost: number;
+  target_delivery_date: string; // YYYY-MM-DD
+  actual_delivery_date?: string;
+  status: 'DELIVERED' | 'IN_TRANSIT' | 'PO_APPROVED' | 'PO_PENDING' | 'DELAYED';
+  associated_task_id?: string;
+  delivery_ref?: string;
+  criticality: 'CRITICAL' | 'NORMAL' | 'LOW';
+  lead_time_days: number;
+  notes?: string;
 }
 

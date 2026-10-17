@@ -6,8 +6,9 @@ import {
   downloadWordDoc,
   downloadReportPDF,
 } from '../../utils/exporters';
-import { FileBarChart, Download, FileSpreadsheet, FileText, Printer, FileCheck, UtensilsCrossed, ArrowRight } from 'lucide-react';
+import { FileBarChart, Download, FileSpreadsheet, FileText, Printer, FileCheck, UtensilsCrossed, ArrowRight, Mail, Send } from 'lucide-react';
 import { CanteenSpendingAggregationTab } from '../reports/CanteenSpendingAggregationTab';
+import { WeeklyDtrEmailHub } from '../reports/WeeklyDtrEmailHub';
 
 export const ReportsView: React.FC = () => {
   const {
@@ -22,9 +23,12 @@ export const ReportsView: React.FC = () => {
     auditLogs,
     currentSite,
     gcashTransactions,
+    weeklyDtrSchedule,
+    emailDeliveryLogs,
   } = useApp();
 
-  const [activeMainTab, setActiveMainTab] = useState<'standard' | 'canteen-aggregation'>('standard');
+  const [activeMainTab, setActiveMainTab] = useState<'standard' | 'canteen-aggregation' | 'dtr-email'>('standard');
+  const [showDtrEmailModal, setShowDtrEmailModal] = useState<boolean>(false);
   const [reportType, setReportType] = useState('attendance-dtr');
   const [siteFilter, setSiteFilter] = useState(currentSite);
   const [weekFilter, setWeekFilter] = useState(dtrWeeks[0]?.week_key || '2026-W41');
@@ -410,10 +414,27 @@ export const ReportsView: React.FC = () => {
             ₱{totalCompanyCanteenDeductions.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </span>
         </button>
+
+        <button
+          onClick={() => setActiveMainTab('dtr-email')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+            activeMainTab === 'dtr-email'
+              ? 'bg-[#13241f] text-[#a3e635] border border-[#a3e635]/40 shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-[#13241f]/50 border border-transparent'
+          }`}
+        >
+          <Mail className="w-4 h-4 text-[#a3e635]" />
+          <span>Weekly DTR Auto-Email Dispatcher (Site Heads, HR &amp; CEO)</span>
+          {weeklyDtrSchedule.enabled && (
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Auto-Schedule Active" />
+          )}
+        </button>
       </div>
 
       {activeMainTab === 'canteen-aggregation' ? (
         <CanteenSpendingAggregationTab />
+      ) : activeMainTab === 'dtr-email' ? (
+        <WeeklyDtrEmailHub initialSiteId={siteFilter} initialWeekKey={weekFilter} />
       ) : (
         <>
           {/* Header */}
@@ -431,6 +452,15 @@ export const ReportsView: React.FC = () => {
 
         {/* Action Export Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setShowDtrEmailModal(true)}
+            className="px-3.5 py-2 bg-[#13241f] border border-[#a3e635]/50 text-[#a3e635] hover:bg-[#a3e635] hover:text-[#080f0d] font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+            title="Automatically email generated weekly DTR summary to registered Site Heads per site, HR, and CEO"
+          >
+            <Mail className="w-4 h-4" />
+            <span>Email Weekly DTR</span>
+          </button>
+
           <button
             onClick={handleDownloadPDF}
             className="px-3.5 py-2 bg-[#a3e635] text-[#080f0d] hover:bg-[#84cc16] font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
@@ -544,6 +574,44 @@ export const ReportsView: React.FC = () => {
         </div>
       </div>
 
+      {/* Helper Shortcut Banner for Weekly DTR Auto-Email Dispatch */}
+      {reportType === 'attendance-dtr' && (
+        <div className="bg-[#13241f] border border-[#a3e635]/40 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs no-print shadow-md">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 rounded-lg bg-[#a3e635]/15 text-[#a3e635] border border-[#a3e635]/30 shrink-0">
+              <Mail className="w-4 h-4" />
+            </span>
+            <div>
+              <div className="font-bold text-white flex items-center gap-2">
+                <span>Weekly DTR Ready for Email Dispatch</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
+                  DOLE D.O. 13 Audited
+                </span>
+              </div>
+              <div className="text-slate-400 text-[11px] mt-0.5">
+                Automatically email this generated weekly attendance summary ({siteFilter} · {weekFilter}) to registered Site Heads per site, HR Lead, and CEO.
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowDtrEmailModal(true)}
+              className="px-3.5 py-1.5 bg-[#a3e635] text-[#080f0d] hover:bg-[#84cc16] font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Email DTR to Site Heads, HR &amp; CEO</span>
+            </button>
+            <button
+              onClick={() => setActiveMainTab('dtr-email')}
+              className="px-3 py-1.5 bg-[#0e1a16] border border-[#234338] hover:border-[#a3e635]/40 text-slate-300 hover:text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              <span>Open Email Hub</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Helper Shortcut Banner to Dedicated Canteen Aggregator Tab */}
       {reportType === 'canteen' && (
         <div className="bg-[#13241f] border border-[#a3e635]/30 rounded-xl p-3.5 flex items-center justify-between gap-3 text-xs no-print">
@@ -644,6 +712,20 @@ export const ReportsView: React.FC = () => {
         </div>
       </div>
         </>
+      )}
+
+      {/* Weekly DTR Email Dispatch Modal */}
+      {showDtrEmailModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in">
+          <div className="bg-[#0e1a16] border border-[#234338] rounded-2xl max-w-5xl w-full max-h-[92vh] overflow-y-auto shadow-2xl p-4 sm:p-6 relative">
+            <WeeklyDtrEmailHub
+              initialSiteId={siteFilter}
+              initialWeekKey={weekFilter}
+              isModalView={true}
+              onCloseModal={() => setShowDtrEmailModal(false)}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

@@ -79,6 +79,7 @@ export const SettingsView: React.FC = () => {
     updateAdminAccount,
     createAdminAccount,
     sites,
+    resetToFactoryDefault,
   } = useApp();
 
   // Active Tab
@@ -1962,6 +1963,47 @@ export const SettingsView: React.FC = () => {
                 )}
               </div>
             </form>
+          </div>
+
+          {/* Factory Default Reset & Demo Data Purge Card */}
+          <div className="bg-[#0e1a16] border border-rose-900/40 rounded-xl p-5 space-y-3">
+            <div className="flex items-center justify-between pb-3 border-b border-[#234338] flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                  <RotateCcw className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Factory Default Clean Start &amp; Demo Data Purge</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Purge all demo GCash transactions, simulated payrolls, demo attendance punches, and test records
+                  </p>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                FACTORY READY
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              This action resets the enterprise ledger to a clean factory default state. All mock GCash disbursements, demo worker payrolls, canteen logs, and test materials receipts are cleared so your company can operate with 100% real accounts, genuine phone numbers, and live production records.
+            </p>
+
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('Execute Factory Default Reset?\n\nThis will permanently clear all demo GCash transactions, demo payrolls, attendance, and test records so you can start with a clean real system.')) {
+                    resetToFactoryDefault();
+                    setFeedback('Factory default reset executed successfully. All demo inputs and mock GCash records have been cleared.');
+                    setTimeout(() => setFeedback(''), 5000);
+                  }
+                }}
+                className="px-4 py-2.5 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 hover:text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-lg"
+              >
+                <Trash2 className="w-4 h-4 text-rose-400" />
+                <span>Execute Factory Default Reset (Wipe All Demo Inputs)</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

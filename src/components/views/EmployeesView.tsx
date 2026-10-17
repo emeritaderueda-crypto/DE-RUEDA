@@ -435,8 +435,20 @@ export const EmployeesView: React.FC = () => {
             <tbody className="divide-y divide-[#234338]/40">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-8 text-center text-slate-500">
-                    No employees matching the search filters.
+                  <td colSpan={9} className="p-10 text-center text-slate-400">
+                    <div className="max-w-md mx-auto space-y-2">
+                      <div className="w-10 h-10 rounded-full bg-[#13241f] border border-[#234338] flex items-center justify-center mx-auto text-[#a3e635]">
+                        <UserPlus className="w-5 h-5" />
+                      </div>
+                      <div className="font-bold text-white text-sm">
+                        {employees.length === 0 ? 'Pristine Factory Default: No Workers Registered' : 'No employees matching the search filters'}
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        {employees.length === 0
+                          ? 'Your ERP is clean and ready for real operations. Click "+ Add New Employee" to enroll real workers with authentic Philippine GCash mobile numbers.'
+                          : 'Try adjusting your search terms, site filter, or category filter.'}
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (

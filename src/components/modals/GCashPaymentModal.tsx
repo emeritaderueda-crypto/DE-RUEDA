@@ -52,7 +52,7 @@ export const GCashPaymentModal: React.FC<GCashPaymentModalProps> = ({
   // Initialize or reset form state when modal opens
   useEffect(() => {
     if (payrollRecord) {
-      const defaultPhone = employee?.gcash_number || '09182345671';
+      const defaultPhone = employee?.gcash_number || '';
       setMobileNumber(defaultPhone);
       setManagerNotes(`Weekly payroll payout for ${payrollRecord.week_key}`);
       setValidationError(null);
@@ -79,7 +79,7 @@ export const GCashPaymentModal: React.FC<GCashPaymentModalProps> = ({
 
   const handleExecutePayment = async () => {
     if (!validatePhone(mobileNumber)) {
-      setValidationError('Please enter a valid 11-digit Philippine GCash mobile number starting with 09 (e.g. 09182345671).');
+      setValidationError('Please enter a valid 11-digit Philippine GCash mobile number starting with 09 (e.g. 09XXXXXXXXX).');
       return;
     }
     if (!managerPin.trim()) {
@@ -91,34 +91,31 @@ export const GCashPaymentModal: React.FC<GCashPaymentModalProps> = ({
     setIsProcessing(true);
     setProcessingStep(1);
 
-    // Simulate authentic step-by-step gateway confirmation sequence
-    setTimeout(() => setProcessingStep(2), 600);
-    setTimeout(() => setProcessingStep(3), 1200);
+    // Real step-by-step gateway confirmation sequence
+    try {
+      setProcessingStep(2);
+      const result = await triggerGcashPayment(
+        payrollRecord.payroll_id,
+        mobileNumber.trim(),
+        managerNotes.trim(),
+        managerPin.trim()
+      );
 
-    setTimeout(async () => {
-      try {
-        const result = await triggerGcashPayment(
-          payrollRecord.payroll_id,
-          mobileNumber.trim(),
-          managerNotes.trim(),
-          managerPin.trim()
-        );
+      setProcessingStep(3);
+      setPaymentResult({
+        reference_no: result.reference_no,
+        receipt_url: result.receipt_url,
+        timestamp: new Date().toISOString(),
+      });
 
-        setPaymentResult({
-          reference_no: result.reference_no,
-          receipt_url: result.receipt_url,
-          timestamp: new Date().toISOString(),
-        });
-
-        setIsProcessing(false);
-        if (onSuccess) {
-          onSuccess(result.reference_no);
-        }
-      } catch (err: any) {
-        setIsProcessing(false);
-        setValidationError(err?.message || 'Payment execution failed. Please verify credentials and retry.');
+      setIsProcessing(false);
+      if (onSuccess) {
+        onSuccess(result.reference_no);
       }
-    }, 1800);
+    } catch (err: any) {
+      setIsProcessing(false);
+      setValidationError(err?.message || 'Payment execution failed. Please verify credentials and retry.');
+    }
   };
 
   const handleCopyRef = (ref: string) => {
@@ -363,7 +360,7 @@ export const GCashPaymentModal: React.FC<GCashPaymentModalProps> = ({
                         setMobileNumber(e.target.value);
                         setValidationError(null);
                       }}
-                      placeholder="09182345671"
+                      placeholder="09XXXXXXXXX (11 digits)"
                       className="w-full bg-[#13241f] border border-[#234338] focus:border-[#005ce6] rounded-lg px-3 py-2 text-xs font-mono font-bold text-white outline-none pl-8"
                     />
                     <Smartphone className="w-4 h-4 text-[#005ce6] absolute left-2.5 top-2.5" />
