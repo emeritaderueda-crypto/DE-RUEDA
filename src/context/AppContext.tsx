@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   Employee,
   Site,
@@ -50,6 +50,8 @@ import {
   SitePaymentBatchSummary,
   GcashOfficialOnboardingStatus,
   PaymentReceiptEvidence,
+  PaymentSmsJob,
+  SmsDeliveryStatus,
 } from '../types';
 import { INITIAL_PROCUREMENT_TIMELINE } from '../data/procurementTimelineData';
 import {
@@ -321,20 +323,38 @@ interface AppContextType {
     recordId: string,
     evidence: {
       reference_number: string;
-      receipt_url: string;
+      receipt_url?: string;
+      receipt_token?: string;
+      private_url?: string;
       amount_paid?: number;
       transfer_date?: string;
       payer_name?: string;
       payer_mobile?: string;
       notes?: string;
+      file_name?: string;
+      mime_type?: string;
+      file_size_bytes?: number;
+      data_base64?: string;
     }
-  ) => { success: boolean; is_duplicate?: boolean; message: string; record?: PaymentRecord };
+  ) => Promise<{ success: boolean; is_duplicate?: boolean; message: string; record?: PaymentRecord }>;
   reviewPaymentRecord: (
     recordId: string,
     status: PaymentRecordStatus,
     notes?: string,
     rejectionReason?: string
   ) => Promise<{ success: boolean; message: string; record?: PaymentRecord }>;
+  confirmPaymentAndSendSms: (
+    recordId: string,
+    affirmation: {
+      receipt_matches_payment: boolean;
+      evidence_reviewed: boolean;
+      reference_verified: boolean;
+    },
+    notes?: string
+  ) => Promise<{ success: boolean; message: string; record?: PaymentRecord; sms_job?: PaymentSmsJob }>;
+  smsOutbox: PaymentSmsJob[];
+  refreshSmsOutbox: () => Promise<void>;
+  retryOutboxSms: (jobId: string) => Promise<{ success: boolean; message: string }>;
   getSiteBatchSummary: (siteId: string, weekKey: string) => SitePaymentBatchSummary;
   checkDuplicateReference: (referenceNumber: string, excludeRecordId?: string) => { isDuplicate: boolean; conflictingRecordId?: string };
   gcashOnboardingStatus: GcashOfficialOnboardingStatus;
@@ -496,15 +516,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`${STORAGE_KEY}_WEEKLY_DTR_SCHEDULE`, JSON.stringify(weeklyDtrSchedule));
   }, [weeklyDtrSchedule]);
 
-  // Automated SMS on DTR Finalization Toggle
-  const [autoSmsOnDtrFinalize, setAutoSmsOnDtrFinalizeState] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_AUTO_SMS_DTR`);
-      return saved !== null ? saved === 'true' : true;
-    } catch {
-      return true;
-    }
-  });
+  // Automated SMS on DTR Finalization Toggle (Retired per Deployment Audit & SMS Update)
+  const [autoSmsOnDtrFinalize, setAutoSmsOnDtrFinalizeState] = useState<boolean>(false);
 
   const setAutoSmsOnDtrFinalize = (enabled: boolean) => {
     setAutoSmsOnDtrFinalizeState(enabled);
@@ -538,6 +551,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem(`${STORAGE_KEY}_PAYMENT_RECORDS`, JSON.stringify(paymentRecords));
   }, [paymentRecords]);
+
+  // Transactional SMS Outbox Queue (Section 4 & 7)
+  const [smsOutbox, setSmsOutbox] = useState<PaymentSmsJob[]>([]);
+
+  const refreshSmsOutbox = useCallback(async () => {
+    try {
+      const res = await fetch('/api/payments/sms-outbox', {
+        headers: {
+          'x-user-role': currentUser?.access_point || 'ceo',
+          'x-user-email': currentUser?.email || 'operations@deruedaconstruction.com',
+          'x-assigned-sites': (currentUser?.assigned_sites || ['ALL']).join(','),
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.jobs) {
+          setSmsOutbox(data.jobs);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to refresh SMS outbox:', err);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    refreshSmsOutbox();
+  }, [refreshSmsOutbox]);
+
+  const retryOutboxSms = async (jobId: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const res = await fetch('/api/payments/sms-retry', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': currentUser?.access_point || 'ceo',
+          'x-user-email': currentUser?.email || 'operations@deruedaconstruction.com',
+          'x-assigned-sites': (currentUser?.assigned_sites || ['ALL']).join(','),
+        },
+        body: JSON.stringify({ job_id: jobId }),
+      });
+      const data = await res.json();
+      await refreshSmsOutbox();
+      return { success: Boolean(data.success), message: data.message || 'Retry executed' };
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Retry failed' };
+    }
+  };
 
   const [employees, setEmployees] = useState<Employee[]>(() => {
     try {
@@ -1732,14 +1792,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ]);
     addAuditLog('WEEKLY_ROLLOVER', 'DTR_WEEKS', nextWeekKey, `Archived previous weeks, started new working week ${nextWeekKey}`);
 
-    // If automated SMS notification on DTR finalization is enabled, dispatch SMS to all workers!
-    if (autoSmsOnDtrFinalize && previousWeekKey) {
-      setTimeout(() => {
-        sendBatchDtrFinalizedSms(previousWeekKey).catch((e) =>
-          console.warn('Auto DTR SMS during rollover error:', e)
-        );
-      }, 500);
-    }
+    // Old unverified SMS broadcast on rollover removed per Deployment Audit & SMS Update.
+    // SMS notifications are now strictly triggered only after receipt upload & authorized payment confirmation.
   };
 
   // Deductions
@@ -3598,17 +3652,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((w) => (w.week_key === weekKey ? { ...w, status: 'finalized' as const, last_updated: new Date().toISOString() } : w))
     );
 
-    // 2. Dispatch batch SMS if enabled
-    let batchRes = { delivered: 0, total: 0 };
-    if (autoSmsOnDtrFinalize) {
-      batchRes = await sendBatchDtrFinalizedSms(weekKey, siteId);
-    }
-
-    addAuditLog('FINALIZE_DTR_WEEK', 'DTR_WEEKS', weekKey, `Week ${weekKey} finalized. Automated SMS sent to ${batchRes.delivered} workers.`);
+    // Old unverified batch SMS alert removed per Deployment Audit & SMS Update.
+    // Payment records will receive SMS strictly after receipt upload & authorized confirmation.
+    addAuditLog('FINALIZE_DTR_WEEK', 'DTR_WEEKS', weekKey, `Week ${weekKey} finalized. Payout records prepared for receipt verification.`);
     return {
       success: true,
-      count: batchRes.delivered,
-      message: `Week ${weekKey} finalized successfully. Automated SMS sent to ${batchRes.delivered} of ${batchRes.total} registered workers.`,
+      count: 0,
+      message: `Week ${weekKey} finalized successfully. Payout obligations are ready in Payment Records Hub. SMS is triggered only after receipt upload & authorized confirmation.`,
     };
   };
 
@@ -3793,50 +3843,100 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newRecord;
   };
 
-  const uploadPaymentReceipt = (
+  const uploadPaymentReceipt = async (
     recordId: string,
     evidence: {
       reference_number: string;
-      receipt_url: string;
+      receipt_url?: string;
+      receipt_token?: string;
+      private_url?: string;
       amount_paid?: number;
       transfer_date?: string;
       payer_name?: string;
       payer_mobile?: string;
       notes?: string;
+      file_name?: string;
+      mime_type?: string;
+      file_size_bytes?: number;
+      data_base64?: string;
     }
-  ): { success: boolean; is_duplicate?: boolean; message: string; record?: PaymentRecord } => {
+  ): Promise<{ success: boolean; is_duplicate?: boolean; message: string; record?: PaymentRecord }> => {
     const target = paymentRecords.find((p) => p.id === recordId);
     if (!target) {
       return { success: false, message: 'Payment record not found.' };
     }
 
-    const dupCheck = checkDuplicateReference(evidence.reference_number, recordId);
+    const cleanRef = (evidence.reference_number || '').trim();
+    const dupCheck = checkDuplicateReference(cleanRef, recordId);
     const now = new Date().toISOString();
     const amountPaid = evidence.amount_paid !== undefined ? evidence.amount_paid : target.expected_amount;
     const amountMatches = Math.abs(amountPaid - target.expected_amount) < 0.01;
 
-    // Section 3 Page 3: A screenshot or uploaded receipt alone must not automatically set PAID_VERIFIED
-    const newStatus: PaymentRecordStatus = dupCheck.isDuplicate || !amountMatches ? 'NEEDS_REVIEW' : 'RECEIPT_UPLOADED';
+    let serverReceiptToken = evidence.receipt_token;
+    let serverPrivateUrl = evidence.private_url;
+    let isServerDuplicate = dupCheck.isDuplicate;
+
+    // Call server authenticated private receipt storage (Section 6 & 7)
+    try {
+      const res = await fetch('/api/payments/upload-receipt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': currentUser?.access_point || 'ceo',
+          'x-user-email': currentUser?.email || 'operations@deruedaconstruction.com',
+          'x-assigned-sites': (currentUser?.assigned_sites || ['ALL']).join(','),
+        },
+        body: JSON.stringify({
+          payment_id: recordId,
+          reference_number: cleanRef,
+          amount_paid: amountPaid,
+          file_name: evidence.file_name || `receipt_${recordId}.jpg`,
+          mime_type: evidence.mime_type || 'image/jpeg',
+          file_size_bytes: evidence.file_size_bytes || 50000,
+          data_base64: evidence.data_base64,
+          payer_name: evidence.payer_name || currentUser?.name || 'De Rueda Construction Finance',
+          notes: evidence.notes,
+        }),
+      });
+
+      if (res.ok) {
+        const srvData = await res.json();
+        serverReceiptToken = srvData.receipt_token;
+        serverPrivateUrl = srvData.private_url;
+        if (srvData.is_duplicate_ref) {
+          isServerDuplicate = true;
+        }
+      }
+    } catch (netErr) {
+      console.warn('Network sync for receipt upload warning:', netErr);
+    }
+
+    const isEffectiveDuplicate = isServerDuplicate || dupCheck.isDuplicate;
+    const newStatus: PaymentRecordStatus = isEffectiveDuplicate || !amountMatches ? 'NEEDS_REVIEW' : 'RECEIPT_UPLOADED';
 
     const evidenceData: PaymentReceiptEvidence = {
-      receipt_url: evidence.receipt_url,
-      reference_number: evidence.reference_number,
+      receipt_url: serverPrivateUrl || evidence.receipt_url || `/api/payments/receipt-file/${serverReceiptToken || recordId}`,
+      receipt_token: serverReceiptToken,
+      private_url: serverPrivateUrl,
+      mime_type: evidence.mime_type || 'image/jpeg',
+      file_size_bytes: evidence.file_size_bytes,
+      reference_number: cleanRef,
       payer_name: evidence.payer_name || currentUser?.name || 'Authorized Payer',
       payer_mobile: evidence.payer_mobile || '0917-582-9104',
       transfer_date: evidence.transfer_date || now,
       uploaded_at: now,
       uploaded_by: currentUser?.email || 'Authorized User',
-      file_name: `receipt_${recordId}.jpg`,
-      is_duplicate_ref: dupCheck.isDuplicate,
+      file_name: evidence.file_name || `receipt_${recordId}.jpg`,
+      is_duplicate_ref: isEffectiveDuplicate,
       amount_paid: amountPaid,
       amount_matches: amountMatches,
-      notes: evidence.notes || (dupCheck.isDuplicate ? `DUPLICATE REFERENCE DETECTED: Conflicted with ${dupCheck.conflictingRecordId}` : undefined),
+      notes: evidence.notes || (isEffectiveDuplicate ? `DUPLICATE REFERENCE DETECTED: Conflicted with ${dupCheck.conflictingRecordId}` : undefined),
     };
 
-    const auditAction = dupCheck.isDuplicate ? 'DUPLICATE_REFERENCE_DETECTED' : 'RECEIPT_UPLOADED';
-    const auditDetails = dupCheck.isDuplicate
-      ? `Duplicate GCash reference number ${evidence.reference_number} uploaded (conflicts with ${dupCheck.conflictingRecordId}). Status routed to NEEDS_REVIEW.`
-      : `Actual transfer receipt uploaded with reference ${evidence.reference_number}. Amount: ₱${amountPaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}. Status set to RECEIPT_UPLOADED.`;
+    const auditAction = isEffectiveDuplicate ? 'DUPLICATE_REFERENCE_DETECTED' : 'RECEIPT_UPLOADED';
+    const auditDetails = isEffectiveDuplicate
+      ? `Duplicate reference number ${cleanRef} uploaded (conflicts with ${dupCheck.conflictingRecordId}). Status routed to NEEDS_REVIEW.`
+      : `Actual transfer receipt stored privately with reference ${cleanRef}. Amount: ₱${amountPaid.toLocaleString('en-US', { minimumFractionDigits: 2 })}. Status set to RECEIPT_UPLOADED.`;
 
     let updatedRecord: PaymentRecord | undefined;
 
@@ -3867,12 +3967,137 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return {
       success: true,
-      is_duplicate: dupCheck.isDuplicate,
-      message: dupCheck.isDuplicate
-        ? `Warning: Reference number ${evidence.reference_number} matches an existing record! Flagged as NEEDS_REVIEW.`
-        : 'Receipt proof successfully attached. Payment is now awaiting reviewer verification.',
+      is_duplicate: isEffectiveDuplicate,
+      message: isEffectiveDuplicate
+        ? `Warning: Reference number ${cleanRef} matches an existing record! Flagged as NEEDS_REVIEW.`
+        : 'Receipt proof successfully attached & stored privately. Payment is now awaiting reviewer verification.',
       record: updatedRecord,
     };
+  };
+
+  const confirmPaymentAndSendSms = async (
+    recordId: string,
+    affirmation: {
+      receipt_matches_payment: boolean;
+      evidence_reviewed: boolean;
+      reference_verified: boolean;
+    },
+    notes?: string
+  ): Promise<{ success: boolean; message: string; record?: PaymentRecord; sms_job?: PaymentSmsJob }> => {
+    const target = paymentRecords.find((p) => p.id === recordId);
+    if (!target) {
+      return { success: false, message: 'Payment record not found.' };
+    }
+
+    if (!target.receipt_evidence || !target.receipt_evidence.reference_number) {
+      return {
+        success: false,
+        message: 'Trigger Condition Blocked: SMS can only be sent AFTER the QR-related payment receipt has been successfully uploaded and stored (Section 3 Page 1).',
+      };
+    }
+
+    const now = new Date().toISOString();
+    const reviewerName = currentUser?.name || currentUser?.email || 'Authorized Reviewer';
+
+    try {
+      const res = await fetch('/api/payments/confirm-and-send-sms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': currentUser?.access_point || 'ceo',
+          'x-user-email': currentUser?.email || 'operations@deruedaconstruction.com',
+          'x-assigned-sites': (currentUser?.assigned_sites || ['ALL']).join(','),
+        },
+        body: JSON.stringify({
+          payment_id: target.id,
+          recipient_id: target.recipient_id,
+          recipient_name: target.recipient_name,
+          recipient_mobile: target.recipient_mobile,
+          amount: target.expected_amount,
+          period_or_purpose: target.period_reference,
+          payment_module: target.module,
+          site_id: target.site_id,
+          receipt_uploaded: true,
+          reference_no: target.receipt_evidence.reference_number,
+          reviewer_affirmation: affirmation,
+          confirmation_method: 'MANUAL_CONFIRMATION',
+          reason_or_notes: notes || 'Confirmed by reviewer with receipt affirmation.',
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return {
+          success: false,
+          message: data.error || data.message || 'Server rejected payment confirmation.',
+        };
+      }
+
+      const smsJob: PaymentSmsJob = data.sms_job;
+
+      let updatedRecord: PaymentRecord | undefined;
+      setPaymentRecords((prev) =>
+        prev.map((rec) => {
+          if (rec.id !== recordId) return rec;
+          updatedRecord = {
+            ...rec,
+            status: 'PAID_VERIFIED',
+            sms_status: smsJob?.status || 'QUEUED',
+            sms_job: smsJob,
+            sms_dispatched: true,
+            sms_dispatched_at: now,
+            sms_reference_id: smsJob?.job_id || `SMS-${Date.now()}`,
+            confirmed_by: reviewerName,
+            confirmed_role: currentUser?.access_point || 'ceo',
+            confirmed_at: now,
+            confirmation_method: 'MANUAL_CONFIRMATION',
+            reviewer_affirmation: {
+              ...affirmation,
+              affirmed_at: now,
+              affirmed_by: reviewerName,
+            },
+            updated_at: now,
+            review_info: {
+              reviewed_by: reviewerName,
+              reviewed_at: now,
+              review_status: 'PAID_VERIFIED',
+              review_notes: notes,
+            },
+            audit_trail: [
+              ...rec.audit_trail,
+              {
+                id: `AUD-${Date.now()}-${Math.floor(10 + Math.random() * 90)}`,
+                action: 'CONFIRM_PAYMENT_AND_SEND_SMS',
+                performed_by: reviewerName,
+                timestamp: now,
+                details: `Payment confirmed to PAID_VERIFIED. Transactional SMS queued (${smsJob?.job_id || 'QUEUED'}). Reviewer affirmation recorded.`,
+              },
+            ],
+          };
+          return updatedRecord;
+        })
+      );
+
+      // Refresh transactional SMS outbox
+      refreshSmsOutbox();
+
+      addAuditLog(
+        'CONFIRM_PAYMENT_AND_SEND_SMS',
+        'PAYMENT_OPERATIONS',
+        recordId,
+        `Payment confirmed (₱${target.expected_amount.toLocaleString()}) for ${target.recipient_name}. SMS Job: ${smsJob?.job_id}`
+      );
+
+      return {
+        success: true,
+        message: data.message || `Payment confirmed and SMS job queued for ${target.recipient_name}.`,
+        record: updatedRecord,
+        sms_job: smsJob,
+      };
+    } catch (err: any) {
+      console.error('[Confirm Payment Error]:', err);
+      return { success: false, message: err?.message || 'Network error during payment confirmation.' };
+    }
   };
 
   const reviewPaymentRecord = async (
@@ -3886,47 +4111,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'Payment record not found.' };
     }
 
+    // If attempting to confirm to PAID_VERIFIED, route through authorized confirmation pipeline
+    if (newStatus === 'PAID_VERIFIED') {
+      const confirmRes = await confirmPaymentAndSendSms(
+        recordId,
+        {
+          receipt_matches_payment: true,
+          evidence_reviewed: true,
+          reference_verified: true,
+        },
+        notes
+      );
+      return {
+        success: confirmRes.success,
+        message: confirmRes.message,
+        record: confirmRes.record,
+      };
+    }
+
+    // Acceptance Criteria 2: "No SMS is sent while payment is awaiting review, rejected, or needs review."
     const now = new Date().toISOString();
     const reviewerName = currentUser?.name || currentUser?.email || 'Authorized Reviewer';
-
-    let smsDispatched = target.sms_dispatched;
-    let smsDispatchedAt = target.sms_dispatched_at;
-    let smsRefId = target.sms_reference_id;
-
-    // Section 3 Page 3: "Only send an SMS payslip after payment is verified (PAID_VERIFIED)"
-    if (newStatus === 'PAID_VERIFIED' && !target.sms_dispatched && target.recipient_mobile) {
-      try {
-        const smsRes = await fetch('/api/payroll/sms-payslip', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-role': currentUser?.access_point || 'ceo',
-            'x-user-email': currentUser?.email || 'operations@deruedaconstruction.com',
-          },
-          body: JSON.stringify({
-            payroll_id: target.id,
-            employee_id: target.recipient_id,
-            employee_name: target.recipient_name,
-            mobile_number: target.recipient_mobile,
-            week_key: target.period_reference,
-            site_id: target.site_id,
-            gross_pay: target.expected_amount,
-            deductions_total: 0,
-            net_pay: target.expected_amount,
-            payout_ref: target.receipt_evidence?.reference_number || target.id,
-            payout_status: 'PAID_VERIFIED',
-          }),
-        });
-        if (smsRes.ok) {
-          const smsData = await smsRes.json();
-          smsDispatched = true;
-          smsDispatchedAt = now;
-          smsRefId = smsData.sms_record?.id || `SMS-${Date.now()}`;
-        }
-      } catch (smsErr) {
-        console.warn('SMS payslip dispatch error:', smsErr);
-      }
-    }
 
     let updatedRecord: PaymentRecord | undefined;
 
@@ -3937,9 +4142,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...rec,
           status: newStatus,
           updated_at: now,
-          sms_dispatched: smsDispatched,
-          sms_dispatched_at: smsDispatchedAt,
-          sms_reference_id: smsRefId,
           review_info: {
             reviewed_by: reviewerName,
             reviewed_at: now,
@@ -3954,7 +4156,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               action: `REVIEW_STATUS_CHANGED_${newStatus}`,
               performed_by: reviewerName,
               timestamp: now,
-              details: `Reviewer set status to ${newStatus}.${notes ? ` Notes: ${notes}` : ''}${rejectionReason ? ` Rejection reason: ${rejectionReason}` : ''}`,
+              details: `Reviewer set status to ${newStatus}.${notes ? ` Notes: ${notes}` : ''}${rejectionReason ? ` Rejection reason: ${rejectionReason}` : ''}. No SMS sent.`,
             },
           ],
         };
@@ -3962,11 +4164,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
 
-    addAuditLog(`REVIEW_${newStatus}`, 'PAYMENT_OPERATIONS', recordId, `Status transitioned to ${newStatus} by ${reviewerName}`);
+    addAuditLog(`REVIEW_${newStatus}`, 'PAYMENT_OPERATIONS', recordId, `Status changed to ${newStatus} by ${reviewerName} (No SMS sent)`);
 
     return {
       success: true,
-      message: `Payment record ${recordId} successfully transitioned to ${newStatus}.`,
+      message: `Payment record ${recordId} successfully transitioned to ${newStatus}. No SMS was sent.`,
       record: updatedRecord,
     };
   };
@@ -4311,6 +4513,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createPaymentRecord,
         uploadPaymentReceipt,
         reviewPaymentRecord,
+        confirmPaymentAndSendSms,
+        smsOutbox,
+        refreshSmsOutbox,
+        retryOutboxSms,
         getSiteBatchSummary,
         checkDuplicateReference,
         gcashOnboardingStatus,

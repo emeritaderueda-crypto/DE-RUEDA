@@ -8,6 +8,8 @@ import {
   SitePaymentBatchSummary,
   Employee,
   Site,
+  SmsDeliveryStatus,
+  PaymentSmsJob,
 } from '../../types';
 import {
   QrCode,
@@ -60,14 +62,18 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
     createPaymentRecord,
     uploadPaymentReceipt,
     reviewPaymentRecord,
+    confirmPaymentAndSendSms,
+    smsOutbox,
+    refreshSmsOutbox,
+    retryOutboxSms,
     getSiteBatchSummary,
     checkDuplicateReference,
     gcashOnboardingStatus,
     addAuditLog,
   } = useApp();
 
-  // Active view tab: 'records' | 'site_batches' | 'official_api_roadmap'
-  const [activeTab, setActiveTab] = useState<'records' | 'site_batches' | 'official_api_roadmap'>('records');
+  // Active view tab: 'records' | 'site_batches' | 'sms_outbox' | 'official_api_roadmap'
+  const [activeTab, setActiveTab] = useState<'records' | 'site_batches' | 'sms_outbox' | 'official_api_roadmap'>('records');
 
   // Filters for Records Ledger
   const [selectedSiteFilter, setSelectedSiteFilter] = useState<string>('ALL');
@@ -78,6 +84,12 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
   // Selected Batch for Site Dashboard QR Tab
   const [batchSiteId, setBatchSiteId] = useState<string>(sites[0]?.site_id || 'SITE-001');
   const [batchWeekKey, setBatchWeekKey] = useState<string>(dtrWeeks[0]?.week_key || 'Week 41');
+
+  // Transactional SMS Outbox State (Section 4)
+  const [smsFilterStatus, setSmsFilterStatus] = useState<string>('ALL');
+  const [smsSearchQuery, setSmsSearchQuery] = useState<string>('');
+  const [retryingJobId, setRetryingJobId] = useState<string | null>(null);
+  const [smsActionNotice, setSmsActionNotice] = useState<string | null>(null);
 
   // Modals
   const [activeVoucherRecord, setActiveVoucherRecord] = useState<PaymentRecord | null>(() => {
@@ -109,7 +121,14 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
   const [uploadPayerName, setUploadPayerName] = useState<string>('');
   const [uploadPayerMobile, setUploadPayerMobile] = useState<string>('0917-582-9104');
   const [uploadTransferDate, setUploadTransferDate] = useState<string>(new Date().toISOString().slice(0, 16));
-  const [uploadReceiptUrl, setUploadReceiptUrl] = useState<string>('https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80');
+  const [uploadReceiptUrl, setUploadReceiptUrl] = useState<string>('');
+  const [uploadFile, setUploadFile] = useState<{
+    file_name: string;
+    mime_type: string;
+    file_size_bytes: number;
+    data_base64: string;
+    preview_url?: string;
+  } | null>(null);
   const [uploadNotes, setUploadNotes] = useState<string>('');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
@@ -119,19 +138,24 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
   const [reviewNotes, setReviewNotes] = useState<string>('');
   const [reviewRejectionReason, setReviewRejectionReason] = useState<string>('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [affirmAmountMatches, setAffirmAmountMatches] = useState(true);
+  const [affirmReferenceVerified, setAffirmReferenceVerified] = useState(true);
+  const [affirmEvidenceReviewed, setAffirmEvidenceReviewed] = useState(true);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
-  // Role permissions
+  // Role permissions (Section 3 Page 2)
   const userRole = currentUser?.access_point || 'ceo';
   const isCeo = userRole === 'ceo';
   const isHr = userRole === 'admin 1';
-  const isSiteHead = userRole === 'admin 2';
-  const canReview = isCeo || isHr || isSiteHead;
+  const isAdmin2 = userRole === 'admin 2';
+  const isSiteHead = userRole === 'site head';
+  const canReview = isCeo || isHr || isAdmin2 || isSiteHead;
 
   // Filtered payment records
   const filteredRecords = useMemo(() => {
     return paymentRecords.filter((rec) => {
-      // Role scope restriction (Section 5)
-      if (isSiteHead && currentUser?.assigned_sites && !currentUser.assigned_sites.includes('ALL')) {
+      // Role site isolation check (Section 3 & 4)
+      if ((isAdmin2 || isSiteHead) && currentUser?.assigned_sites && !currentUser.assigned_sites.includes('ALL')) {
         if (!currentUser.assigned_sites.includes(rec.site_id)) return false;
       }
 
@@ -152,7 +176,7 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
       }
       return true;
     });
-  }, [paymentRecords, selectedSiteFilter, selectedModuleFilter, selectedStatusFilter, searchQuery, isSiteHead, currentUser]);
+  }, [paymentRecords, selectedSiteFilter, selectedModuleFilter, selectedStatusFilter, searchQuery, isAdmin2, isSiteHead, currentUser]);
 
   // Aggregate Metrics
   const metrics = useMemo(() => {
@@ -217,10 +241,43 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
     setUploadPayerName(currentUser?.name || 'De Rueda Construction Finance');
     setUploadPayerMobile('0917-582-9104');
     setUploadTransferDate(new Date().toISOString().slice(0, 16));
+    setUploadReceiptUrl('');
+    setUploadFile(null);
     setUploadNotes('');
     setUploadError(null);
     setDuplicateWarning(null);
     setIsUploadModalOpen(true);
+  };
+
+  // Handle client-side file reading and validation (Section 2 & 6)
+  const handleReceiptFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) {
+      setUploadError(`Invalid file format '${file.type}'. Allowed: JPG, PNG, WEBP, PDF.`);
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError('Receipt file exceeds 10MB size limit.');
+      return;
+    }
+    setUploadError(null);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const b64 = reader.result as string;
+      setUploadFile({
+        file_name: file.name,
+        mime_type: file.type,
+        file_size_bytes: file.size,
+        data_base64: b64,
+        preview_url: file.type.startsWith('image/') ? b64 : undefined,
+      });
+      setUploadReceiptUrl('');
+    };
+    reader.readAsDataURL(file);
   };
 
   // Check duplicate reference as user types
@@ -238,34 +295,101 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
     }
   };
 
-  // Submit Receipt Upload
-  const handleSubmitReceiptUpload = (e: React.FormEvent) => {
+  // Submit Receipt Upload (Section 2 & 6: Stores in private storage, links to payment ID)
+  const handleSubmitReceiptUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!uploadTargetRecord) return;
     if (!uploadRefNumber.trim()) {
-      setUploadError('GCash Transaction Reference Number is strictly required.');
+      setUploadError('GCash / Bank Transaction Reference Number is strictly required.');
       return;
     }
 
-    const res = uploadPaymentReceipt(uploadTargetRecord.id, {
-      reference_number: uploadRefNumber.trim(),
-      receipt_url: uploadReceiptUrl,
-      amount_paid: uploadAmountPaid,
-      transfer_date: uploadTransferDate,
-      payer_name: uploadPayerName,
-      payer_mobile: uploadPayerMobile,
-      notes: uploadNotes,
-    });
-
-    if (res.success) {
-      setIsUploadModalOpen(false);
-      setUploadTargetRecord(null);
-      if (activeVoucherRecord && activeVoucherRecord.id === uploadTargetRecord.id && res.record) {
-        setActiveVoucherRecord(res.record);
-      }
-    } else {
-      setUploadError(res.message);
+    if (!uploadFile && !uploadReceiptUrl.trim()) {
+      setUploadError('Actual receipt evidence file is required. Seeded public sample URLs are prohibited per audit.');
+      return;
     }
+
+    setUploadError(null);
+    try {
+      const res = await uploadPaymentReceipt(uploadTargetRecord.id, {
+        reference_number: uploadRefNumber.trim(),
+        receipt_url: uploadReceiptUrl.trim() || undefined,
+        amount_paid: uploadAmountPaid,
+        transfer_date: uploadTransferDate,
+        payer_name: uploadPayerName,
+        payer_mobile: uploadPayerMobile,
+        notes: uploadNotes,
+        file_name: uploadFile?.file_name,
+        mime_type: uploadFile?.mime_type,
+        file_size_bytes: uploadFile?.file_size_bytes,
+        data_base64: uploadFile?.data_base64,
+      });
+
+      if (res.success) {
+        setIsUploadModalOpen(false);
+        setUploadTargetRecord(null);
+        setUploadFile(null);
+        if (activeVoucherRecord && activeVoucherRecord.id === uploadTargetRecord.id && res.record) {
+          setActiveVoucherRecord(res.record);
+        }
+      } else {
+        setUploadError(res.message);
+      }
+    } catch (err: any) {
+      setUploadError(err?.message || 'Failed to upload receipt.');
+    }
+  };
+
+  // Role permissions per Section 3 Page 2
+  const checkRoleConfirmationPermission = (record: PaymentRecord): { allowed: boolean; reason?: string } => {
+    // CEO: may confirm across the company
+    if (isCeo) return { allowed: true };
+
+    // HR / Admin 1: may confirm payroll-related payments within the approved HR scope
+    if (isHr) {
+      const hrModules: PaymentModule[] = ['WEEKLY_PAYROLL', 'CASH_ADVANCE', 'CANTEEN_SETTLEMENT', 'EMPLOYEE_REIMBURSEMENT'];
+      if (hrModules.includes(record.module)) return { allowed: true };
+      return {
+        allowed: false,
+        reason: `HR / Admin 1 role is restricted to payroll and workforce disbursements. Module '${record.module}' requires CEO or procurement authorization.`,
+      };
+    }
+
+    // Admin 2: may confirm payments only for assigned sites/projects and permitted payment types
+    if (isAdmin2) {
+      const assigned = currentUser?.assigned_sites || ['ALL'];
+      if (!assigned.includes('ALL') && !assigned.includes(record.site_id)) {
+        return {
+          allowed: false,
+          reason: `Site Isolation Security: Admin 2 is restricted to [${assigned.join(', ')}]. Access to confirm payment for site ${record.site_id} is blocked.`,
+        };
+      }
+      const admin2Modules: PaymentModule[] = ['SUPPLIER_PAYMENT', 'CONTRACTOR_PAYMENT', 'CASH_ADVANCE', 'OTHER_AUTHORIZED_DISBURSEMENT', 'WEEKLY_PAYROLL'];
+      if (admin2Modules.includes(record.module)) return { allowed: true };
+      return {
+        allowed: false,
+        reason: `Admin 2 is not authorized to confirm module '${record.module}'.`,
+      };
+    }
+
+    // Site Head: may confirm only payments for the site(s) explicitly assigned to that person and payment categories granted
+    if (isSiteHead) {
+      const assigned = currentUser?.assigned_sites || ['ALL'];
+      if (!assigned.includes('ALL') && !assigned.includes(record.site_id)) {
+        return {
+          allowed: false,
+          reason: `Site Isolation Security: Site Head is restricted to [${assigned.join(', ')}]. Access to confirm payment for site ${record.site_id} is blocked.`,
+        };
+      }
+      const siteHeadModules: PaymentModule[] = ['WEEKLY_PAYROLL', 'CASH_ADVANCE', 'OTHER_AUTHORIZED_DISBURSEMENT'];
+      if (siteHeadModules.includes(record.module)) return { allowed: true };
+      return {
+        allowed: false,
+        reason: `Site Head role is restricted to weekly site payroll and cash advance disbursements.`,
+      };
+    }
+
+    return { allowed: false, reason: 'Unauthorized role.' };
   };
 
   // Open Review Modal
@@ -274,6 +398,10 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
     setReviewDecision('PAID_VERIFIED');
     setReviewNotes('');
     setReviewRejectionReason('');
+    setAffirmAmountMatches(true);
+    setAffirmReferenceVerified(true);
+    setAffirmEvidenceReviewed(true);
+    setReviewError(null);
     setIsReviewModalOpen(true);
   };
 
@@ -281,25 +409,81 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
   const handleSubmitReviewDecision = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reviewTargetRecord) return;
-    setReviewSubmitting(true);
+    setReviewError(null);
 
-    try {
-      const res = await reviewPaymentRecord(
-        reviewTargetRecord.id,
-        reviewDecision,
-        reviewNotes,
-        reviewDecision === 'PAYMENT_REJECTED' ? reviewRejectionReason : undefined
-      );
-
-      if (res.success) {
-        setIsReviewModalOpen(false);
-        setReviewTargetRecord(null);
-        if (activeVoucherRecord && activeVoucherRecord.id === reviewTargetRecord.id && res.record) {
-          setActiveVoucherRecord(res.record);
-        }
+    if (reviewDecision === 'PAID_VERIFIED') {
+      if (!reviewTargetRecord.receipt_evidence || !reviewTargetRecord.receipt_evidence.reference_number) {
+        setReviewError('Trigger Condition Blocked: SMS can only be sent AFTER the payment receipt has been successfully uploaded and stored (Section 3 Page 1).');
+        return;
       }
+      if (!affirmAmountMatches || !affirmEvidenceReviewed || !affirmReferenceVerified) {
+        setReviewError('Reviewer Affirmation Required: Please affirm all verification statements before confirming.');
+        return;
+      }
+      const perm = checkRoleConfirmationPermission(reviewTargetRecord);
+      if (!perm.allowed) {
+        setReviewError(perm.reason || 'Unauthorized to confirm this payment.');
+        return;
+      }
+      setReviewSubmitting(true);
+      try {
+        const res = await confirmPaymentAndSendSms(
+          reviewTargetRecord.id,
+          {
+            receipt_matches_payment: affirmAmountMatches,
+            evidence_reviewed: affirmEvidenceReviewed,
+            reference_verified: affirmReferenceVerified,
+          },
+          reviewNotes
+        );
+        if (res.success) {
+          setIsReviewModalOpen(false);
+          setReviewTargetRecord(null);
+          if (activeVoucherRecord && activeVoucherRecord.id === reviewTargetRecord.id && res.record) {
+            setActiveVoucherRecord(res.record);
+          }
+        } else {
+          setReviewError(res.message);
+        }
+      } finally {
+        setReviewSubmitting(false);
+      }
+    } else {
+      // Non-verified status (NEEDS_REVIEW, PAYMENT_REJECTED, UNDER_REVIEW) - NO SMS SENT
+      setReviewSubmitting(true);
+      try {
+        const res = await reviewPaymentRecord(
+          reviewTargetRecord.id,
+          reviewDecision,
+          reviewNotes,
+          reviewDecision === 'PAYMENT_REJECTED' ? reviewRejectionReason : undefined
+        );
+        if (res.success) {
+          setIsReviewModalOpen(false);
+          setReviewTargetRecord(null);
+          if (activeVoucherRecord && activeVoucherRecord.id === reviewTargetRecord.id && res.record) {
+            setActiveVoucherRecord(res.record);
+          }
+        } else {
+          setReviewError(res.message);
+        }
+      } finally {
+        setReviewSubmitting(false);
+      }
+    }
+  };
+
+  // Retry outbox SMS handler
+  const handleRetryOutboxJob = async (jobId: string) => {
+    setRetryingJobId(jobId);
+    try {
+      const res = await retryOutboxSms(jobId);
+      setSmsActionNotice(res.message);
+      setTimeout(() => setSmsActionNotice(null), 5000);
+    } catch (err: any) {
+      setSmsActionNotice(err?.message || 'Retry failed');
     } finally {
-      setReviewSubmitting(false);
+      setRetryingJobId(null);
     }
   };
 
@@ -391,6 +575,49 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-yellow-500/10 text-yellow-400 border border-yellow-500/30">
             <Clock className="w-3.5 h-3.5 text-yellow-400" />
             AWAITING PAYMENT
+          </span>
+        );
+    }
+  };
+
+  // SMS Outbox Status Badge Component (Section 4 Page 2)
+  const renderSmsStatusBadge = (status?: SmsDeliveryStatus) => {
+    switch (status) {
+      case 'DELIVERED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+            <CheckCircle2 className="w-3 h-3 text-emerald-400" /> DELIVERED
+          </span>
+        );
+      case 'SENT_TO_PROVIDER':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/30">
+            <Send className="w-3 h-3 text-sky-400" /> TELCO TRANSIT
+          </span>
+        );
+      case 'QUEUED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+            <Clock className="w-3 h-3 text-amber-400" /> OUTBOX QUEUED
+          </span>
+        );
+      case 'RETRY_PENDING':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/30">
+            <RefreshCw className="w-3 h-3 text-purple-400 animate-spin" /> RETRY PENDING
+          </span>
+        );
+      case 'FAILED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">
+            <AlertCircle className="w-3 h-3 text-rose-400" /> FAILED
+          </span>
+        );
+      case 'NOT_QUEUED':
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
+            <Clock className="w-3 h-3 text-slate-500" /> NOT QUEUED
           </span>
         );
     }
@@ -524,6 +751,21 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
         >
           <QrCode className="w-4 h-4" />
           Site Batch Dashboard &amp; Site QRs
+        </button>
+
+        <button
+          onClick={() => setActiveTab('sms_outbox')}
+          className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all ${
+            activeTab === 'sms_outbox'
+              ? 'bg-[#a3e635] text-[#080f0d] shadow-md'
+              : 'bg-[#13241f] text-slate-300 hover:bg-[#1a332c]'
+          }`}
+        >
+          <Smartphone className="w-4 h-4" />
+          Transactional SMS Outbox
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-500/20 text-blue-300 border border-blue-500/30 font-mono">
+            {smsOutbox.length}
+          </span>
         </button>
 
         <button
@@ -702,11 +944,9 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
 
                         <td className="py-3.5 px-4">
                           {renderStatusBadge(rec.status)}
-                          {rec.sms_dispatched && (
-                            <div className="text-[10px] text-emerald-400 mt-1 flex items-center gap-1">
-                              <Smartphone className="w-3 h-3" /> SMS Dispatched
-                            </div>
-                          )}
+                          <div className="mt-1">
+                            {renderSmsStatusBadge(rec.sms_status)}
+                          </div>
                         </td>
 
                         <td className="py-3.5 px-4">
@@ -1107,6 +1347,244 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
                         <td className="py-2.5 px-3">{renderStatusBadge(p.status)}</td>
                       </tr>
                     ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: TRANSACTIONAL SMS OUTBOX & DELIVERY STATUS ENGINE (Sections 3, 4, 7) */}
+      {/* ========================================================================= */}
+      {activeTab === 'sms_outbox' && (
+        <div className="space-y-6">
+          {/* Header & Status Banner */}
+          <div className="bg-[#10201b] border border-[#234338] rounded-2xl p-5 shadow-lg space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded text-[11px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    Transactional Outbox Architecture
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded text-[11px] font-bold bg-blue-500/10 text-blue-300 border border-blue-500/20">
+                    Idempotent Telco Delivery
+                  </span>
+                </div>
+                <h3 className="text-xl font-black text-white mt-1 flex items-center gap-2">
+                  <Smartphone className="w-5 h-5 text-[#a3e635]" />
+                  Verified Payment SMS Notification Engine
+                </h3>
+                <p className="text-xs text-slate-300 mt-1 max-w-2xl">
+                  In strict compliance with the Deployment Audit specification, payment SMS messages are enqueued into a durable transactional outbox only after receipt proof is uploaded and confirmed to <strong>PAID_VERIFIED</strong> by an authorized role. Delivery states are tracked separately from accounting settlement.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => refreshSmsOutbox()}
+                  className="px-3 py-2 bg-[#1a362d] text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-[#a3e635]" />
+                  Refresh Queue
+                </button>
+              </div>
+            </div>
+
+            {smsActionNotice && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{smsActionNotice}</span>
+              </div>
+            )}
+
+            {/* Outbox Metrics Strip */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pt-3 border-t border-[#1f3b31]">
+              <div className="bg-[#0a1411] p-3 rounded-xl border border-[#1f3b31]">
+                <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total SMS Jobs</span>
+                <span className="text-lg font-black text-white font-mono">{smsOutbox.length}</span>
+                <span className="text-[10px] text-slate-500 block">All transactional dispatches</span>
+              </div>
+
+              <div className="bg-[#0a1411] p-3 rounded-xl border border-emerald-500/30">
+                <span className="text-[10px] text-emerald-400 uppercase font-semibold block flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Delivered
+                </span>
+                <span className="text-lg font-black text-emerald-400 font-mono">
+                  {smsOutbox.filter((j) => j.status === 'DELIVERED').length}
+                </span>
+                <span className="text-[10px] text-emerald-500/80 block">Confirmed by telco gateway</span>
+              </div>
+
+              <div className="bg-[#0a1411] p-3 rounded-xl border border-sky-500/30">
+                <span className="text-[10px] text-sky-400 uppercase font-semibold block flex items-center gap-1">
+                  <Send className="w-3 h-3" /> In Telco Transit
+                </span>
+                <span className="text-lg font-black text-sky-400 font-mono">
+                  {smsOutbox.filter((j) => j.status === 'SENT_TO_PROVIDER').length}
+                </span>
+                <span className="text-[10px] text-sky-500/80 block">Dispatched to SMS network</span>
+              </div>
+
+              <div className="bg-[#0a1411] p-3 rounded-xl border border-amber-500/30">
+                <span className="text-[10px] text-amber-400 uppercase font-semibold block flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Outbox Queued
+                </span>
+                <span className="text-lg font-black text-amber-400 font-mono">
+                  {smsOutbox.filter((j) => j.status === 'QUEUED' || j.status === 'RETRY_PENDING').length}
+                </span>
+                <span className="text-[10px] text-amber-500/80 block">Awaiting worker delivery</span>
+              </div>
+
+              <div className="bg-[#0a1411] p-3 rounded-xl border border-rose-500/30">
+                <span className="text-[10px] text-rose-400 uppercase font-semibold block flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> Failed Deliveries
+                </span>
+                <span className="text-lg font-black text-rose-400 font-mono">
+                  {smsOutbox.filter((j) => j.status === 'FAILED').length}
+                </span>
+                <span className="text-[10px] text-rose-500/80 block">Requires number correction</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Filter & Search Bar */}
+          <div className="bg-[#10201b] border border-[#234338] rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {['ALL', 'DELIVERED', 'SENT_TO_PROVIDER', 'QUEUED', 'FAILED'].map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setSmsFilterStatus(st)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    smsFilterStatus === st
+                      ? 'bg-[#a3e635] text-[#080f0d] shadow'
+                      : 'bg-[#0a1411] text-slate-300 hover:bg-[#1a362d]'
+                  }`}
+                >
+                  {st.replace(/_/g, ' ')}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative min-w-[240px]">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search recipient, mobile, reference..."
+                value={smsSearchQuery}
+                onChange={(e) => setSmsSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 bg-[#0a1411] border border-[#234338] rounded-lg text-xs text-white placeholder-slate-500"
+              />
+            </div>
+          </div>
+
+          {/* SMS Outbox Table */}
+          <div className="bg-[#10201b] border border-[#234338] rounded-xl overflow-hidden shadow-lg">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-[#0a1512] uppercase tracking-wider text-slate-400 border-b border-[#234338]">
+                  <tr>
+                    <th className="py-3 px-4">Job ID &amp; Payment</th>
+                    <th className="py-3 px-4">Recipient &amp; System Mobile</th>
+                    <th className="py-3 px-4">Amount &amp; Reference</th>
+                    <th className="py-3 px-4">Confirmation Audit</th>
+                    <th className="py-3 px-4">Delivery Status</th>
+                    <th className="py-3 px-4">SMS Body Preview</th>
+                    <th className="py-3 px-4 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1f3b31]">
+                  {smsOutbox
+                    .filter((job) => {
+                      if (smsFilterStatus !== 'ALL' && job.status !== smsFilterStatus) return false;
+                      if (smsSearchQuery.trim()) {
+                        const q = smsSearchQuery.toLowerCase();
+                        return (
+                          job.recipient_name.toLowerCase().includes(q) ||
+                          job.recipient_mobile.includes(q) ||
+                          job.job_id.toLowerCase().includes(q) ||
+                          job.payment_id.toLowerCase().includes(q) ||
+                          job.reference_no.toLowerCase().includes(q)
+                        );
+                      }
+                      return true;
+                    })
+                    .map((job) => (
+                      <tr key={job.job_id} className="hover:bg-[#162c25]/60 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="font-mono text-xs font-bold text-white">{job.job_id}</div>
+                          <div className="text-[11px] text-[#a3e635] font-mono">{job.payment_id}</div>
+                          <div className="text-[10px] text-slate-400">{job.period_or_purpose}</div>
+                        </td>
+
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-white">{job.recipient_name}</div>
+                          <div className="text-xs text-slate-300 font-mono flex items-center gap-1">
+                            <Smartphone className="w-3 h-3 text-emerald-400" />
+                            {job.recipient_mobile}
+                          </div>
+                          <span className="text-[10px] text-emerald-400/90 font-medium">Verified HR System Master Contact</span>
+                        </td>
+
+                        <td className="py-3 px-4">
+                          <div className="font-mono font-bold text-white text-sm">
+                            ₱{job.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-[11px] text-slate-400 font-mono">
+                            Ref: {job.masked_reference}
+                          </div>
+                          {job.provider_ref && (
+                            <div className="text-[10px] text-slate-500 font-mono">
+                              Provider: {job.provider_ref}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4">
+                          <div className="text-[11px] text-white font-medium">{job.confirmed_by}</div>
+                          <div className="text-[10px] text-slate-400 uppercase font-mono">Role: {job.confirmed_role}</div>
+                          <div className="text-[10px] text-slate-500">Method: {job.confirmation_method}</div>
+                        </td>
+
+                        <td className="py-3 px-4">
+                          {renderSmsStatusBadge(job.status)}
+                          <div className="text-[10px] text-slate-400 mt-1">
+                            {job.delivered_at
+                              ? `Delivered: ${new Date(job.delivered_at).toLocaleTimeString()}`
+                              : `Queued: ${new Date(job.queued_at).toLocaleTimeString()}`}
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-4 max-w-xs">
+                          <div className="p-2 bg-[#0a1411] rounded-lg border border-[#1f3b31] text-[11px] text-slate-300 leading-snug font-mono">
+                            {job.sms_body}
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-4 text-center">
+                          {job.status === 'FAILED' || job.status === 'RETRY_PENDING' ? (
+                            <button
+                              onClick={() => handleRetryOutboxJob(job.job_id)}
+                              disabled={retryingJobId === job.job_id}
+                              className="px-2.5 py-1 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/40 rounded-lg text-xs font-bold flex items-center gap-1 mx-auto transition-all disabled:opacity-50"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${retryingJobId === job.job_id ? 'animate-spin' : ''}`} />
+                              Retry Send
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-slate-500 font-mono">Settled</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  {smsOutbox.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="py-10 text-center text-slate-400">
+                        <Smartphone className="w-8 h-8 mx-auto text-slate-600 mb-2" />
+                        No SMS jobs in transactional outbox yet. When payment records are confirmed by authorized roles, jobs will automatically appear here.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1631,14 +2109,53 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
               </div>
 
               <div>
-                <label className="text-slate-300 font-semibold block mb-1">Receipt Screenshot URL / Proof</label>
-                <input
-                  type="url"
-                  required
-                  value={uploadReceiptUrl}
-                  onChange={(e) => setUploadReceiptUrl(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#0a1411] border border-[#234338] rounded-lg text-white font-mono text-[11px]"
-                />
+                <label className="text-slate-300 font-semibold block mb-1">
+                  Upload Actual Receipt File (JPG, PNG, WEBP, PDF &le; 10MB) <span className="text-rose-400">*</span>
+                </label>
+                <div className="border-2 border-dashed border-[#234338] hover:border-blue-500/60 rounded-xl p-3 bg-[#0a1411] transition-all text-center">
+                  <input
+                    type="file"
+                    id="receipt-file-input"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    onChange={handleReceiptFileChange}
+                    className="hidden"
+                  />
+                  <label htmlFor="receipt-file-input" className="cursor-pointer block">
+                    {uploadFile ? (
+                      <div className="flex items-center justify-between gap-3 p-2 bg-[#10201b] rounded-lg border border-emerald-500/30 text-left">
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          {uploadFile.preview_url ? (
+                            <img
+                              src={uploadFile.preview_url}
+                              alt="Receipt Preview"
+                              className="w-10 h-10 object-cover rounded border border-[#234338] shrink-0"
+                            />
+                          ) : (
+                            <FileCheck2 className="w-8 h-8 text-emerald-400 shrink-0" />
+                          )}
+                          <div className="truncate">
+                            <span className="font-bold text-white text-xs block truncate">{uploadFile.file_name}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {(uploadFile.file_size_bytes / 1024).toFixed(1)} KB &bull; {uploadFile.mime_type}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0">
+                          READY
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="py-2">
+                        <Upload className="w-6 h-6 text-slate-400 mx-auto mb-1" />
+                        <span className="text-xs font-bold text-blue-400 hover:text-blue-300">Click to choose file</span>
+                        <span className="text-xs text-slate-400"> or drag and drop</span>
+                        <p className="text-[10px] text-slate-500 mt-0.5">
+                          Private storage with authenticated access (Section 6). No public sample URLs.
+                        </p>
+                      </div>
+                    )}
+                  </label>
+                </div>
               </div>
 
               <div>
@@ -1698,6 +2215,37 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
               </button>
             </div>
 
+            {/* Review Error Banner */}
+            {reviewError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-400 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <span>{reviewError}</span>
+              </div>
+            )}
+
+            {/* Reviewer Role & Scope Card (Section 3 Page 2) */}
+            <div className="p-2.5 bg-[#0a1411] border border-[#1f3b31] rounded-xl flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-[#a3e635]" />
+                <div>
+                  <span className="text-[10px] text-slate-400 block uppercase font-semibold">Reviewer Authority</span>
+                  <span className="font-bold text-white">{currentUser?.name || currentUser?.email || 'Authorized Reviewer'}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-[#1a362d] text-[#a3e635] border border-[#2d5c4c]">
+                  Role: {userRole}
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  {isCeo
+                    ? 'Global Company Authority'
+                    : isHr
+                    ? 'HR / Payroll Scope'
+                    : `Assigned: ${(currentUser?.assigned_sites || ['ALL']).join(', ')}`}
+                </span>
+              </div>
+            </div>
+
             {/* Comparison Cards */}
             <div className="p-3 bg-[#0a1411] border border-[#1f3b31] rounded-xl grid grid-cols-2 gap-3 text-xs">
               <div>
@@ -1706,16 +2254,26 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
                   ₱{reviewTargetRecord.expected_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </span>
                 <span className="text-slate-300">{reviewTargetRecord.recipient_name}</span>
+                <span className="text-[10px] text-slate-400 block font-mono">Site: {reviewTargetRecord.site_name}</span>
               </div>
 
               <div>
                 <span className="text-[10px] text-slate-400 uppercase block">Receipt Proof Attached</span>
-                <span className="font-mono font-bold text-white block">
-                  ₱{reviewTargetRecord.receipt_evidence?.amount_paid?.toLocaleString('en-US', { minimumFractionDigits: 2 }) || 'N/A'}
-                </span>
-                <span className="text-slate-300 font-mono">
-                  Ref: {reviewTargetRecord.receipt_evidence?.reference_number || 'None'}
-                </span>
+                {reviewTargetRecord.receipt_evidence ? (
+                  <>
+                    <span className="font-mono font-bold text-white block">
+                      ₱{reviewTargetRecord.receipt_evidence?.amount_paid?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-slate-300 font-mono text-[11px] block truncate">
+                      Ref: {reviewTargetRecord.receipt_evidence?.reference_number}
+                    </span>
+                    <span className="text-[10px] text-emerald-400">✓ Uploaded &amp; Stored Privately</span>
+                  </>
+                ) : (
+                  <div className="text-rose-400 font-semibold mt-1 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" /> No receipt attached
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1727,25 +2285,90 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
                   onChange={(e) => setReviewDecision(e.target.value as PaymentRecordStatus)}
                   className="w-full px-3 py-2 bg-[#0a1411] border border-[#234338] rounded-lg text-white font-bold"
                 >
-                  <option value="PAID_VERIFIED">✓ PAID VERIFIED (Dispatches Employee SMS Notification)</option>
-                  <option value="NEEDS_REVIEW">⚠ Flag for Detailed Audit (NEEDS_REVIEW)</option>
-                  <option value="PAYMENT_REJECTED">✗ Reject Payment Evidence (PAYMENT_REJECTED)</option>
-                  <option value="UNDER_REVIEW">⏳ Keep Under Review (UNDER_REVIEW)</option>
+                  <option value="PAID_VERIFIED">✓ PAID VERIFIED (Confirm Payment &amp; Send Transactional SMS)</option>
+                  <option value="NEEDS_REVIEW">⚠ Flag for Detailed Audit (NEEDS_REVIEW - No SMS)</option>
+                  <option value="PAYMENT_REJECTED">✗ Reject Payment Evidence (PAYMENT_REJECTED - No SMS)</option>
+                  <option value="UNDER_REVIEW">⏳ Keep Under Review (UNDER_REVIEW - No SMS)</option>
                 </select>
               </div>
 
               {reviewDecision === 'PAID_VERIFIED' && (
-                <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded text-emerald-300 text-[11px] flex items-center gap-2">
-                  <Smartphone className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>
-                    Marking this payment <strong>PAID_VERIFIED</strong> will trigger an automated SMS notification to the employee ({reviewTargetRecord.recipient_mobile}).
-                  </span>
+                <div className="space-y-3">
+                  {!reviewTargetRecord.receipt_evidence ? (
+                    <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="block">Trigger Condition Blocked (Section 3 Page 1)</strong>
+                        A payment SMS cannot be queued while receipt proof is missing. Please attach the transfer receipt before confirming.
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Reviewer Affirmation Checklist (Section 4 Page 2) */}
+                      <div className="p-3 bg-[#0a1411] border border-[#234a3e] rounded-xl space-y-2">
+                        <span className="text-[11px] font-bold text-[#a3e635] uppercase tracking-wider block flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Reviewer Compliance Affirmations (Required)
+                        </span>
+
+                        <label className="flex items-start gap-2 cursor-pointer text-slate-300 text-[11px]">
+                          <input
+                            type="checkbox"
+                            checked={affirmAmountMatches}
+                            onChange={(e) => setAffirmAmountMatches(e.target.checked)}
+                            className="rounded border-slate-700 bg-slate-900 text-[#a3e635] focus:ring-0 mt-0.5"
+                          />
+                          <span>
+                            I affirm that I have inspected the uploaded receipt and confirmed the transferred amount matches expected obligation (<strong>₱{reviewTargetRecord.expected_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>).
+                          </span>
+                        </label>
+
+                        <label className="flex items-start gap-2 cursor-pointer text-slate-300 text-[11px]">
+                          <input
+                            type="checkbox"
+                            checked={affirmReferenceVerified}
+                            onChange={(e) => setAffirmReferenceVerified(e.target.checked)}
+                            className="rounded border-slate-700 bg-slate-900 text-[#a3e635] focus:ring-0 mt-0.5"
+                          />
+                          <span>
+                            I affirm that the reference number (<strong>{reviewTargetRecord.receipt_evidence.reference_number}</strong>) is valid and non-duplicate in the global registry.
+                          </span>
+                        </label>
+
+                        <label className="flex items-start gap-2 cursor-pointer text-slate-300 text-[11px]">
+                          <input
+                            type="checkbox"
+                            checked={affirmEvidenceReviewed}
+                            onChange={(e) => setAffirmEvidenceReviewed(e.target.checked)}
+                            className="rounded border-slate-700 bg-slate-900 text-[#a3e635] focus:ring-0 mt-0.5"
+                          />
+                          <span>
+                            I affirm that evidence was manually reviewed via authorized records and satisfies corporate verification policy.
+                          </span>
+                        </label>
+                      </div>
+
+                      {/* Recipient & SMS Preview Strip */}
+                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl space-y-1.5 text-xs text-emerald-300">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold flex items-center gap-1.5">
+                            <Smartphone className="w-4 h-4 text-emerald-400" />
+                            Confirmed SMS Dispatch Trigger
+                          </span>
+                          <span className="font-mono text-[11px] text-emerald-400">{reviewTargetRecord.recipient_mobile}</span>
+                        </div>
+                        <p className="text-[11px] text-emerald-200/90 leading-relaxed font-mono bg-[#081512] p-2 rounded border border-emerald-500/20">
+                          De Rueda Construction: Your payment for {reviewTargetRecord.period_reference} has been confirmed. Amount: ₱{reviewTargetRecord.expected_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}. Reference: {reviewTargetRecord.receipt_evidence.reference_number.slice(0, 5)}-***. Status: PAID-VERIFIED. If you believe this is incorrect, contact HR through the company’s official channel.
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
               {reviewDecision === 'PAYMENT_REJECTED' && (
                 <div>
-                  <label className="text-rose-400 font-semibold block mb-1">Rejection Reason</label>
+                  <label className="text-rose-400 font-semibold block mb-1">Rejection Reason <span className="text-rose-500">*</span></label>
                   <input
                     type="text"
                     required
@@ -1754,6 +2377,9 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
                     onChange={(e) => setReviewRejectionReason(e.target.value)}
                     className="w-full px-3 py-2 bg-[#0a1411] border border-rose-500/40 rounded-lg text-white"
                   />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    No SMS will be sent for rejected payments. Reason will be logged in permanent audit trail.
+                  </span>
                 </div>
               )}
 
@@ -1769,20 +2395,31 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#234338]">
+            <div className="flex items-center justify-between gap-3 pt-3 border-t border-[#234338]">
               <button
                 type="button"
                 onClick={() => setIsReviewModalOpen(false)}
-                className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold"
+                className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold hover:text-white"
               >
                 Cancel
               </button>
+
               <button
                 type="submit"
-                disabled={reviewSubmitting}
-                className="px-5 py-2 bg-[#a3e635] text-[#080f0d] font-bold rounded-xl text-xs shadow hover:bg-[#bef264] disabled:opacity-50"
+                disabled={reviewSubmitting || (reviewDecision === 'PAID_VERIFIED' && (!reviewTargetRecord.receipt_evidence || !affirmAmountMatches || !affirmEvidenceReviewed || !affirmReferenceVerified))}
+                className={`px-5 py-2 font-bold rounded-xl text-xs shadow transition-all disabled:opacity-50 ${
+                  reviewDecision === 'PAID_VERIFIED'
+                    ? 'bg-[#a3e635] text-[#080f0d] hover:bg-[#bef264]'
+                    : reviewDecision === 'PAYMENT_REJECTED'
+                    ? 'bg-rose-600 text-white hover:bg-rose-500'
+                    : 'bg-amber-600 text-white hover:bg-amber-500'
+                }`}
               >
-                {reviewSubmitting ? 'Confirming...' : 'Confirm Decision & Update Ledger'}
+                {reviewSubmitting
+                  ? 'Processing...'
+                  : reviewDecision === 'PAID_VERIFIED'
+                  ? 'Confirm Payment & Send SMS'
+                  : `Save Status as ${reviewDecision.replace(/_/g, ' ')} (No SMS)`}
               </button>
             </div>
           </form>

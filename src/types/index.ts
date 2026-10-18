@@ -1,4 +1,4 @@
-export type AccessPointRole = 'ceo' | 'admin 1' | 'admin 2';
+export type AccessPointRole = 'ceo' | 'admin 1' | 'admin 2' | 'site head';
 
 export interface UserSession {
   session_id: string;
@@ -880,6 +880,10 @@ export type PaymentModule =
 
 export interface PaymentReceiptEvidence {
   receipt_url: string;
+  receipt_token?: string;
+  private_url?: string;
+  mime_type?: string;
+  file_size_bytes?: number;
   reference_number: string;
   payer_name?: string;
   payer_mobile?: string;
@@ -909,6 +913,45 @@ export interface PaymentAuditEntry {
   details: string;
 }
 
+// =========================================================================
+// DEPLOYMENT AUDIT & SMS CONFIRMATION UPDATE: OUTBOX & VERIFICATION SPEC
+// =========================================================================
+
+export type SmsDeliveryStatus =
+  | 'NOT_QUEUED'
+  | 'QUEUED'
+  | 'SENT_TO_PROVIDER'
+  | 'DELIVERED'
+  | 'FAILED'
+  | 'RETRY_PENDING';
+
+export interface PaymentSmsJob {
+  job_id: string;
+  payment_id: string;
+  recipient_id: string;
+  recipient_name: string;
+  recipient_mobile: string;
+  amount: number;
+  period_or_purpose: string;
+  reference_no: string;
+  masked_reference: string;
+  idempotency_key: string;
+  status: SmsDeliveryStatus;
+  sms_body: string;
+  provider_ref?: string;
+  queued_at: string;
+  sent_at?: string;
+  delivered_at?: string;
+  failed_at?: string;
+  failure_reason?: string;
+  retry_count: number;
+  max_retries: number;
+  last_retry_at?: string;
+  confirmed_by: string;
+  confirmed_role: string;
+  confirmation_method: 'MANUAL_CONFIRMATION' | 'AUTO_VERIFICATION';
+}
+
 export interface PaymentRecord {
   id: string; // Unique internal ID, e.g., PAY-2026-W41-EMP-001
   module: PaymentModule;
@@ -927,9 +970,23 @@ export interface PaymentRecord {
   approved_at: string;
   receipt_evidence?: PaymentReceiptEvidence;
   review_info?: PaymentReviewInfo;
+  // Audit-Compliant SMS Confirmation & Outbox Queue Tracking
+  sms_status?: SmsDeliveryStatus;
+  sms_job?: PaymentSmsJob;
   sms_dispatched?: boolean;
   sms_dispatched_at?: string;
   sms_reference_id?: string;
+  confirmation_method?: 'MANUAL_CONFIRMATION' | 'AUTO_VERIFICATION';
+  confirmed_by?: string;
+  confirmed_role?: string;
+  confirmed_at?: string;
+  reviewer_affirmation?: {
+    receipt_matches_payment: boolean;
+    evidence_reviewed: boolean;
+    reference_verified: boolean;
+    affirmed_at: string;
+    affirmed_by: string;
+  };
   created_at: string;
   updated_at: string;
   audit_trail: PaymentAuditEntry[];

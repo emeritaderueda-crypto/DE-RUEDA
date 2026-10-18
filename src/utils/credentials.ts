@@ -26,6 +26,12 @@ export const DEFAULT_CREDENTIALS: Record<AccessPointRole, RoleCredential> = {
     label: 'Admin 2 (Site Ops)',
     description: 'Site-Scoped Operations & Time/Payroll Engine Gatekeeper',
   },
+  'site head': {
+    password: 'DRC04',
+    email: 'sitehead.mariveles@deruedaconstruction.com',
+    label: 'Site Head (Field Ops)',
+    description: 'Site-Assigned Field Operations & Local Workforce Payment Authorizer',
+  },
 };
 
 // Default Accounts with unique identities and explicit site isolation
@@ -117,6 +123,19 @@ export const INITIAL_ADMIN_ACCOUNTS: AdminUserAccount[] = [
     createdAt: '2026-01-01T08:00:00Z',
     updatedAt: '2026-10-15T08:00:00Z',
     lastLoginAt: '2026-10-15T07:45:00Z',
+  },
+  // Site Head: Mariveles Field Operations (Audit Specification Section 3)
+  {
+    id: 'USR-SITEHEAD-01',
+    email: 'sitehead.mariveles@deruedaconstruction.com',
+    name: 'Engr. Jun Reyes (Site Head - Mariveles)',
+    role: 'site head',
+    assignedSites: ['SITE-001'],
+    mfaEnabled: false,
+    status: 'active',
+    createdAt: '2026-01-01T08:00:00Z',
+    updatedAt: '2026-10-16T08:00:00Z',
+    lastLoginAt: '2026-10-16T08:00:00Z',
   },
 ];
 

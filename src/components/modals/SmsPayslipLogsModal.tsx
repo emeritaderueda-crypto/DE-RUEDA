@@ -17,6 +17,7 @@ import {
   Check,
   AlertTriangle,
   Sparkles,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface SmsPayslipLogsModalProps {
@@ -33,11 +34,6 @@ export const SmsPayslipLogsModal: React.FC<SmsPayslipLogsModalProps> = ({ isOpen
   const [correctedMobile, setCorrectedMobile] = useState('');
   const [isRetrying, setIsRetrying] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
-
-  // Test SMS State
-  const [isTestOpen, setIsTestOpen] = useState(false);
-  const [testPayrollId, setTestPayrollId] = useState(payroll[0]?.payroll_id || '');
-  const [isSendingTest, setIsSendingTest] = useState(false);
 
   if (!isOpen) return null;
 
@@ -77,23 +73,6 @@ export const SmsPayslipLogsModal: React.FC<SmsPayslipLogsModalProps> = ({ isOpen
     }
   };
 
-  const handleSendTestSms = async () => {
-    const pRecord = payroll.find((p) => p.payroll_id === testPayrollId);
-    if (!pRecord) return;
-    setIsSendingTest(true);
-    try {
-      const fakeRef = `GCASH-TEST-${Date.now().toString().slice(-6)}`;
-      const res = await sendAutomaticSmsPayslip(pRecord, fakeRef);
-      setActionNotice(res.message);
-      setIsTestOpen(false);
-      setTimeout(() => setActionNotice(null), 5000);
-    } catch (err: any) {
-      setActionNotice(err?.message || 'Test dispatch failed');
-    } finally {
-      setIsSendingTest(false);
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
       <div className="bg-[#0e1a16] border border-[#234338] rounded-2xl max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl relative overflow-hidden animate-in fade-in duration-150">
@@ -106,29 +85,22 @@ export const SmsPayslipLogsModal: React.FC<SmsPayslipLogsModalProps> = ({ isOpen
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base sm:text-lg font-black text-white tracking-tight uppercase">
-                  Automated SMS Payslips & HR Exception Queue
+                  Audited Transactional SMS &amp; Delivery Queue
                 </h2>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                  TELCO VERIFIED
+                  RECEIPT-CONFIRMED
                 </span>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40">
-                  IDEMPOTENT
+                  IDEMPOTENT OUTBOX
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Automated SMS payslip delivery triggered strictly on confirmed GCash disbursement &bull; Audited delivery logs & exception retry
+                SMS notifications are triggered strictly after receipt upload &amp; authorized verification &bull; Separate delivery status tracking
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsTestOpen(!isTestOpen)}
-              className="px-3 py-1.5 bg-[#13241f] border border-[#234338] hover:border-[#a3e635] text-xs text-[#a3e635] font-semibold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Test Dispatch</span>
-            </button>
             <button
               onClick={onClose}
               className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-[#13241f] transition-colors cursor-pointer"
@@ -138,44 +110,15 @@ export const SmsPayslipLogsModal: React.FC<SmsPayslipLogsModalProps> = ({ isOpen
           </div>
         </div>
 
-        {/* Test Dispatch Form Drawer */}
-        {isTestOpen && (
-          <div className="p-4 bg-[#11211b] border-b border-[#234338] space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-emerald-400" />
-                Simulate Automatic SMS Payslip Dispatch
-              </span>
-              <button onClick={() => setIsTestOpen(false)} className="text-slate-400 hover:text-white text-xs">
-                Cancel
-              </button>
-            </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <select
-                value={testPayrollId}
-                onChange={(e) => setTestPayrollId(e.target.value)}
-                className="bg-[#080f0d] border border-[#234338] text-xs text-white rounded-lg px-3 py-2 flex-1 min-w-[220px]"
-              >
-                {payroll.map((p) => {
-                  const emp = employees.find((e) => e.employee_id === p.employee_id);
-                  return (
-                    <option key={p.payroll_id} value={p.payroll_id}>
-                      {emp?.name || p.employee_id} &bull; Net: ₱{p.net_pay.toLocaleString()} &bull; {p.week_key}
-                    </option>
-                  );
-                })}
-              </select>
-              <button
-                onClick={handleSendTestSms}
-                disabled={isSendingTest}
-                className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-[#10b981] text-[#080f0d] font-black text-xs uppercase rounded-lg hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>{isSendingTest ? 'Dispatching...' : 'Dispatch SMS'}</span>
-              </button>
-            </div>
+        {/* Verification Policy Banner */}
+        <div className="px-4 py-2.5 bg-[#0a1411] border-b border-[#234338] flex items-center justify-between text-xs text-slate-300">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>
+              SMS triggers are strictly linked to verified payment records. Manage receipts and approvals in <strong>Payment Records Hub</strong>.
+            </span>
           </div>
-        )}
+        </div>
 
         {/* Notification Toast */}
         {actionNotice && (

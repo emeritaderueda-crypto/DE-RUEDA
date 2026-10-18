@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 import { GoogleGenAI } from '@google/genai';
 import {
   authenticateUser,
@@ -20,6 +21,12 @@ import {
   OFFICIAL_GCASH_ONBOARDING_INFO,
 } from './src/server/gcashAdapter.js';
 import {
+  enqueuePaymentConfirmationSms,
+  retryOutboxJob,
+  getTransactionalOutbox,
+  TRANSACTIONAL_SMS_OUTBOX,
+  PaymentConfirmationSmsPayload,
+  PaymentSmsJob,
   dispatchPayslipSms,
   dispatchDtrFinalizedSms,
   dispatchBatchDtrFinalizedSms,
@@ -30,6 +37,12 @@ import {
   getEmailDeliveryLogs,
   WeeklyDtrEmailPayload,
 } from './src/server/emailAdapter.js';
+import {
+  storeSecureReceipt,
+  getSecureReceipt,
+  getReceiptAuditLedger,
+  validateReceiptFile,
+} from './src/server/receiptValidator.js';
 
 dotenv.config();
 
@@ -549,8 +562,21 @@ Respond with JSON:
       if (!session) {
         // Fallback for developer / internal calls only if explicitly provided in headers, but strictly typed
         const legacyRole = (req.headers['x-user-role'] || '').toString().toLowerCase();
-        if (legacyRole && (legacyRole.includes('ceo') || legacyRole.includes('admin 1') || legacyRole.includes('admin 2'))) {
-          userRole = legacyRole.includes('ceo') ? 'ceo' : legacyRole.includes('admin 1') ? 'admin 1' : 'admin 2';
+        if (
+          legacyRole &&
+          (legacyRole.includes('ceo') ||
+            legacyRole.includes('admin 1') ||
+            legacyRole.includes('admin 2') ||
+            legacyRole.includes('site head') ||
+            legacyRole.includes('site_head'))
+        ) {
+          userRole = legacyRole.includes('ceo')
+            ? 'ceo'
+            : legacyRole.includes('admin 1')
+            ? 'admin 1'
+            : legacyRole.includes('site head') || legacyRole.includes('site_head')
+            ? 'site head'
+            : 'admin 2';
           assignedSites = (req.headers['x-assigned-sites'] || 'ALL').toString().split(',').map((s) => s.trim().toUpperCase());
           userEmail = (req.headers['x-user-email'] || 'dev@deruedaconstruction.com').toString();
         } else {
@@ -601,13 +627,13 @@ Respond with JSON:
         }
       }
 
-      // Site Isolation Check for Admin 2 (Section 10)
-      if (userRole === 'admin 2') {
+      // Site Isolation Check for Admin 2 and Site Head (Section 3 & 10)
+      if (userRole === 'admin 2' || userRole === 'site head') {
         const targetSite = (req.body?.site_id || req.query?.site_id || '').toString().trim().toUpperCase();
         if (targetSite && !assignedSites.includes('ALL') && !assignedSites.includes(targetSite)) {
           return res.status(403).json({
             success: false,
-            error: `Site Isolation Security Violation: Admin 2 account (${userEmail}) is assigned strictly to [${assignedSites.join(', ')}]. Access to site '${targetSite}' is blocked.`,
+            error: `Site Isolation Security Violation: ${userRole.toUpperCase()} account (${userEmail}) is assigned strictly to [${assignedSites.join(', ')}]. Access to site '${targetSite}' is blocked.`,
             assigned_sites: assignedSites,
             requested_site: targetSite,
           });
@@ -732,190 +758,374 @@ Respond with JSON:
     }
   );
 
-  // 4. Automatic SMS Payslip Dispatch (Specification Phase 5 & Section 5 SMS Requirements)
-  app.post(
-    '/api/payroll/sms-payslip',
-    requireServerAuth(['ceo', 'admin 1']),
-    async (req: Request, res: Response) => {
-      try {
-        const {
-          payroll_id,
-          employee_id,
-          employee_name,
-          mobile_number,
-          week_key,
-          site_id,
-          gross_pay,
-          deductions_total,
-          net_pay,
-          payout_ref,
-          payout_status,
-          idempotency_key,
-        } = req.body;
+  // =========================================================================
+  // DEPLOYMENT AUDIT & SMS UPDATE: SECURE RECEIPT SERVICE (Sections 2, 6 & 7)
+  // =========================================================================
 
-        if (!payroll_id || !employee_name || !mobile_number || !payout_ref) {
-          return res.status(400).json({ success: false, error: 'Missing required parameters for SMS payslip.' });
+  // 1. Upload Receipt to Private Storage with authenticated validation & SHA-256 deduplication
+  app.post(
+    '/api/payments/upload-receipt',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2', 'site head']),
+    (req: Request, res: Response) => {
+      try {
+        const user = (req as any).authenticatedUser;
+        const actor = {
+          id: user?.id || 'USR-ANON',
+          email: user?.email || 'operations@deruedaconstruction.com',
+          name: user?.name,
+          role: (user?.role || 'ceo') as any,
+          assignedSites: user?.assignedSites || ['ALL'],
+        };
+
+        const storeResult = storeSecureReceipt(req.body, actor);
+        if (!storeResult.success || !storeResult.receipt) {
+          return res.status(400).json({
+            success: false,
+            error: (storeResult.errors || ['Receipt validation failed.']).join(' '),
+            errors: storeResult.errors,
+          });
         }
 
-        const dispatchResult = await dispatchPayslipSms({
-          payroll_id,
-          employee_id: employee_id || 'UNKNOWN',
-          employee_name,
-          mobile_number,
-          week_key: week_key || '2026-W41',
-          site_id: site_id || 'SITE-001',
-          gross_pay: parseFloat(gross_pay) || 0,
-          deductions_total: parseFloat(deductions_total) || 0,
-          net_pay: parseFloat(net_pay) || 0,
-          payout_ref,
-          payout_status: payout_status || 'UNKNOWN',
-          idempotency_key,
+        const receipt = storeResult.receipt;
+        return res.json({
+          success: true,
+          receipt_token: receipt.receipt_token,
+          private_url: receipt.private_url,
+          reference_number: receipt.reference_number,
+          content_hash: receipt.content_hash,
+          file_name: receipt.file_name,
+          mime_type: receipt.mime_type,
+          file_size_bytes: receipt.file_size_bytes,
+          is_duplicate_ref: storeResult.isDuplicate,
+          warning: storeResult.duplicateWarning,
+          message: storeResult.isDuplicate
+            ? `Warning: ${storeResult.duplicateWarning}. Record will be flagged as NEEDS_REVIEW.`
+            : 'Receipt successfully validated and stored in private authenticated storage.',
         });
-
-        return res.json(dispatchResult);
-      } catch (smsErr: any) {
-        console.error('[SMS Dispatch Error]:', smsErr);
-        return res.status(400).json({ success: false, error: smsErr?.message || 'SMS dispatch failure.' });
-      }
-    }
-  );
-
-  // 4b. Automated DTR Summary Finalized SMS Dispatch
-  app.post(
-    '/api/sms/dtr-finalized',
-    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
-    async (req: Request, res: Response) => {
-      try {
-        const { employee_id, employee_name, mobile_number, week_key, site_id, site_name, total_days, regular_hours, ot_hours } = req.body;
-        if (!employee_id || !employee_name || !mobile_number || !week_key) {
-          return res.status(400).json({ success: false, error: 'Missing required parameters for DTR SMS dispatch.' });
-        }
-        const result = await dispatchDtrFinalizedSms({
-          employee_id,
-          employee_name,
-          mobile_number,
-          week_key,
-          site_id: site_id || 'SITE-001',
-          site_name: site_name || site_id || 'Project Site',
-          total_days: Number(total_days) || 0,
-          regular_hours: Number(regular_hours) || 0,
-          ot_hours: Number(ot_hours) || 0,
-        });
-        return res.json(result);
       } catch (err: any) {
-        console.error('[DTR Finalized SMS Error]:', err);
-        return res.status(500).json({ success: false, error: err?.message || 'Failed to dispatch DTR SMS.' });
+        console.error('[Receipt Upload Error]:', err);
+        return res.status(500).json({ success: false, error: err?.message || 'Failed to upload receipt.' });
       }
     }
   );
 
-  // 4c. Batch DTR Finalized SMS Dispatch to all site/company employees
-  app.post(
-    '/api/sms/batch-dtr-finalized',
-    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
-    async (req: Request, res: Response) => {
-      try {
-        const { items } = req.body;
-        if (!items || !Array.isArray(items) || items.length === 0) {
-          return res.status(400).json({ success: false, error: 'Array of employee DTR items is required.' });
-        }
-        const result = await dispatchBatchDtrFinalizedSms(items);
-        return res.json(result);
-      } catch (err: any) {
-        console.error('[Batch DTR SMS Error]:', err);
-        return res.status(500).json({ success: false, error: err?.message || 'Batch DTR SMS failed.' });
-      }
-    }
-  );
-
-  // 4d. Payslip Generated / Released SMS Trigger
-  app.post(
-    '/api/sms/payslip-generated',
-    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
-    async (req: Request, res: Response) => {
-      try {
-        const { payroll_id, employee_id, employee_name, mobile_number, week_key, site_id, gross_pay, deductions_total, net_pay, payout_ref } = req.body;
-        if (!payroll_id || !employee_name || !mobile_number) {
-          return res.status(400).json({ success: false, error: 'Missing payroll_id, employee_name or mobile_number.' });
-        }
-        const result = await dispatchPayslipSms({
-          payroll_id,
-          employee_id: employee_id || 'UNKNOWN',
-          employee_name,
-          mobile_number,
-          week_key: week_key || '2026-W41',
-          site_id: site_id || 'SITE-001',
-          gross_pay: parseFloat(gross_pay) || 0,
-          deductions_total: parseFloat(deductions_total) || 0,
-          net_pay: parseFloat(net_pay) || 0,
-          payout_ref: payout_ref || `PAY-${payroll_id}`,
-          payout_status: 'GENERATED',
-        });
-        return res.json(result);
-      } catch (err: any) {
-        return res.status(500).json({ success: false, error: err?.message || 'Failed to dispatch payslip SMS.' });
-      }
-    }
-  );
-
-  // 5. SMS Payslip Delivery Logs & HR Exception Queue (Section 5 Page 5)
+  // 2. Authenticated Private Receipt File Endpoint (Section 6: scoped access)
   app.get(
-    '/api/payroll/sms-logs',
-    requireServerAuth(['ceo', 'admin 1']),
-    (_req: Request, res: Response) => {
-      const deliveredCount = SERVER_SMS_LOGS.filter((l) => l.status === 'DELIVERED').length;
-      const failedCount = SERVER_SMS_LOGS.filter((l) => l.status === 'FAILED' || l.status === 'RETRY_QUEUED').length;
+    '/api/payments/receipt-file/:token',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2', 'site head']),
+    (req: Request, res: Response) => {
+      const token = req.params.token;
+      const user = (req as any).authenticatedUser;
+      const actor = {
+        id: user?.id || 'USR-ANON',
+        email: user?.email || 'operations@deruedaconstruction.com',
+        name: user?.name,
+        role: (user?.role || 'ceo') as any,
+        assignedSites: user?.assignedSites || ['ALL'],
+      };
 
+      const targetSite = (req.query?.site_id || '').toString().trim();
+      const accessResult = getSecureReceipt(token, actor, targetSite || undefined);
+
+      if (!accessResult.success || !accessResult.receipt) {
+        return res.status(accessResult.status).json({
+          success: false,
+          error: accessResult.error || 'Private receipt not found or access denied.',
+        });
+      }
+
+      const receipt = accessResult.receipt;
+      if (receipt.data_base64) {
+        const imgBuffer = Buffer.from(receipt.data_base64.replace(/^data:[a-zA-Z0-9/+-]+;base64,/, ''), 'base64');
+        res.setHeader('Content-Type', receipt.mime_type);
+        res.setHeader('Content-Disposition', `inline; filename="${receipt.file_name}"`);
+        return res.send(imgBuffer);
+      }
+
+      // Return JSON metadata if raw binary is omitted
+      return res.json({
+        success: true,
+        receipt_token: receipt.receipt_token,
+        payment_id: receipt.payment_id,
+        reference_number: receipt.reference_number,
+        file_name: receipt.file_name,
+        uploaded_at: receipt.uploaded_at,
+        uploaded_by: receipt.uploaded_by,
+        amount_paid: receipt.amount_paid,
+        access_count: receipt.access_count,
+        content_hash: receipt.content_hash,
+      });
+    }
+  );
+
+  // 3. Receipt Security & Deduplication Audit Ledger Endpoint
+  app.get(
+    '/api/payments/receipts-audit',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2', 'site head']),
+    (_req: Request, res: Response) => {
       res.json({
         success: true,
-        total_count: SERVER_SMS_LOGS.length,
-        delivered_count: deliveredCount,
-        failed_count: failedCount,
-        logs: SERVER_SMS_LOGS.slice(0, 50),
+        audit_trail: getReceiptAuditLedger(),
       });
     }
   );
 
-  // 6. Retry Failed SMS from HR Exception Queue
+  // =========================================================================
+  // DEPLOYMENT AUDIT & SMS UPDATE: CONFIRM PAYMENT & SEND SMS (Sections 3 & 4)
+  // =========================================================================
+
   app.post(
-    '/api/payroll/sms-retry',
-    requireServerAuth(['ceo', 'admin 1']),
+    '/api/payments/confirm-and-send-sms',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2', 'site head']),
     async (req: Request, res: Response) => {
-      const { sms_id, corrected_mobile } = req.body;
-      const record = SERVER_SMS_LOGS.find((l) => l.id === sms_id);
-      if (!record) {
-        return res.status(404).json({ success: false, error: 'SMS log entry not found in HR delivery ledger.' });
+      try {
+        const user = (req as any).authenticatedUser;
+        const actorRole = (user?.role || '').toLowerCase();
+        const actorEmail = user?.email || 'operations@deruedaconstruction.com';
+        const actorSites: string[] = user?.assignedSites || ['ALL'];
+
+        const {
+          payment_id,
+          recipient_id,
+          recipient_name,
+          recipient_mobile,
+          amount,
+          period_or_purpose,
+          payment_module,
+          site_id,
+          receipt_uploaded,
+          reference_no,
+          reviewer_affirmation,
+          confirmation_method = 'MANUAL_CONFIRMATION',
+          reason_or_notes,
+        } = req.body;
+
+        // Validation 1: Required payment fields
+        if (!payment_id || !recipient_name || !recipient_mobile || amount === undefined) {
+          return res.status(400).json({
+            success: false,
+            error: 'Missing required payment fields: payment_id, recipient_name, recipient_mobile, and amount are required.',
+          });
+        }
+
+        // Validation 2: Server-Side Enforced Role Permissions & Site Scope (Section 3 Page 2)
+        // CEO: Company-wide across all sites and modules
+        if (actorRole === 'ceo') {
+          // Permitted across company
+        }
+        // HR / Admin 1: May confirm payroll-related payments within approved HR scope
+        else if (actorRole === 'admin 1') {
+          const hrAllowedModules = ['WEEKLY_PAYROLL', 'CASH_ADVANCE', 'CANTEEN_SETTLEMENT', 'EMPLOYEE_REIMBURSEMENT'];
+          if (payment_module && !hrAllowedModules.includes(payment_module)) {
+            return res.status(403).json({
+              success: false,
+              error: `Access Denied (403): HR / Admin 1 is restricted to payroll and workforce disbursements. Module '${payment_module}' requires CEO or designated procurement authorization.`,
+              actor_role: actorRole,
+              attempted_module: payment_module,
+            });
+          }
+        }
+        // Admin 2: May confirm payments only for assigned sites/projects and permitted payment types
+        else if (actorRole === 'admin 2') {
+          const targetSite = (site_id || '').toString().trim().toUpperCase();
+          if (!actorSites.includes('ALL') && !actorSites.includes(targetSite)) {
+            return res.status(403).json({
+              success: false,
+              error: `Site Isolation Security Denial: Admin 2 (${actorEmail}) is assigned strictly to [${actorSites.join(', ')}]. Access to confirm payment for site '${targetSite}' is blocked.`,
+              assigned_sites: actorSites,
+              requested_site: targetSite,
+            });
+          }
+          const admin2AllowedModules = ['SUPPLIER_PAYMENT', 'CONTRACTOR_PAYMENT', 'CASH_ADVANCE', 'OTHER_AUTHORIZED_DISBURSEMENT', 'WEEKLY_PAYROLL'];
+          if (payment_module && !admin2AllowedModules.includes(payment_module)) {
+            return res.status(403).json({
+              success: false,
+              error: `Access Denied: Admin 2 is not authorized to confirm payments for module '${payment_module}'.`,
+            });
+          }
+        }
+        // Site Head: May confirm only payments for explicitly assigned site(s) and permitted payment categories
+        else if (actorRole === 'site head') {
+          const targetSite = (site_id || '').toString().trim().toUpperCase();
+          if (!actorSites.includes('ALL') && !actorSites.includes(targetSite)) {
+            return res.status(403).json({
+              success: false,
+              error: `Site Isolation Security Denial: Site Head (${actorEmail}) is assigned strictly to [${actorSites.join(', ')}]. Cannot confirm payment for site '${targetSite}'.`,
+              assigned_sites: actorSites,
+              requested_site: targetSite,
+            });
+          }
+          const siteHeadAllowedModules = ['WEEKLY_PAYROLL', 'CASH_ADVANCE', 'OTHER_AUTHORIZED_DISBURSEMENT'];
+          if (payment_module && !siteHeadAllowedModules.includes(payment_module)) {
+            return res.status(403).json({
+              success: false,
+              error: `Access Denied: Site Head role is restricted to weekly site payroll and cash advance disbursements.`,
+            });
+          }
+        } else {
+          return res.status(403).json({
+            success: false,
+            error: `Access Denied (403): Role '${actorRole}' is not authorized to confirm payments.`,
+          });
+        }
+
+        // Validation 3: Rule 1 - Receipt MUST be successfully uploaded & stored (Section 3 Page 1)
+        if (!receipt_uploaded || !reference_no) {
+          return res.status(400).json({
+            success: false,
+            error: 'Trigger Condition Blocked: SMS can only be sent AFTER the QR-related payment receipt has been successfully uploaded and stored (Section 3 Page 1). No unverified payment SMS can be triggered.',
+          });
+        }
+
+        // Validation 4: Reviewer Affirmation for Manual Confirmation (Section 4 Page 2)
+        if (confirmation_method === 'MANUAL_CONFIRMATION') {
+          if (
+            !reviewer_affirmation ||
+            !reviewer_affirmation.receipt_matches_payment ||
+            !reviewer_affirmation.evidence_reviewed
+          ) {
+            return res.status(400).json({
+              success: false,
+              error: 'Reviewer Affirmation Required: Reviewer must explicitly affirm that receipt matches payment and that evidence was reviewed before confirmation & SMS dispatch (Section 4).',
+            });
+          }
+        }
+
+        // Idempotency Key: payment ID + notification type + confirmed status (Section 4 Page 2)
+        const idempotencyKey = `${payment_id}-PAYMENT_CONFIRMATION-PAID_VERIFIED`;
+
+        // Enqueue into Transactional Outbox (Saves payment status & SMS job together, delivers asynchronously)
+        const smsResult = await enqueuePaymentConfirmationSms({
+          payment_id,
+          recipient_id: recipient_id || 'UNKNOWN',
+          recipient_name,
+          recipient_mobile,
+          amount: Number(amount) || 0,
+          period_or_purpose: period_or_purpose || 'Weekly Wages',
+          reference_no: reference_no || 'MANUAL-REF',
+          receipt_uploaded: true,
+          payment_status: 'PAID_VERIFIED',
+          confirmed_by: actorEmail,
+          confirmed_role: actorRole,
+          site_id: site_id || 'SITE-001',
+          confirmation_method,
+          reviewer_affirmation,
+          idempotency_key: idempotencyKey,
+        });
+
+        // Audit Trail Entry (Section 3 Page 2)
+        const now = new Date().toISOString();
+        const auditEntry = {
+          actor_id: user?.id || 'USR-ACTOR',
+          role: actorRole,
+          site_scope: actorSites.join(', '),
+          timestamp: now,
+          payment_id,
+          prior_status: req.body?.prior_status || 'RECEIPT_UPLOADED',
+          new_status: 'PAID_VERIFIED',
+          confirmation_method,
+          evidence_reference: reference_no,
+          reason_or_notes: reason_or_notes || 'Confirmed through authorized manual review verification.',
+        };
+
+        return res.json({
+          success: true,
+          payment_id,
+          payment_status: 'PAID_VERIFIED',
+          duplicate_prevented: smsResult.duplicate_prevented || false,
+          sms_job: smsResult.sms_job,
+          audit_entry: auditEntry,
+          message: smsResult.duplicate_prevented
+            ? `Payment verified. SMS already queued (${smsResult.sms_job.status}). Duplicate send prevented.`
+            : `Payment confirmed and verified. Transactional SMS queued for ${recipient_name} (${smsResult.sms_job.recipient_mobile}).`,
+        });
+      } catch (err: any) {
+        console.error('[Payment Confirmation & SMS Error]:', err);
+        return res.status(500).json({ success: false, error: err?.message || 'Payment confirmation failed.' });
       }
-
-      if (corrected_mobile) {
-        let clean = corrected_mobile.toString().trim().replace(/[^0-9+]/g, '');
-        if (clean.startsWith('09')) clean = '+63' + clean.slice(1);
-        record.mobile_number = clean;
-      }
-
-      // Re-dispatch through real SMS gateway
-      const redelivery = await dispatchPayslipSms({
-        payroll_id: record.payroll_id,
-        employee_id: record.employee_id,
-        employee_name: record.employee_name,
-        mobile_number: record.mobile_number,
-        week_key: record.week_key,
-        site_id: record.site_id,
-        gross_pay: record.gross_pay,
-        deductions_total: record.deductions_total,
-        net_pay: record.net_pay,
-        payout_ref: record.payout_ref,
-        payout_status: 'SUCCEEDED',
-        idempotency_key: `RETRY-${record.id}-${Date.now()}`,
-      });
-
-      res.json({
-        success: redelivery.success,
-        message: redelivery.message,
-        sms_record: redelivery.sms_record,
-      });
     }
   );
+
+  // 3. Transactional SMS Outbox Queue Monitor Endpoint (Section 4 Page 2)
+  app.get(
+    '/api/payments/sms-outbox',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2', 'site head']),
+    (_req: Request, res: Response) => {
+      try {
+        const outbox = getTransactionalOutbox();
+        res.json({
+          success: true,
+          ...outbox,
+        });
+      } catch (err: any) {
+        res.status(500).json({ success: false, error: err?.message || 'Failed to load SMS outbox.' });
+      }
+    }
+  );
+
+  // 4. Retry Failed SMS from Transactional Outbox (Section 4 Page 2)
+  app.post(
+    '/api/payments/sms-retry',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2', 'site head']),
+    async (req: Request, res: Response) => {
+      try {
+        const { job_id } = req.body;
+        if (!job_id) {
+          return res.status(400).json({ success: false, error: 'job_id is required for retry.' });
+        }
+        const user = (req as any).authenticatedUser;
+        const actor = user?.email || user?.name || 'Authorized Actor';
+        const retryResult = await retryOutboxJob(job_id, actor);
+        return res.json(retryResult);
+      } catch (err: any) {
+        return res.status(500).json({ success: false, error: err?.message || 'Retry execution failed.' });
+      }
+    }
+  );
+
+  // =========================================================================
+  // RETIRED OLD SMS ALERT ENDPOINTS (Section 6 & 8: "removed the old sms alert setup")
+  // =========================================================================
+
+  app.post('/api/payroll/sms-payslip', (_req: Request, res: Response) => {
+    return res.status(410).json({
+      success: false,
+      error: 'Old SMS alert setup retired. Use /api/payments/confirm-and-send-sms after receipt is uploaded and verified.',
+    });
+  });
+
+  app.post('/api/sms/dtr-finalized', (_req: Request, res: Response) => {
+    return res.status(410).json({
+      success: false,
+      error: 'Old unverified DTR SMS alerts retired per Deployment Audit & SMS Confirmation Update.',
+    });
+  });
+
+  app.post('/api/sms/batch-dtr-finalized', (_req: Request, res: Response) => {
+    return res.status(410).json({
+      success: false,
+      error: 'Old batch DTR SMS alerts retired per Deployment Audit & SMS Confirmation Update.',
+    });
+  });
+
+  app.post('/api/sms/payslip-generated', (_req: Request, res: Response) => {
+    return res.status(410).json({
+      success: false,
+      error: 'Old premature payslip SMS retired per Deployment Audit & SMS Confirmation Update.',
+    });
+  });
+
+  app.get('/api/payroll/sms-logs', requireServerAuth(['ceo', 'admin 1', 'admin 2', 'site head']), (_req: Request, res: Response) => {
+    const outbox = getTransactionalOutbox();
+    res.json({
+      success: true,
+      total_count: outbox.total,
+      delivered_count: outbox.delivered,
+      failed_count: outbox.failed,
+      queued_count: outbox.queued,
+      logs: outbox.jobs,
+    });
+  });
 
   // 5. Automatic Weekly DTR Email Dispatch to Site Heads, HR, and CEO
   app.post(

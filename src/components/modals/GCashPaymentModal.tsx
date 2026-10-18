@@ -44,9 +44,14 @@ export const GCashPaymentModal: React.FC<GCashPaymentModalProps> = ({
   const [amountPaid, setAmountPaid] = useState<number>(0);
   const [payerName, setPayerName] = useState('');
   const [transferDate, setTransferDate] = useState(new Date().toISOString().slice(0, 16));
-  const [receiptUrl, setReceiptUrl] = useState(
-    'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80'
-  );
+  const [receiptUrl, setReceiptUrl] = useState('');
+  const [uploadFile, setUploadFile] = useState<{
+    file_name: string;
+    mime_type: string;
+    file_size_bytes: number;
+    data_base64: string;
+    preview_url?: string;
+  } | null>(null);
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedRef, setCopiedRef] = useState(false);
@@ -72,6 +77,8 @@ export const GCashPaymentModal: React.FC<GCashPaymentModalProps> = ({
       setPayerName(currentUser?.name || 'De Rueda Construction Finance');
       setReferenceNo(matchedPaymentRecord?.receipt_evidence?.reference_number || payrollRecord.reference_no || '');
       setNotes(`Weekly payroll payout for ${payrollRecord.week_key} - ${employee?.name || payrollRecord.employee_id}`);
+      setReceiptUrl('');
+      setUploadFile(null);
       setValidationError(null);
       setDuplicateWarning(null);
       setUploadSuccessMessage(null);
@@ -96,6 +103,36 @@ export const GCashPaymentModal: React.FC<GCashPaymentModalProps> = ({
     }
   };
 
+  const handleReceiptFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) {
+      setValidationError(`Invalid file format '${file.type}'. Allowed: JPG, PNG, WEBP, PDF.`);
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setValidationError('Receipt file exceeds 10MB size limit.');
+      return;
+    }
+    setValidationError(null);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const b64 = reader.result as string;
+      setUploadFile({
+        file_name: file.name,
+        mime_type: file.type,
+        file_size_bytes: file.size,
+        data_base64: b64,
+        preview_url: file.type.startsWith('image/') ? b64 : undefined,
+      });
+      setReceiptUrl('');
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedRef(true);
@@ -109,18 +146,27 @@ export const GCashPaymentModal: React.FC<GCashPaymentModalProps> = ({
       return;
     }
 
+    if (!uploadFile && !receiptUrl.trim()) {
+      setValidationError('Actual receipt file is required. Seeded public sample URLs are prohibited per audit.');
+      return;
+    }
+
     setIsSubmitting(true);
     setValidationError(null);
 
     try {
       if (matchedPaymentRecord) {
-        const uploadRes = uploadPaymentReceipt(matchedPaymentRecord.id, {
+        const uploadRes = await uploadPaymentReceipt(matchedPaymentRecord.id, {
           reference_number: referenceNo.trim(),
-          receipt_url: receiptUrl,
+          receipt_url: receiptUrl.trim() || undefined,
           amount_paid: amountPaid,
           transfer_date: transferDate,
           payer_name: payerName,
           notes: notes,
+          file_name: uploadFile?.file_name,
+          mime_type: uploadFile?.mime_type,
+          file_size_bytes: uploadFile?.file_size_bytes,
+          data_base64: uploadFile?.data_base64,
         });
 
         if (uploadRes.success) {
@@ -133,7 +179,7 @@ export const GCashPaymentModal: React.FC<GCashPaymentModalProps> = ({
         }
       } else {
         setUploadSuccessMessage(
-          `Receipt proof attached for ${employee?.name || payrollRecord.employee_id}. Reference ${referenceNo.trim()} registered.`
+          `Receipt proof attached for ${employee?.name || payrollRecord.employee_id}. Reference ${referenceNo.trim()} registered. Stored in private storage awaiting authorized confirmation.`
         );
         if (onSuccess) {
           onSuccess(referenceNo.trim());
@@ -327,14 +373,52 @@ export const GCashPaymentModal: React.FC<GCashPaymentModalProps> = ({
               </div>
 
               <div className="text-xs">
-                <label className="text-slate-300 font-semibold block mb-1">Receipt Screenshot Proof URL</label>
-                <input
-                  type="url"
-                  required
-                  value={receiptUrl}
-                  onChange={(e) => setReceiptUrl(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#0a1411] border border-[#234338] rounded-lg text-white font-mono text-[11px]"
-                />
+                <label className="text-slate-300 font-semibold block mb-1">
+                  Upload Actual Receipt File (JPG, PNG, WEBP, PDF &le; 10MB) <span className="text-rose-400">*</span>
+                </label>
+                <div className="border border-dashed border-[#234338] hover:border-blue-500/60 rounded-xl p-3 bg-[#0a1411] transition-all text-center">
+                  <input
+                    type="file"
+                    id="gcash-receipt-file-input"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    onChange={handleReceiptFileChange}
+                    className="hidden"
+                  />
+                  <label htmlFor="gcash-receipt-file-input" className="cursor-pointer block">
+                    {uploadFile ? (
+                      <div className="flex items-center justify-between gap-3 p-2 bg-[#10201b] rounded-lg border border-emerald-500/30 text-left">
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          {uploadFile.preview_url ? (
+                            <img
+                              src={uploadFile.preview_url}
+                              alt="Receipt"
+                              className="w-8 h-8 object-cover rounded border border-[#234338] shrink-0"
+                            />
+                          ) : (
+                            <FileCheck2 className="w-6 h-6 text-emerald-400 shrink-0" />
+                          )}
+                          <div className="truncate">
+                            <span className="font-bold text-white text-xs block truncate">{uploadFile.file_name}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {(uploadFile.file_size_bytes / 1024).toFixed(1)} KB &bull; {uploadFile.mime_type}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0">
+                          ATTACHED
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="py-1">
+                        <Upload className="w-5 h-5 text-slate-400 mx-auto mb-1" />
+                        <span className="text-xs font-bold text-blue-400 hover:text-blue-300">Choose receipt file</span>
+                        <p className="text-[10px] text-slate-500 mt-0.5">
+                          Private storage with authenticated access (Section 6). No public sample URLs.
+                        </p>
+                      </div>
+                    )}
+                  </label>
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-2">

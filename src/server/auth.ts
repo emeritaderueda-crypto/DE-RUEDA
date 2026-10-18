@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 
-export type UserRole = 'ceo' | 'admin 1' | 'admin 2';
+export type UserRole = 'ceo' | 'admin 1' | 'admin 2' | 'site head';
 
 export interface ServerUserRecord {
   id: string;
@@ -200,6 +200,21 @@ export const SERVER_USERS: ServerUserRecord[] = [
     createdAt: '2026-01-01T08:00:00Z',
     updatedAt: '2026-10-16T08:00:00Z',
   },
+  {
+    id: 'USR-SITEHEAD-01',
+    email: 'sitehead.mariveles@deruedaconstruction.com',
+    name: 'Engr. Jun Reyes (Site Head - Mariveles)',
+    role: 'site head',
+    assignedSites: ['SITE-001'],
+    passwordSalt: saltAdm2Mariveles,
+    passwordHash: hashPassword('DRC04', saltAdm2Mariveles),
+    mfaEnabled: false,
+    mfaSecret: 'QBSWY3DPEHPK3PXP',
+    backupCodesHashed: [],
+    status: 'active',
+    createdAt: '2026-03-01T08:00:00Z',
+    updatedAt: '2026-10-16T08:00:00Z',
+  },
 ];
 
 // Active In-Memory Server Sessions Store with auto-expiry (8 hours)
@@ -275,8 +290,9 @@ export function authenticateUser(
   const isLegacyCeo = user.role === 'ceo' && (enteredPassword === 'Emerita0279' || enteredPassword === 'DRC01');
   const isLegacyHr = user.role === 'admin 1' && enteredPassword === 'DRC02';
   const isLegacyAdm2 = user.role === 'admin 2' && (enteredPassword === 'DRC03' || enteredPassword === '2233');
+  const isLegacySiteHead = user.role === 'site head' && (enteredPassword === 'DRC04' || enteredPassword === 'DRC03');
 
-  if (!isDirectPassword && !isLegacyCeo && !isLegacyHr && !isLegacyAdm2) {
+  if (!isDirectPassword && !isLegacyCeo && !isLegacyHr && !isLegacyAdm2 && !isLegacySiteHead) {
     return { success: false, error: 'Authentication failed: Invalid credentials provided.' };
   }
 
