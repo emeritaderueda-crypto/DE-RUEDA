@@ -857,3 +857,117 @@ export interface ProcurementTimelineItem {
   notes?: string;
 }
 
+// =========================================================================
+// UPGRADE & CHANGE SPECIFICATION: PAYMENT RECORDS & QR SETTLEMENT SYSTEM
+// =========================================================================
+
+export type PaymentRecordStatus =
+  | 'AWAITING_PAYMENT'
+  | 'RECEIPT_UPLOADED'
+  | 'UNDER_REVIEW'
+  | 'PAID_VERIFIED'
+  | 'PAYMENT_REJECTED'
+  | 'NEEDS_REVIEW';
+
+export type PaymentModule =
+  | 'WEEKLY_PAYROLL'
+  | 'CASH_ADVANCE'
+  | 'EMPLOYEE_REIMBURSEMENT'
+  | 'CONTRACTOR_PAYMENT'
+  | 'SUPPLIER_PAYMENT'
+  | 'CANTEEN_SETTLEMENT'
+  | 'OTHER_AUTHORIZED_DISBURSEMENT';
+
+export interface PaymentReceiptEvidence {
+  receipt_url: string;
+  reference_number: string;
+  payer_name?: string;
+  payer_mobile?: string;
+  transfer_date: string;
+  uploaded_at: string;
+  uploaded_by: string;
+  file_name?: string;
+  is_duplicate_ref?: boolean;
+  amount_paid?: number;
+  amount_matches?: boolean;
+  notes?: string;
+}
+
+export interface PaymentReviewInfo {
+  reviewed_by: string;
+  reviewed_at: string;
+  review_status: PaymentRecordStatus;
+  review_notes?: string;
+  rejection_reason?: string;
+}
+
+export interface PaymentAuditEntry {
+  id: string;
+  action: string;
+  performed_by: string;
+  timestamp: string;
+  details: string;
+}
+
+export interface PaymentRecord {
+  id: string; // Unique internal ID, e.g., PAY-2026-W41-EMP-001
+  module: PaymentModule;
+  recipient_id: string;
+  recipient_name: string;
+  recipient_mobile: string;
+  recipient_verified: boolean;
+  recipient_qr_url?: string; // Genuine external receiving QR supplied by recipient
+  site_id: string;
+  site_name: string;
+  period_reference: string;
+  expected_amount: number;
+  currency: 'PHP';
+  status: PaymentRecordStatus;
+  approved_by: string;
+  approved_at: string;
+  receipt_evidence?: PaymentReceiptEvidence;
+  review_info?: PaymentReviewInfo;
+  sms_dispatched?: boolean;
+  sms_dispatched_at?: string;
+  sms_reference_id?: string;
+  created_at: string;
+  updated_at: string;
+  audit_trail: PaymentAuditEntry[];
+}
+
+export interface SitePaymentBatchSummary {
+  site_id: string;
+  site_name: string;
+  week_key: string;
+  total_workers: number;
+  total_expected_amount: number;
+  total_verified_amount: number;
+  status_counts: Record<PaymentRecordStatus, number>;
+  records: PaymentRecord[];
+  batch_qr_url?: string;
+  is_fully_verified: boolean;
+}
+
+export interface GcashOfficialOnboardingStatus {
+  api_enabled: boolean;
+  product_type: 'GCash PowerPay+' | 'Funds Disbursement Service';
+  current_phase: 'PHASE_A_ONBOARDING' | 'PHASE_B_ADAPTER_SETUP' | 'PHASE_C_TESTING_PILOT' | 'LIVE_DISBURSEMENT_READY';
+  business_verification: {
+    status: 'PENDING_OFFICIAL_APPROVAL';
+    submitted_date: string;
+    dole_compliance_verified: boolean;
+    sec_registration_verified: boolean;
+  };
+  security_checklist: {
+    no_client_secrets: boolean;
+    server_side_adapter: boolean;
+    idempotency_enforced: boolean;
+    duplicate_reference_check: boolean;
+    receipt_upload_not_auto_paid: boolean;
+    sms_only_on_verified: boolean;
+    audit_trail_immutable: boolean;
+    emergency_killswitch: boolean;
+  };
+  manual_fallback_active: boolean;
+}
+

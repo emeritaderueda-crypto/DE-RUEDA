@@ -15,8 +15,9 @@ import {
   getLiveBalance,
   SERVER_GCASH_TRANSACTIONS,
   DisbursementResult,
-  topUpLiveMerchantBalance,
-  getAuthoritativeFloat,
+  checkDuplicateReference,
+  registerReference,
+  OFFICIAL_GCASH_ONBOARDING_INFO,
 } from './src/server/gcashAdapter.js';
 import {
   dispatchPayslipSms,
@@ -624,44 +625,101 @@ Respond with JSON:
   // 2. Real GCash Business Disbursement Gateway (Specification Phase 2 & Section 3)
   // =========================================================================
 
-  // 1. Authoritative Live Balance (Section 6 Compliance)
-  app.get('/api/gcash/wallet', requireServerAuth(['ceo', 'admin 1', 'admin 2']), async (_req: Request, res: Response) => {
-    try {
-      const balanceInfo = await getLiveBalance();
-      res.json(balanceInfo);
-    } catch (err: any) {
-      res.status(500).json({ status: 'UNAVAILABLE', available_balance: null, message: err?.message || 'Balance query error' });
-    }
-  });
+  // =========================================================================
+  // UPGRADE & CHANGE SPECIFICATION: OFFICIAL GCASH STATUS & PAYMENT ENDPOINTS
+  // =========================================================================
 
-  // 1b. Real-Time Float Top-Up
-  app.post(
-    '/api/gcash/top-up',
-    requireServerAuth(['ceo', 'admin 1']),
+  // 1. Official GCash API Integration Status & Onboarding Roadmap (Section 4)
+  app.get(
+    '/api/payments/official-onboarding-status',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
+    (_req: Request, res: Response) => {
+      res.json({
+        success: true,
+        ...OFFICIAL_GCASH_ONBOARDING_INFO,
+      });
+    }
+  );
+
+  // 2. Real-Time Duplicate Reference Check for Receipt Uploads (Section 3 Page 3)
+  app.get(
+    '/api/payments/check-duplicate-reference',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
     (req: Request, res: Response) => {
+      const rawRef = (req.query.ref as string) || '';
+      const currentRecordId = (req.query.record_id as string) || '';
+      const dupCheck = checkDuplicateReference(rawRef, currentRecordId);
+      res.json(dupCheck);
+    }
+  );
+
+  // 3. Register Reference in Global Ledger
+  app.post(
+    '/api/payments/register-reference',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
+    (req: Request, res: Response) => {
+      const { reference_number, record_id } = req.body;
+      if (!reference_number || !record_id) {
+        return res.status(400).json({ success: false, error: 'reference_number and record_id are required' });
+      }
+      const regResult = registerReference(reference_number, record_id);
+      if (!regResult.success) {
+        return res.status(409).json(regResult);
+      }
+      return res.json(regResult);
+    }
+  );
+
+  // 4. Legacy GCash Status Boundary (Returns Manual Mode & Disabled Status)
+  app.get(
+    '/api/gcash/wallet',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
+    async (_req: Request, res: Response) => {
       try {
-        const { amount, source } = req.body;
-        const numAmount = parseFloat(amount);
-        if (isNaN(numAmount) || numAmount <= 0) {
-          return res.status(400).json({ success: false, error: 'Valid positive top-up amount required.' });
-        }
-        const updatedBalance = topUpLiveMerchantBalance(numAmount);
-        return res.json({
-          success: true,
-          amount_credited: numAmount,
-          new_balance: updatedBalance,
-          currency: 'PHP',
-          source: source || 'Corporate Online Banking',
-          timestamp: new Date().toISOString(),
-          message: `Successfully credited ₱${numAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} to live GCash merchant float.`,
-        });
+        const balanceInfo = await getLiveBalance();
+        res.json(balanceInfo);
       } catch (err: any) {
-        return res.status(500).json({ success: false, error: err?.message || 'Top-up failed.' });
+        res.status(500).json({ status: 'UNAVAILABLE', available_balance: null, message: err?.message || 'Balance query error' });
       }
     }
   );
 
-  // 1c. Real-Time Server GCash Transactions Ledger
+  // 5. Automated Payout Boundary (Explicitly Disabled per Executive Decision Page 1 & Section 1)
+  app.post(
+    '/api/gcash/disburse',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
+    async (req: Request, res: Response) => {
+      const { payroll_id, employee_name, gcash_number, amount } = req.body;
+      const result = await executeDisbursement({
+        payroll_id: payroll_id || 'UNKNOWN',
+        employee_id: 'UNKNOWN',
+        employee_name: employee_name || 'Worker',
+        gcash_number: gcash_number || '',
+        amount: parseFloat(amount) || 0,
+        week_key: '2026-W41',
+        site_id: 'SITE-001',
+      });
+      return res.status(403).json({
+        success: false,
+        status: result.status,
+        message: result.error_message,
+        specification_note: 'Automated payouts are disabled. Use manual receipt upload and authorized verification.',
+      });
+    }
+  );
+
+  app.post(
+    '/api/gcash/batch-disburse',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
+    async (_req: Request, res: Response) => {
+      return res.status(403).json({
+        success: false,
+        status: 'DISABLED_PENDING_APPROVAL',
+        message: 'Bulk automated GCash payouts are disabled per Upgrade & Change Specification Section 1 & 4. All disbursements must be executed individually in official GCash and verified via receipt upload.',
+      });
+    }
+  );
+
   app.get(
     '/api/gcash/transactions',
     requireServerAuth(['ceo', 'admin 1', 'admin 2']),
@@ -669,134 +727,8 @@ Respond with JSON:
       res.json({
         success: true,
         count: SERVER_GCASH_TRANSACTIONS.length,
-        current_float: getAuthoritativeFloat(),
         transactions: SERVER_GCASH_TRANSACTIONS,
       });
-    }
-  );
-
-  // 2. Real Authorized GCash Disbursement (Page 4 State Model & Idempotency)
-  app.post(
-    '/api/gcash/disburse',
-    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
-    async (req: Request, res: Response) => {
-      try {
-        const {
-          payroll_id,
-          employee_id,
-          employee_name,
-          gcash_number,
-          amount,
-          week_key,
-          site_id,
-          site_name,
-          idempotency_key,
-          environment,
-        } = req.body;
-
-        if (!payroll_id || !employee_name || !gcash_number || !amount) {
-          return res.status(400).json({
-            success: false,
-            error: 'Missing required parameters: payroll_id, employee_name, gcash_number, and amount are required.',
-          });
-        }
-
-        const numAmount = parseFloat(amount);
-        if (isNaN(numAmount) || numAmount <= 0) {
-          return res.status(400).json({
-            success: false,
-            error: 'Amount must be a positive number greater than 0.',
-          });
-        }
-
-        const result = await executeDisbursement(
-          {
-            payroll_id,
-            employee_id: employee_id || 'UNKNOWN',
-            employee_name,
-            gcash_number,
-            amount: numAmount,
-            week_key: week_key || '2026-W41',
-            site_id: site_id || 'SITE-001',
-            site_name,
-            idempotency_key,
-          },
-          environment || 'sandbox'
-        );
-
-        if (result.status === 'FAILED') {
-          return res.status(422).json({
-            success: false,
-            error: result.error_message || 'Disbursement declined by provider.',
-            result,
-          });
-        }
-
-        return res.json({
-          success: result.status === 'SUCCEEDED' || result.status === 'PAID',
-          ...result,
-        });
-      } catch (err: any) {
-        console.error('[GCash Gateway Error]:', err);
-        res.status(500).json({
-          success: false,
-          error: err?.message || 'GCash disbursement gateway error occurred.',
-        });
-      }
-    }
-  );
-
-  // 3. Batch Disbursement with Idempotency & Reconciliation (Section 3 Page 4)
-  app.post(
-    '/api/gcash/batch-disburse',
-    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
-    async (req: Request, res: Response) => {
-      try {
-        const { items, environment, hub_id } = req.body;
-        if (!Array.isArray(items) || items.length === 0) {
-          return res.status(400).json({ success: false, error: 'items array is required' });
-        }
-
-        const results: DisbursementResult[] = [];
-        for (const item of items) {
-          const resItem = await executeDisbursement(
-            {
-              payroll_id: item.payroll_id,
-              employee_id: item.employee_id || 'UNKNOWN',
-              employee_name: item.employee_name,
-              gcash_number: item.gcash_number,
-              amount: parseFloat(item.amount) || 0,
-              week_key: item.week_key || '2026-W41',
-              site_id: item.site_id || 'SITE-001',
-              site_name: item.site_name,
-              idempotency_key: item.idempotency_key,
-            },
-            environment || 'sandbox'
-          );
-          results.push(resItem);
-        }
-
-        const successCount = results.filter((r) => r.status === 'SUCCEEDED' || r.status === 'PAID').length;
-        const failedCount = results.filter((r) => r.status === 'FAILED').length;
-        const unknownCount = results.filter((r) => r.status === 'UNKNOWN').length;
-        const totalAmount = results.reduce((sum, r) => sum + (r.amount || 0), 0);
-
-        return res.json({
-          success: failedCount === 0 && unknownCount === 0,
-          batch_id: `BATCH-${Date.now()}`,
-          count: results.length,
-          success_count: successCount,
-          failed_count: failedCount,
-          unknown_count: unknownCount,
-          total_amount: totalAmount,
-          currency: 'PHP',
-          hub_used: hub_id || 'Default',
-          disbursements: results,
-        });
-      } catch (err: any) {
-        console.error('[GCash Batch Error]:', err);
-        res.status(500).json({ success: false, error: err?.message || 'Batch disbursement failed.' });
-      }
     }
   );
 

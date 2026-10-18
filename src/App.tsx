@@ -26,7 +26,7 @@ import { AuditView } from './components/views/AuditView';
 import { PublicWebsiteView } from './components/views/PublicWebsiteView';
 import { LandingPagePreviewView } from './components/views/LandingPagePreviewView';
 import { CeoMonitoringView } from './components/views/CeoMonitoringView';
-import { CeoGcashDashboardView } from './components/views/CeoGcashDashboardView';
+import { PaymentRecordsHubView } from './components/views/PaymentRecordsHubView';
 import { CanteenView } from './components/views/CanteenView';
 import { NetworkSyncToast } from './components/common/NetworkSyncToast';
 
@@ -143,7 +143,7 @@ const MainAppContent: React.FC = () => {
       case 'ceo_monitoring':
         return <CeoMonitoringView onNavigate={handleNavigate} />;
       case 'ceo_gcash':
-        return <CeoGcashDashboardView onNavigate={handleNavigate} />;
+        return <PaymentRecordsHubView onNavigate={handleNavigate} />;
       case 'employees':
         return <EmployeesView />;
       case 'sites':

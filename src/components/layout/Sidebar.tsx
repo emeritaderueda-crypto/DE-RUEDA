@@ -25,6 +25,7 @@ import {
   Lock,
   Wallet,
   UtensilsCrossed,
+  QrCode,
 } from 'lucide-react';
 
 export type PageId =
@@ -79,9 +80,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         },
         {
           id: 'ceo_gcash' as PageId,
-          label: currentUser?.access_point === 'admin 1' ? 'Executive GCash Hub' : currentUser?.access_point === 'admin 2' ? 'Site GCash Hub' : 'CEO GCash Operations',
-          icon: Wallet,
-          badge: currentUser?.access_point === 'admin 1' ? 'HR' : currentUser?.access_point === 'admin 2' ? 'SITE OPS' : 'RESTRICTED',
+          label: currentUser?.access_point === 'admin 1' ? 'Executive Payment Operations' : currentUser?.access_point === 'admin 2' ? 'Site Payment & Batch QR Hub' : 'Payment Records & Settlement',
+          icon: QrCode,
+          badge: currentUser?.access_point === 'admin 1' ? 'VOUCHERS' : currentUser?.access_point === 'admin 2' ? 'SITE OPS' : 'OFFICIAL QR',
         },
       ],
     },
@@ -92,7 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'employees' as PageId, label: 'Employees / HR', icon: Users },
         { id: 'sites' as PageId, label: 'Sites & Projects', icon: Building },
         ...(currentUser?.access_point === 'admin 1'
-          ? [{ id: 'ceo_gcash' as PageId, label: 'Executive GCash Hub', icon: Wallet, badge: 'HR' }]
+          ? [{ id: 'ceo_gcash' as PageId, label: 'Executive Payment Operations', icon: QrCode, badge: 'VOUCHERS' }]
           : []),
       ],
     },
@@ -104,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'canteen' as PageId, label: 'Canteen Weekly Stipend', icon: UtensilsCrossed, badge: 'GCASH' },
         { id: 'payroll' as PageId, label: 'Weekly Payroll', icon: Banknote },
         ...(currentUser?.access_point === 'admin 2'
-          ? [{ id: 'ceo_gcash' as PageId, label: 'Site GCash Hub', icon: Wallet, badge: 'SITE OPS' }]
+          ? [{ id: 'ceo_gcash' as PageId, label: 'Site Payment & Batch QR Hub', icon: QrCode, badge: 'SITE OPS' }]
           : []),
         { id: 'cashflow' as PageId, label: 'Cash Flow Disbursements', icon: TrendingDown },
         { id: 'payslips' as PageId, label: 'Payslips Hub (6/Page)', icon: FileSpreadsheet },
