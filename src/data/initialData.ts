@@ -24,6 +24,12 @@ import {
   QrScanLogItem,
   PaymentRecord,
 } from '../types';
+import {
+  FIFTEEN_EMPLOYEES_PER_SITE,
+  FIFTEEN_PAYROLLS_PER_SITE,
+  FIFTEEN_PAYMENT_RECORDS_PER_SITE,
+  FIFTEEN_ATTENDANCE_PER_SITE,
+} from './fifteenEmployeesPerSite';
 
 export const INITIAL_SETTINGS: SystemSettings = {
   company_name: 'De Rueda Construction',
@@ -132,8 +138,8 @@ export const INITIAL_SITES: Site[] = [
   },
 ];
 
-// Factory Default Start: Clean pristine employee directory ready for real workforce registration
-export const INITIAL_EMPLOYEES: Employee[] = [];
+// 15 active employees per site with verified profiles and biometrics
+export const INITIAL_EMPLOYEES: Employee[] = FIFTEEN_EMPLOYEES_PER_SITE;
 
 // Optional sample template reference for testing/benchmarking
 export const SAMPLE_EMPLOYEE_TEMPLATES: Employee[] = [
@@ -398,15 +404,16 @@ export const INITIAL_DTR_WEEKS: DtrWeek[] = [
   },
 ];
 
-// Factory Default: Clean attendance dataset ready for live operations
-export const INITIAL_ATTENDANCE: AttendanceRecord[] = [];
+// Verified turnstile biometric attendance logs for all 60 employees
+export const INITIAL_ATTENDANCE: AttendanceRecord[] = FIFTEEN_ATTENDANCE_PER_SITE;
 
 export const INITIAL_QR_SCAN_LOGS: QrScanLogItem[] = [];
 
 
 export const INITIAL_DEDUCTIONS: DeductionRecord[] = [];
 
-export const INITIAL_PAYROLL: PayrollRecord[] = [];
+// 15 employees per site with calculated salary awaiting release of payout
+export const INITIAL_PAYROLL: PayrollRecord[] = FIFTEEN_PAYROLLS_PER_SITE;
 
 export const INITIAL_MATERIALS: MaterialRecord[] = [];
 
@@ -640,6 +647,7 @@ export const INITIAL_GCASH_TRANSACTIONS: GCashTransactionRecord[] = [];
 // =========================================================================
 
 export const INITIAL_PAYMENT_RECORDS: PaymentRecord[] = [
+  ...FIFTEEN_PAYMENT_RECORDS_PER_SITE,
   {
     id: 'PAY-2026-W41-EMP-0001',
     module: 'WEEKLY_PAYROLL',

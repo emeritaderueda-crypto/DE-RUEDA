@@ -143,14 +143,7 @@ export const CanteenNotificationCenter: React.FC = () => {
             <span>{isSyncing ? 'Syncing...' : 'Sync Pending Queue'}</span>
           </button>
 
-          <button
-            onClick={() => simulateFailedUploadForTesting()}
-            className="px-2.5 py-1.5 bg-[#182b24] hover:bg-[#203a31] text-amber-300 hover:text-white border border-amber-500/30 text-[11px] font-semibold rounded-lg transition-colors flex items-center gap-1"
-            title="Simulate a failed upload scenario to test manual reconciliation alert UI"
-          >
-            <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-            <span>Simulate Anomaly</span>
-          </button>
+
 
           <button
             onClick={() => setIsOpen(!isOpen)}

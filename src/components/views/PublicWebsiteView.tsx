@@ -127,41 +127,13 @@ export const PublicWebsiteView: React.FC<PublicWebsiteViewProps> = ({
         </nav>
 
         <div className="flex items-center gap-2.5 shrink-0">
-          {currentUser ? (
-            <>
-              {onGoToDashboard && (
-                <button
-                  onClick={onGoToDashboard}
-                  className="px-3.5 py-2 bg-[#a3e635] text-[#080f0d] hover:bg-[#84cc16] font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  <LayoutDashboard className="w-3.5 h-3.5" />
-                  <span>Dashboard ({currentUser.access_point.toUpperCase()})</span>
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  if (onOpenLogout) {
-                    onOpenLogout();
-                  } else {
-                    logout();
-                  }
-                }}
-                className="px-3 py-2 bg-[#13241f] border border-rose-500/30 text-rose-300 hover:text-white hover:bg-rose-500/20 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
-                title="Log out"
-              >
-                <LogOut className="w-3.5 h-3.5 text-rose-400" />
-                <span>Logout</span>
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={onOpenLogin}
-              className="px-4 py-2 bg-[#a3e635] text-[#080f0d] hover:bg-[#84cc16] font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <span>System Login</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          )}
+          <button
+            onClick={onOpenLogin}
+            className="px-4 py-2 bg-[#a3e635] text-[#080f0d] hover:bg-[#84cc16] font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            <span>Client Portal &bull; System Login</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
         </div>
       </header>
 

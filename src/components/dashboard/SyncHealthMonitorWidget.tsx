@@ -277,18 +277,6 @@ export const SyncHealthMonitorWidget: React.FC<SyncHealthMonitorWidgetProps> = (
               <ExternalLink className="w-3 h-3 text-[#10b981]" />
             </button>
           )}
-
-          <button
-            onClick={toggleSimulateOffline}
-            className={`px-2.5 py-1.5 border rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
-              isOnline
-                ? 'bg-[#13241f] border-[#234338] text-slate-400 hover:text-white'
-                : 'bg-amber-500/20 border-amber-500/40 text-amber-200'
-            }`}
-            title="Toggle offline simulation to test buffer mode"
-          >
-            {isOnline ? 'Simulate Drop' : 'Restore Online'}
-          </button>
         </div>
       </div>
 

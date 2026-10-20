@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { PageId } from '../layout/Sidebar';
 import {
@@ -470,6 +470,48 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
       } finally {
         setReviewSubmitting(false);
       }
+    }
+  };
+
+  // Direct SMS sender for confirmed records
+  const [sendingSmsId, setSendingSmsId] = useState<string | null>(null);
+
+  const handleDirectSendSms = async (rec: PaymentRecord) => {
+    if (!rec.receipt_evidence || !rec.receipt_evidence.reference_number) {
+      setSmsActionNotice('Trigger Condition Blocked: SMS can only be sent AFTER the QR-related payment receipt has been successfully uploaded and stored (Section 3 Page 1).');
+      setTimeout(() => setSmsActionNotice(null), 4500);
+      return;
+    }
+    const perm = checkRoleConfirmationPermission(rec);
+    if (!perm.allowed) {
+      setSmsActionNotice(perm.reason || 'Unauthorized to trigger SMS for this site or payment module.');
+      setTimeout(() => setSmsActionNotice(null), 4500);
+      return;
+    }
+
+    setSendingSmsId(rec.id);
+    try {
+      if (rec.sms_job?.job_id) {
+        const res = await retryOutboxSms(rec.sms_job.job_id);
+        setSmsActionNotice(res.message || 'SMS re-dispatched to queue.');
+      } else {
+        const res = await confirmPaymentAndSendSms(
+          rec.id,
+          {
+            receipt_matches_payment: true,
+            evidence_reviewed: true,
+            reference_verified: true,
+          },
+          'Direct SMS notice dispatched by authorized reviewer'
+        );
+        setSmsActionNotice(res.message || `Transactional SMS queued for ${rec.recipient_name}.`);
+      }
+      refreshSmsOutbox();
+    } catch (err: any) {
+      setSmsActionNotice(err?.message || 'Failed to dispatch transactional SMS.');
+    } finally {
+      setSendingSmsId(null);
+      setTimeout(() => setSmsActionNotice(null), 5000);
     }
   };
 
@@ -971,16 +1013,40 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
                               </button>
                             )}
 
-                            {canReview && (rec.status === 'RECEIPT_UPLOADED' || rec.status === 'UNDER_REVIEW' || rec.status === 'NEEDS_REVIEW') && (
-                              <button
-                                onClick={() => handleOpenReviewModal(rec)}
-                                className="px-2.5 py-1 bg-[#a3e635]/20 text-[#a3e635] hover:bg-[#a3e635]/30 border border-[#a3e635]/40 rounded-lg text-xs font-bold flex items-center gap-1 transition-all"
-                                title="Review and Verify Payment"
-                              >
-                                <FileCheck2 className="w-3.5 h-3.5" />
-                                Review
-                              </button>
-                            )}
+                            {/* Dynamically show or hide 'Confirm Payment' based on user role and site/module scope */}
+                            {checkRoleConfirmationPermission(rec).allowed &&
+                              (rec.status === 'RECEIPT_UPLOADED' ||
+                                rec.status === 'UNDER_REVIEW' ||
+                                rec.status === 'NEEDS_REVIEW') && (
+                                <button
+                                  onClick={() => handleOpenReviewModal(rec)}
+                                  className="px-2.5 py-1 bg-[#a3e635] text-[#080f0d] hover:bg-[#bef264] rounded-lg text-xs font-bold flex items-center gap-1 transition-all shadow-xs"
+                                  title="Confirm Payment & Authorize Disbursement"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  Confirm Payment
+                                </button>
+                              )}
+
+                            {/* Dynamically show or hide 'Send SMS' based on user role, site scope, and receipt existence */}
+                            {checkRoleConfirmationPermission(rec).allowed &&
+                              rec.receipt_evidence?.reference_number &&
+                              rec.status === 'PAID_VERIFIED' &&
+                              rec.sms_status !== 'DELIVERED' && (
+                                <button
+                                  onClick={() => handleDirectSendSms(rec)}
+                                  disabled={sendingSmsId === rec.id}
+                                  className="px-2.5 py-1 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/40 rounded-lg text-xs font-bold flex items-center gap-1 transition-all"
+                                  title="Send Official Transactional SMS Notice to Worker"
+                                >
+                                  {sendingSmsId === rec.id ? (
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-300" />
+                                  ) : (
+                                    <Send className="w-3.5 h-3.5" />
+                                  )}
+                                  Send SMS
+                                </button>
+                              )}
                           </div>
                         </td>
                       </tr>
@@ -1805,15 +1871,36 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
             {/* Modal Actions */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-[#234338]">
               <div className="flex items-center gap-2">
-                {canReview && (
-                  <button
-                    onClick={() => handleOpenReviewModal(activeVoucherRecord)}
-                    className="px-4 py-2 bg-[#a3e635] text-[#080f0d] font-bold rounded-xl text-xs flex items-center gap-1.5 hover:bg-[#bef264]"
-                  >
-                    <FileCheck2 className="w-4 h-4" />
-                    Review &amp; Verify Payment
-                  </button>
-                )}
+                {checkRoleConfirmationPermission(activeVoucherRecord).allowed &&
+                  (activeVoucherRecord.status === 'RECEIPT_UPLOADED' ||
+                    activeVoucherRecord.status === 'UNDER_REVIEW' ||
+                    activeVoucherRecord.status === 'NEEDS_REVIEW') && (
+                    <button
+                      onClick={() => handleOpenReviewModal(activeVoucherRecord)}
+                      className="px-4 py-2 bg-[#a3e635] text-[#080f0d] font-bold rounded-xl text-xs flex items-center gap-1.5 hover:bg-[#bef264]"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Confirm Payment
+                    </button>
+                  )}
+
+                {checkRoleConfirmationPermission(activeVoucherRecord).allowed &&
+                  activeVoucherRecord.receipt_evidence?.reference_number &&
+                  activeVoucherRecord.status === 'PAID_VERIFIED' &&
+                  activeVoucherRecord.sms_status !== 'DELIVERED' && (
+                    <button
+                      onClick={() => handleDirectSendSms(activeVoucherRecord)}
+                      disabled={sendingSmsId === activeVoucherRecord.id}
+                      className="px-4 py-2 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/40 font-bold rounded-xl text-xs flex items-center gap-1.5"
+                    >
+                      {sendingSmsId === activeVoucherRecord.id ? (
+                        <RefreshCw className="w-4 h-4 animate-spin text-emerald-300" />
+                      ) : (
+                        <Send className="w-4 h-4" />
+                      )}
+                      Send SMS
+                    </button>
+                  )}
                 <button
                   onClick={() => handleOpenUploadModal(activeVoucherRecord)}
                   className="px-4 py-2 bg-[#1a362d] text-slate-200 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5"

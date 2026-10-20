@@ -154,12 +154,6 @@ export const CanteenOfflineQueueModal: React.FC<CanteenOfflineQueueModalProps> =
                 {isOnline ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
                 <span>{isOnline ? 'Connected' : 'Disconnected'}</span>
               </div>
-              <button
-                onClick={toggleSimulateOffline}
-                className="text-[10px] text-slate-400 hover:text-white underline mt-0.5 cursor-pointer"
-              >
-                {offlineStats.isSimulatedOffline ? 'End Outage Sim' : 'Simulate Drop'}
-              </button>
             </div>
           </div>
 

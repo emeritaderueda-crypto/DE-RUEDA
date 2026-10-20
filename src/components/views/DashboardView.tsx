@@ -9,6 +9,7 @@ import {
   STORAGE_MILESTONES_KEY,
 } from '../dashboard/ProjectGanttChart';
 import { CriticalMilestoneAlerts } from '../dashboard/CriticalMilestoneAlerts';
+import { OverduePayoutNotificationWidget } from '../dashboard/OverduePayoutNotificationWidget';
 import { LaborCapacityWidget } from '../dashboard/LaborCapacityWidget';
 import { EquipmentSchedulerWidget } from '../dashboard/EquipmentSchedulerWidget';
 import { ManagerApprovalsWidget } from '../dashboard/ManagerApprovalsWidget';
@@ -67,6 +68,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     sites,
     attendance,
     payroll,
+    paymentRecords,
     materials,
     expenses,
     auditLogs,
@@ -145,6 +147,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const pendingPayrollCount = filteredPayroll.filter((p) => p.payment_status === 'Pending').length;
   const pendingProofCount = filteredPayroll.filter((p) => !p.proof_file_id || p.payment_status === 'Pending').length;
+
+  // Notification System: Flag employee records awaiting payout > 48 hours
+  const overduePayoutStats = useMemo(() => {
+    const now = Date.now();
+    let count = 0;
+    let totalAmount = 0;
+    paymentRecords.forEach((p) => {
+      const siteMatch = currentSite === 'ALL' || p.site_id === currentSite;
+      if (siteMatch && p.status === 'AWAITING_PAYMENT') {
+        const createdTime = new Date(p.created_at || p.approved_at || Date.now()).getTime();
+        const ageHours = (now - createdTime) / (1000 * 60 * 60);
+        if (ageHours >= 48) {
+          count += 1;
+          totalAmount += p.expected_amount;
+        }
+      }
+    });
+    return { count, totalAmount };
+  }, [paymentRecords, currentSite]);
 
   // ==========================================
   // PROJECT KPIS CALCULATIONS (FROM CONTEXT)
@@ -714,6 +735,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* ==================================================== */}
+      {/* NOTIFICATION SYSTEM: OVERDUE PAYOUT ALERT (> 48H)    */}
+      {/* Flags employee records with Awaiting Payout status   */}
+      {/* for more than 48 hours and highlights in Dashboard   */}
+      {/* ==================================================== */}
+      <OverduePayoutNotificationWidget onNavigate={onNavigate} />
+
+      {/* ==================================================== */}
       {/* AUTOMATED MANAGER ALERT SYSTEM (CRITICAL MILESTONES) */}
       {/* Push notifications to registered managers for       */}
       {/* critical milestone deadlines within 48 hours         */}
@@ -736,7 +764,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       />
 
       {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3.5">
+        {/* Overdue Payout (>48h) Alert Card */}
+        <div
+          onClick={() => onNavigate('ceo_gcash')}
+          className={`rounded-xl p-4 flex flex-col justify-between cursor-pointer transition-all ${
+            overduePayoutStats.count > 0
+              ? 'bg-linear-to-b from-amber-950/50 to-[#0e1a16] border-2 border-amber-500/70 hover:border-amber-400 shadow-lg shadow-amber-950/40 group'
+              : 'bg-[#0e1a16] border border-[#234338]'
+          }`}
+          title="Click to view all overdue payments in the Payment Records Hub"
+        >
+          <div className="flex items-center justify-between text-slate-400 text-xs">
+            <span className="font-semibold uppercase tracking-wider text-[11px] text-amber-300 flex items-center gap-1.5">
+              {overduePayoutStats.count > 0 && (
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                </span>
+              )}
+              Payout &gt; 48h
+            </span>
+            <AlertTriangle className={`w-4 h-4 ${overduePayoutStats.count > 0 ? 'text-amber-400 animate-pulse' : 'text-slate-500'}`} />
+          </div>
+          <div className="mt-3">
+            <div className="text-2xl sm:text-3xl font-extrabold text-amber-400 font-mono tabular-nums">
+              {overduePayoutStats.count}
+            </div>
+            <div className="text-[11px] text-slate-300 mt-0.5 truncate font-mono">
+              ₱{overduePayoutStats.totalAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })} &bull; Action Req.
+            </div>
+          </div>
+        </div>
         <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400 text-xs">
             <span className="font-semibold uppercase tracking-wider text-[11px]">Active Workforce</span>

@@ -201,6 +201,31 @@ export const AttendanceView: React.FC = () => {
     });
   }, [weekDates, qrScanLogs, attendance, siteFilter]);
 
+  // Derive on-time arrival rate from authoritative attendance records (Section 2 & 10)
+  const onTimeArrivalMetrics = useMemo(() => {
+    const relevant = attendance.filter((a) => {
+      if (siteFilter !== 'ALL' && a.site_id !== siteFilter) return false;
+      return weekDates.includes(a.work_date);
+    });
+
+    if (relevant.length === 0) {
+      return { text: 'No data', sub: 'Zero attendance records logged' };
+    }
+
+    const withTimeIn = relevant.filter((a) => Boolean(a.time_in));
+    if (withTimeIn.length === 0) {
+      return { text: 'No data', sub: 'Zero clock-in timestamps' };
+    }
+
+    const onTimeCount = withTimeIn.filter((a) => {
+      const [h, m] = a.time_in.split(':').map(Number);
+      return (h < 8) || (h === 8 && m <= 5);
+    }).length;
+
+    const rate = ((onTimeCount / withTimeIn.length) * 100).toFixed(1);
+    return { text: `${rate}%`, sub: `${onTimeCount} of ${withTimeIn.length} clock-ins on time` };
+  }, [attendance, siteFilter, weekDates]);
+
   // Filtered last 20 QR scan logs for administrative reference
   const displayedScanLogs = useMemo(() => {
     const list = (qrScanLogs || []).slice(0, 20);
@@ -844,9 +869,9 @@ export const AttendanceView: React.FC = () => {
                 <span>On-Time Arrival</span>
               </div>
               <div className="text-xl sm:text-2xl font-black font-mono text-sky-400 mt-1">
-                96.4%
+                {onTimeArrivalMetrics.text}
               </div>
-              <div className="text-[10px] text-slate-500 mt-0.5">Verified biometric clock-ins</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">{onTimeArrivalMetrics.sub}</div>
             </div>
           </div>
 

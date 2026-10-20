@@ -263,9 +263,9 @@ export interface LoginDirectoryRecord {
   first_login_at: string;
   last_login_at: string;
   login_count: number;
-  gdrive_file_id: string;
-  gdrive_file_url: string;
-  gdrive_folder: string;
+  gdrive_file_id?: string;
+  gdrive_file_url?: string;
+  gdrive_folder?: string;
   device_info: string;
   status: 'active' | 'flagged' | 'archived';
   is_ceo_confidential: boolean;

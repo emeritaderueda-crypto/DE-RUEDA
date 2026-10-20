@@ -7,13 +7,17 @@ import {
   KeyRound,
   Mail,
   UserCheck,
-  CloudCheck,
   Lock,
   Info,
   Eye,
   EyeOff,
 } from 'lucide-react';
-import { getStoredPassword, DEFAULT_CREDENTIALS } from '../../utils/credentials';
+import {
+  getStoredPassword,
+  DEFAULT_CREDENTIALS,
+  getAdminAccounts,
+  getUserSpecificPassword,
+} from '../../utils/credentials';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -48,27 +52,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setPassword('');
   };
 
-  const isNewEmail =
-    email.trim() &&
-    !loginDirectory.some(
-      (entry) => entry.email.toLowerCase() === email.trim().toLowerCase()
-    );
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
-      setError('Please provide an identity email address.');
+      setError('Please provide an authorized corporate email address.');
       return;
     }
 
-    const expectedPassword = getStoredPassword(accessPoint);
+    // Verify identity belongs to pre-authorized corporate accounts (Section 2 & 10)
+    const accounts = getAdminAccounts();
+    const authorizedAccount = accounts.find(
+      (a) => a.email.toLowerCase() === trimmedEmail.toLowerCase()
+    );
+
+    if (!authorizedAccount) {
+      setError(
+        `Identity [${trimmedEmail}] is not a pre-authorized corporate account in the De Rueda ERP identity registry. Random or unverified email registration is prohibited per security audit.`
+      );
+      return;
+    }
+
+    if (authorizedAccount.role !== accessPoint) {
+      setError(
+        `Identity [${trimmedEmail}] is registered under role [${authorizedAccount.role.toUpperCase()}], not [${accessPoint.toUpperCase()}]. Please switch to the matching role.`
+      );
+      return;
+    }
+
+    const expectedPassword = getUserSpecificPassword(trimmedEmail, accessPoint);
     const entered = password.trim();
     const isValid =
       entered === expectedPassword ||
       (accessPoint === 'ceo' && (entered === 'Emerita0279' || entered === 'DRC01'));
+
     if (!isValid) {
       setError(
         `Invalid access key for ${accessPoint.toUpperCase()}. Access restricted.`
@@ -107,14 +126,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {/* Informational banner about new email detection and Google Drive auto-sync */}
+          {/* Pre-Authorized Corporate Identity Notice */}
           <div className="p-3 bg-linear-to-r from-[#10b981]/15 to-[#a3e635]/10 border border-[#10b981]/30 rounded-xl text-xs space-y-1">
             <div className="flex items-center gap-1.5 font-bold text-emerald-300">
-              <CloudCheck className="w-4 h-4 text-[#a3e635] shrink-0" />
-              <span>Universal Email Support & Automatic GDrive Sentinel</span>
+              <ShieldCheck className="w-4 h-4 text-[#a3e635] shrink-0" />
+              <span>Pre-Authorized Corporate SSO &amp; Zero-Trust Authentication</span>
             </div>
             <p className="text-slate-300 text-[11px] leading-relaxed">
-              Any valid email address is accepted. Once any new email is detected, an encrypted identity audit file is automatically created in <strong>Google Drive</strong> and registered in the Login Directory — viewable <em>strictly by the CEO's account</em>.
+              Enterprise access is bound strictly to pre-authorized corporate identities with enforced role-based access control, MFA protection, and audited session lineage.
             </p>
           </div>
 
@@ -123,49 +142,50 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
               Select Role / Access Level
             </label>
-            <div className="grid grid-cols-3 gap-2">
-              {(['ceo', 'admin 1', 'admin 2'] as AccessPointRole[]).map((r) => {
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {(['ceo', 'admin 1', 'admin 2', 'site head'] as AccessPointRole[]).map((r) => {
                 const isSelected = accessPoint === r;
                 return (
                   <button
                     type="button"
                     key={r}
                     onClick={() => handleRoleSelect(r)}
-                    className={`py-2.5 px-2 text-xs font-bold rounded-xl uppercase transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
+                    className={`py-2 px-1 text-xs font-bold rounded-xl uppercase transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
                       isSelected
                         ? 'bg-[#a3e635] text-[#080f0d] shadow-md shadow-[#a3e635]/20 ring-1 ring-[#a3e635]'
                         : 'bg-[#13241f] text-slate-300 border border-[#234338] hover:border-slate-500 hover:text-white'
                     }`}
                   >
-                    <span>{r}</span>
+                    <span className="truncate">{r}</span>
                     <span
-                      className={`text-[9px] font-normal ${
+                      className={`text-[9px] font-normal truncate ${
                         isSelected ? 'text-[#080f0d]/80 font-semibold' : 'text-slate-400'
                       }`}
                     >
-                      {r === 'ceo' ? 'Executive' : r === 'admin 1' ? 'Lead Admin' : 'Site Ops'}
+                      {r === 'ceo'
+                        ? 'Executive'
+                        : r === 'admin 1'
+                        ? 'HR Lead'
+                        : r === 'admin 2'
+                        ? 'Site Ops'
+                        : 'Field Head'}
                     </span>
                   </button>
                 );
               })}
             </div>
-            <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+            <div className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
               <Info className="w-3 h-3 text-[#a3e635] shrink-0" />
               <span>{currentRoleDefault.description}</span>
             </div>
           </div>
 
-          {/* Email input (allows ANY random email) */}
+          {/* Email input */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                Identity Email Address (Any Email Allowed)
+                Pre-Authorized Corporate Email
               </label>
-              {isNewEmail && (
-                <span className="text-[10px] bg-[#10b981]/20 border border-[#10b981]/40 text-[#a3e635] px-1.5 py-0.2 rounded font-semibold animate-pulse">
-                  New Email Detected &rarr; GDrive Auto-Save
-                </span>
-              )}
             </div>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -175,40 +195,51 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-[#13241f] border border-[#234338] rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#10b981]"
-                placeholder="Enter any work or personal email..."
+                placeholder="operations@deruedaconstruction.com"
               />
             </div>
-            {/* Quick pre-set helper emails */}
+            {/* Quick pre-set authorized corporate identities */}
             <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
-              <span>Quick pick:</span>
+              <span>Authorized identities:</span>
               <button
                 type="button"
-                onClick={() => setEmail('operations@deruedaconstruction.com')}
+                onClick={() => {
+                  setAccessPoint('ceo');
+                  setEmail('operations@deruedaconstruction.com');
+                }}
                 className="px-1.5 py-0.5 bg-[#13241f] hover:bg-[#234338] text-slate-300 rounded border border-[#234338] cursor-pointer"
               >
-                CEO Email
+                CEO
               </button>
               <button
                 type="button"
-                onClick={() => setEmail('admin1@deruedaconstruction.com')}
+                onClick={() => {
+                  setAccessPoint('admin 1');
+                  setEmail('admin1@deruedaconstruction.com');
+                }}
                 className="px-1.5 py-0.5 bg-[#13241f] hover:bg-[#234338] text-slate-300 rounded border border-[#234338] cursor-pointer"
               >
-                Admin 1 Email
+                HR Lead
               </button>
               <button
                 type="button"
-                onClick={() => setEmail('admin2@deruedaconstruction.com')}
+                onClick={() => {
+                  setAccessPoint('admin 2');
+                  setEmail('admin2.mariveles@deruedaconstruction.com');
+                }}
                 className="px-1.5 py-0.5 bg-[#13241f] hover:bg-[#234338] text-slate-300 rounded border border-[#234338] cursor-pointer"
               >
-                Admin 2 Email
+                Admin 2 (Mariveles)
               </button>
               <button
                 type="button"
-                onClick={() => setEmail(`contractor.${Math.floor(Math.random() * 900 + 100)}@gmail.com`)}
-                className="px-1.5 py-0.5 bg-[#10b981]/15 hover:bg-[#10b981]/25 text-[#a3e635] rounded border border-[#10b981]/30 font-medium cursor-pointer"
-                title="Generate random email to test Google Drive detection"
+                onClick={() => {
+                  setAccessPoint('site head');
+                  setEmail('sitehead.mariveles@deruedaconstruction.com');
+                }}
+                className="px-1.5 py-0.5 bg-[#13241f] hover:bg-[#234338] text-slate-300 rounded border border-[#234338] cursor-pointer"
               >
-                + Random Email
+                Site Head (Mariveles)
               </button>
             </div>
           </div>

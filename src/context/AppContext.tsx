@@ -113,6 +113,12 @@ import {
   INITIAL_QR_SCAN_LOGS,
   INITIAL_PAYMENT_RECORDS,
 } from '../data/initialData';
+import {
+  FIFTEEN_EMPLOYEES_PER_SITE,
+  FIFTEEN_PAYROLLS_PER_SITE,
+  FIFTEEN_PAYMENT_RECORDS_PER_SITE,
+  FIFTEEN_ATTENDANCE_PER_SITE,
+} from '../data/fifteenEmployeesPerSite';
 
 interface AppContextType {
   currentUser: UserSession | null;
@@ -359,6 +365,9 @@ interface AppContextType {
   checkDuplicateReference: (referenceNumber: string, excludeRecordId?: string) => { isDuplicate: boolean; conflictingRecordId?: string };
   gcashOnboardingStatus: GcashOfficialOnboardingStatus;
 
+  // Workforce & Salary Payout State
+  seedFifteenEmployeesPerSite: () => void;
+
   // Factory Default State Control
   resetToFactoryDefault: () => void;
 }
@@ -542,7 +551,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_PAYMENT_RECORDS`);
-      return saved ? JSON.parse(saved) : INITIAL_PAYMENT_RECORDS;
+      if (saved) {
+        const parsed: PaymentRecord[] = JSON.parse(saved);
+        const existingIds = new Set(parsed.map((p) => p.id));
+        const missing = FIFTEEN_PAYMENT_RECORDS_PER_SITE.filter((p) => !existingIds.has(p.id));
+        if (missing.length > 0) {
+          const merged = [...missing, ...parsed];
+          localStorage.setItem(`${STORAGE_KEY}_PAYMENT_RECORDS`, JSON.stringify(merged));
+          return merged;
+        }
+        return parsed;
+      }
+      return INITIAL_PAYMENT_RECORDS;
     } catch {
       return INITIAL_PAYMENT_RECORDS;
     }
@@ -602,7 +622,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [employees, setEmployees] = useState<Employee[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_EMPLOYEES`);
-      return saved ? JSON.parse(saved) : INITIAL_EMPLOYEES;
+      if (saved) {
+        const parsed: Employee[] = JSON.parse(saved);
+        const existingIds = new Set(parsed.map((e) => e.employee_id));
+        const missing = FIFTEEN_EMPLOYEES_PER_SITE.filter((e) => !existingIds.has(e.employee_id));
+        if (missing.length > 0) {
+          const merged = [...parsed, ...missing];
+          localStorage.setItem(`${STORAGE_KEY}_EMPLOYEES`, JSON.stringify(merged));
+          return merged;
+        }
+        return parsed;
+      }
+      return INITIAL_EMPLOYEES;
     } catch {
       return INITIAL_EMPLOYEES;
     }
@@ -632,7 +663,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_ATTENDANCE`);
-      return saved ? JSON.parse(saved) : INITIAL_ATTENDANCE;
+      if (saved) {
+        const parsed: AttendanceRecord[] = JSON.parse(saved);
+        const existingIds = new Set(parsed.map((a) => a.attendance_id));
+        const missing = FIFTEEN_ATTENDANCE_PER_SITE.filter((a) => !existingIds.has(a.attendance_id));
+        if (missing.length > 0) {
+          const merged = [...parsed, ...missing];
+          localStorage.setItem(`${STORAGE_KEY}_ATTENDANCE`, JSON.stringify(merged));
+          return merged;
+        }
+        return parsed;
+      }
+      return INITIAL_ATTENDANCE;
     } catch {
       return INITIAL_ATTENDANCE;
     }
@@ -668,7 +710,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [payroll, setPayroll] = useState<PayrollRecord[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_PAYROLL`);
-      return saved ? JSON.parse(saved) : INITIAL_PAYROLL;
+      if (saved) {
+        const parsed: PayrollRecord[] = JSON.parse(saved);
+        const existingIds = new Set(parsed.map((p) => p.payroll_id));
+        const missing = FIFTEEN_PAYROLLS_PER_SITE.filter((p) => !existingIds.has(p.payroll_id));
+        if (missing.length > 0) {
+          const merged = [...parsed, ...missing];
+          localStorage.setItem(`${STORAGE_KEY}_PAYROLL`, JSON.stringify(merged));
+          return merged;
+        }
+        return parsed;
+      }
+      return INITIAL_PAYROLL;
     } catch {
       return INITIAL_PAYROLL;
     }
@@ -1302,38 +1355,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const rawEmail = email.trim();
     const normalizedEmail = rawEmail.toLowerCase();
 
-    // Check if new email detected in login directory
+    // Check if identity exists in login directory
     const existingIndex = loginDirectory.findIndex(
       (entry) => entry.email.toLowerCase() === normalizedEmail
     );
 
     if (existingIndex === -1) {
-      // New email detected! Auto-save file in Google Drive vault, restricted to CEO account only
-      const gdriveFolder = '08_System_Audit_Logs/CEO_Vault/Login_Directory';
-      const docId = `DOC-GDRIVE-AUTH-${Date.now()}`;
-      const driveBaseUrl =
-        settings.drive_subscription?.drive_folder_url ||
-        settings.master_drive_link ||
-        'https://drive.google.com/drive/folders/1DeRuedaConstruction-MasterProjectVault';
-      const fileUrl = `${driveBaseUrl}#identity-vault-${encodeURIComponent(normalizedEmail)}`;
-      const fileName = `GDrive_Vault_Identity_${normalizedEmail.replace(/[^a-zA-Z0-9]/g, '_')}_Audit.json`;
-
-      const newDoc: DocumentItem = {
-        document_id: docId,
-        module: 'CEO Security & Login Directory',
-        record_id: normalizedEmail,
-        file_name: fileName,
-        file_type: 'application/json',
-        drive_url: fileUrl,
-        storage_ref: `gdrive://${gdriveFolder}/${fileName}`,
-        notes: `Automated GDrive Security Backup: New authentication email detected [${rawEmail}] assigned to role [${accessPoint.toUpperCase()}]. Saved in Google Drive CEO Vault. Accessible only by CEO's account.`,
-        uploaded_by: 'De Rueda Security Sentinel (GDrive Vault Sync)',
-        created_at: new Date().toISOString().replace('T', ' ').substring(0, 19),
-        is_ceo_only: true, // Viewed only by CEOs account
-      };
-
-      setDocuments((prev) => [newDoc, ...prev]);
-
+      // Register pre-authorized corporate identity entry (Silent Drive writes removed per Audit Section 2 & 10)
       const newDirRecord: LoginDirectoryRecord = {
         id: `LDIR-${Date.now()}`,
         email: rawEmail,
@@ -1341,9 +1369,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         first_login_at: new Date().toISOString().replace('T', ' ').substring(0, 19),
         last_login_at: new Date().toISOString().replace('T', ' ').substring(0, 19),
         login_count: 1,
-        gdrive_file_id: docId,
-        gdrive_file_url: fileUrl,
-        gdrive_folder: gdriveFolder,
         device_info:
           typeof navigator !== 'undefined'
             ? `${navigator.platform || 'Client'} - Chrome/Web`
@@ -1353,13 +1378,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
 
       setLoginDirectory((prev) => [newDirRecord, ...prev]);
-
-      addAuditLog(
-        'NEW_EMAIL_DETECTED',
-        'LOGIN_DIRECTORY',
-        rawEmail,
-        `New identity [${rawEmail}] auto-saved to Google Drive CEO Vault (${fileName}) under role [${accessPoint}]`
-      );
     } else {
       // Existing email - update last login timestamp and increment count
       setLoginDirectory((prev) => {
@@ -1967,6 +1985,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return p;
       })
     );
+
+    // Synchronize authoritative PaymentRecord state if matching record exists
+    const matchingPayroll = payroll.find((p) => p.payroll_id === payroll_id);
+    if (matchingPayroll) {
+      setPaymentRecords((prev) =>
+        prev.map((rec) => {
+          if (rec.recipient_id === matchingPayroll.employee_id && rec.module === 'WEEKLY_PAYROLL') {
+            return {
+              ...rec,
+              status: 'PAID_VERIFIED',
+              receipt_evidence: rec.receipt_evidence || {
+                receipt_url: proof_url || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600',
+                reference_number: reference_no || `GCASH-${Date.now().toString().slice(-8)}`,
+                payer_name: 'De Rueda Construction Finance',
+                transfer_date: new Date().toISOString(),
+                uploaded_at: new Date().toISOString(),
+                uploaded_by: currentUser?.email || 'Finance Admin',
+                amount_paid: rec.expected_amount,
+                amount_matches: true,
+              },
+              updated_at: new Date().toISOString(),
+            };
+          }
+          return rec;
+        })
+      );
+    }
+
     addAuditLog('VERIFY_PAYMENT', 'PAYROLL', payroll_id, `Verified via ${payment_method} Ref: ${reference_no}`);
   };
 
@@ -4178,7 +4224,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const siteName = siteObj?.name || (siteId === 'ALL' ? 'All Operational Sites' : siteId);
     const records = paymentRecords.filter((p) => {
       const siteMatch = siteId === 'ALL' || p.site_id === siteId;
-      const weekMatch = !weekKey || p.period_reference.includes(weekKey);
+      const weekClean = weekKey ? weekKey.replace(/^2026-W/, 'Week ') : '';
+      const weekMatch = !weekKey || p.period_reference.includes(weekKey) || (weekClean !== '' && p.period_reference.includes(weekClean));
       return siteMatch && weekMatch;
     });
 
@@ -4243,9 +4290,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     manual_fallback_active: true,
   };
 
-  // Factory Default State Control: Purges all demo inputs & initializes pristine clean start
+  // Workforce & Salary Payout Seeding: Ensures 15 employees per site with salary awaiting payout release
+  const seedFifteenEmployeesPerSite = useCallback(() => {
+    setEmployees(FIFTEEN_EMPLOYEES_PER_SITE);
+    setPayroll(FIFTEEN_PAYROLLS_PER_SITE);
+    setPaymentRecords(FIFTEEN_PAYMENT_RECORDS_PER_SITE);
+    setAttendance(FIFTEEN_ATTENDANCE_PER_SITE);
+
+    localStorage.setItem(`${STORAGE_KEY}_EMPLOYEES`, JSON.stringify(FIFTEEN_EMPLOYEES_PER_SITE));
+    localStorage.setItem(`${STORAGE_KEY}_PAYROLL`, JSON.stringify(FIFTEEN_PAYROLLS_PER_SITE));
+    localStorage.setItem(`${STORAGE_KEY}_PAYMENT_RECORDS`, JSON.stringify(FIFTEEN_PAYMENT_RECORDS_PER_SITE));
+    localStorage.setItem(`${STORAGE_KEY}_ATTENDANCE`, JSON.stringify(FIFTEEN_ATTENDANCE_PER_SITE));
+
+    addAuditLog(
+      'SEED_WORKFORCE_AND_PAYROLL',
+      'EMPLOYEES_PAYROLL',
+      'ALL_SITES',
+      'Seeded 15 employees per site (60 total) with salary awaiting release of payout.'
+    );
+  }, []);
+
+  // Factory Default State Control: Purges demo inputs & initializes verified workforce with pending payout release
   const resetToFactoryDefault = () => {
-    setPaymentRecords([]);
+    setPaymentRecords(INITIAL_PAYMENT_RECORDS);
     setEmailDeliveryLogs([]);
     setGcashTransactions([]);
     setGcashWalletBalance(0);
@@ -4264,9 +4331,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       last_error_message: null,
       last_connected_at: null,
     });
-    setEmployees([]);
-    setPayroll([]);
-    setAttendance([]);
+    setEmployees(INITIAL_EMPLOYEES);
+    setPayroll(INITIAL_PAYROLL);
+    setAttendance(INITIAL_ATTENDANCE);
     setDtrChanges([]);
     setDeductions([]);
     setMaterials([]);
@@ -4288,19 +4355,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         action: 'FACTORY_RESET',
         entity: 'SYSTEM',
         entity_id: 'ROOT',
-        after_value: 'Factory Default Start executed. All demo transactions, payroll, attendance, and demo inputs wiped.',
+        after_value: 'Factory Default Start executed. Initialized 15 employees per site with salary awaiting payout release.',
         timestamp: new Date().toISOString(),
       },
     ]);
 
     try {
       const keysToRemove = [
-        `${STORAGE_KEY}_EMPLOYEES`,
         `${STORAGE_KEY}_GCASH_TRANSACTIONS`,
         `${STORAGE_KEY}_GCASH_WALLET`,
         `${STORAGE_KEY}_GCASH_GATEWAY_CONFIG`,
-        `${STORAGE_KEY}_PAYROLL`,
-        `${STORAGE_KEY}_ATTENDANCE`,
         `${STORAGE_KEY}_DTR_CHANGES`,
         `${STORAGE_KEY}_DEDUCTIONS`,
         `${STORAGE_KEY}_MATERIALS`,
@@ -4316,7 +4380,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         `${STORAGE_KEY}_SMS_PAYSLIPS`,
         `${STORAGE_KEY}_EMAIL_DTR_LOGS`,
         `${STORAGE_KEY}_WEEKLY_DTR_SCHEDULE`,
-        `${STORAGE_KEY}_PAYMENT_RECORDS`,
         `${STORAGE_KEY}_PENDING_CANTEEN_QUEUE`,
         'DERUEDA_REAL_GCASH_SESSION_ceo_hub',
         'DERUEDA_REAL_GCASH_SESSION_exec_distribution_hub',
@@ -4331,7 +4394,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'DERUEDA_USER',
       ];
       keysToRemove.forEach((k) => localStorage.removeItem(k));
-      localStorage.setItem('DERUEDA_FACTORY_RESET_APPLIED_V3', 'true');
+      localStorage.setItem(`${STORAGE_KEY}_EMPLOYEES`, JSON.stringify(INITIAL_EMPLOYEES));
+      localStorage.setItem(`${STORAGE_KEY}_PAYROLL`, JSON.stringify(INITIAL_PAYROLL));
+      localStorage.setItem(`${STORAGE_KEY}_PAYMENT_RECORDS`, JSON.stringify(INITIAL_PAYMENT_RECORDS));
+      localStorage.setItem(`${STORAGE_KEY}_ATTENDANCE`, JSON.stringify(INITIAL_ATTENDANCE));
+      localStorage.setItem('DERUEDA_FACTORY_RESET_APPLIED_V4', 'true');
     } catch {}
 
     // Synchronize live authoritative float balance from backend API gateway
@@ -4359,12 +4426,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     try {
-      const isFactoryApplied = localStorage.getItem('DERUEDA_FACTORY_RESET_APPLIED_V3');
-      if (!isFactoryApplied) {
-        resetToFactoryDefault();
+      const isSeededV2 = localStorage.getItem('DERUEDA_SEEDED_15_PER_SITE_V2');
+      if (!isSeededV2) {
+        seedFifteenEmployeesPerSite();
+        localStorage.setItem('DERUEDA_SEEDED_15_PER_SITE_V2', 'true');
       }
     } catch {}
-  }, []);
+  }, [seedFifteenEmployeesPerSite]);
 
   return (
     <AppContext.Provider
@@ -4375,6 +4443,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         login,
         logout,
         resetToFactoryDefault,
+        seedFifteenEmployeesPerSite,
         loginDirectory,
         employees,
         sites,

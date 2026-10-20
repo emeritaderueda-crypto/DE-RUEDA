@@ -28,9 +28,16 @@ import {
   FileText,
   DollarSign,
   Calendar,
+  Camera,
+  Clock,
+  AlertTriangle,
+  ArrowRight,
+  Wallet,
 } from 'lucide-react';
 import { EmployeeQrBadgeExportModal } from '../modals/EmployeeQrBadgeExportModal';
 import { BulkQrExportModal } from '../modals/BulkQrExportModal';
+import { HrEmployeePhotoCaptureModal } from '../modals/HrEmployeePhotoCaptureModal';
+import { EmployeesPayoutSummaryDashboard } from '../employees/EmployeesPayoutSummaryDashboard';
 
 export const EmployeesView: React.FC = () => {
   const {
@@ -41,6 +48,10 @@ export const EmployeesView: React.FC = () => {
     updateEmployee,
     archiveEmployee,
     rehireEmployee,
+    paymentRecords,
+    payroll,
+    verifyPayrollProof,
+    addAuditLog,
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -58,6 +69,8 @@ export const EmployeesView: React.FC = () => {
   const [isQrExportModalOpen, setIsQrExportModalOpen] = useState(false);
   const [exportModalInitialEmpId, setExportModalInitialEmpId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isPhotoCaptureOpen, setIsPhotoCaptureOpen] = useState(false);
+  const [photoCaptureTarget, setPhotoCaptureTarget] = useState<'NEW' | 'EDIT'>('NEW');
 
   // Add form state
   const [formData, setFormData] = useState({
@@ -75,6 +88,12 @@ export const EmployeesView: React.FC = () => {
     drive_link: '',
   });
 
+  const [payoutStatusFilter, setPayoutStatusFilter] = useState<'ALL' | 'PENDING' | 'RELEASED' | 'OVERDUE_48H'>('ALL');
+  const [quickPayoutEmp, setQuickPayoutEmp] = useState<Employee | null>(null);
+  const [quickPayoutRef, setQuickPayoutRef] = useState<string>('');
+  const [isQuickPayoutProcessing, setIsQuickPayoutProcessing] = useState<boolean>(false);
+  const [quickPayoutToast, setQuickPayoutToast] = useState<string | null>(null);
+
   const filtered = employees.filter((emp) => {
     const q = searchQuery.toLowerCase();
     const matchesQ =
@@ -89,7 +108,33 @@ export const EmployeesView: React.FC = () => {
       (categoryFilter === 'Office-Based' ? isEmpOffice : !isEmpOffice);
     const matchesStatus = statusFilter === 'ALL' || emp.status === statusFilter;
 
-    return matchesQ && matchesSite && matchesCategory && matchesStatus;
+    let matchesPayout = true;
+    if (payoutStatusFilter !== 'ALL') {
+      const payRec = paymentRecords.find(
+        (p) => p.recipient_id === emp.employee_id && p.module === 'WEEKLY_PAYROLL'
+      );
+      const payrollItem = payroll.find((pr) => pr.employee_id === emp.employee_id);
+      const isReleased =
+        payRec?.status === 'PAID_VERIFIED' ||
+        payrollItem?.payment_status === 'Verified' ||
+        payrollItem?.payment_status === 'Paid';
+
+      if (payoutStatusFilter === 'RELEASED') {
+        matchesPayout = isReleased;
+      } else if (payoutStatusFilter === 'PENDING') {
+        matchesPayout = !isReleased;
+      } else if (payoutStatusFilter === 'OVERDUE_48H') {
+        if (isReleased) {
+          matchesPayout = false;
+        } else {
+          const createdTime = new Date(payRec?.created_at || payrollItem?.created_at || emp.created_at).getTime();
+          const ageHours = (Date.now() - createdTime) / (1000 * 60 * 60);
+          matchesPayout = ageHours >= 48;
+        }
+      }
+    }
+
+    return matchesQ && matchesSite && matchesCategory && matchesStatus && matchesPayout;
   });
 
   const handleCreateSubmit = (e: React.FormEvent) => {
@@ -357,6 +402,14 @@ export const EmployeesView: React.FC = () => {
         </div>
       </div>
 
+      {/* Visual Summary Dashboard: Payout Pending versus Payout Released Statuses (15 employees per site) */}
+      <EmployeesPayoutSummaryDashboard
+        selectedSiteFilter={siteFilter}
+        onSelectSiteFilter={(s) => setSiteFilter(s)}
+        payoutStatusFilter={payoutStatusFilter}
+        onSelectPayoutStatusFilter={(st) => setPayoutStatusFilter(st)}
+      />
+
       {/* Filter and Search Bar */}
       <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-3 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px]">
@@ -429,13 +482,14 @@ export const EmployeesView: React.FC = () => {
                 <th className="p-3">Govt & GCash IDs</th>
                 <th className="p-3 text-center">QR Ver</th>
                 <th className="p-3">Status</th>
+                <th className="p-3">Salary Payout Status</th>
                 <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#234338]/40">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-10 text-center text-slate-400">
+                  <td colSpan={10} className="p-10 text-center text-slate-400">
                     <div className="max-w-md mx-auto space-y-2">
                       <div className="w-10 h-10 rounded-full bg-[#13241f] border border-[#234338] flex items-center justify-center mx-auto text-[#a3e635]">
                         <UserPlus className="w-5 h-5" />
@@ -518,6 +572,65 @@ export const EmployeesView: React.FC = () => {
                         {emp.status}
                       </span>
                     </td>
+                    {/* Salary Payout Status Column */}
+                    {(() => {
+                      const payRec = paymentRecords.find(
+                        (p) => p.recipient_id === emp.employee_id && p.module === 'WEEKLY_PAYROLL'
+                      );
+                      const payrollItem = payroll.find((pr) => pr.employee_id === emp.employee_id);
+                      const isReleased =
+                        payRec?.status === 'PAID_VERIFIED' ||
+                        payrollItem?.payment_status === 'Verified' ||
+                        payrollItem?.payment_status === 'Paid';
+                      const amount = payRec?.expected_amount || payrollItem?.net_pay || emp.daily_rate * 6 * 0.85;
+
+                      const createdTime = new Date(payRec?.created_at || payrollItem?.created_at || emp.created_at).getTime();
+                      const ageHours = Math.max(0, Math.floor((Date.now() - createdTime) / (1000 * 60 * 60)));
+                      const isOverdue48h = !isReleased && ageHours >= 48;
+
+                      return (
+                        <td className="p-3 whitespace-nowrap">
+                          {isReleased ? (
+                            <div className="space-y-0.5">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                Payout Released
+                              </span>
+                              <div className="text-[10px] text-emerald-400 font-mono font-bold">
+                                ₱{amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                  <Clock className="w-3 h-3 text-amber-400" />
+                                  Payout Pending
+                                </span>
+                                {isOverdue48h && (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-rose-500 text-white shadow-xs" title={`Pending for ${ageHours} hours`}>
+                                    &gt;48h
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-amber-300 font-mono font-bold">
+                                ₱{amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setQuickPayoutEmp(emp);
+                                  setQuickPayoutRef(`GCASH-${Date.now().toString().slice(-8)}`);
+                                }}
+                                className="px-2 py-0.5 bg-[#a3e635]/20 hover:bg-[#a3e635] text-[#a3e635] hover:text-[#080f0d] border border-[#a3e635]/40 rounded text-[10px] font-bold transition-all cursor-pointer inline-flex items-center gap-1"
+                              >
+                                <Wallet className="w-2.5 h-2.5" />
+                                Release Payout
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })()}
                     <td className="p-3 text-right whitespace-nowrap">
                       <div className="inline-flex items-center gap-1.5">
                         <button
@@ -655,14 +768,41 @@ export const EmployeesView: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Worker Photo / Avatar URL</label>
-                  <input
-                    type="url"
-                    value={formData.photo_url}
-                    onChange={(e) => setFormData({ ...formData, photo_url: e.target.value })}
-                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white"
-                    placeholder="https://images.unsplash.com/... (optional)"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-300 font-semibold">Worker ID Photo (DOLE Compliant)</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPhotoCaptureTarget('NEW');
+                        setIsPhotoCaptureOpen(true);
+                      }}
+                      className="px-2 py-0.5 bg-[#a3e635]/15 hover:bg-[#a3e635]/25 text-[#a3e635] border border-[#a3e635]/30 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Open live camera to capture high-res ID badge photo"
+                    >
+                      <Camera className="w-3 h-3" />
+                      <span>Open Camera</span>
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {formData.photo_url ? (
+                      <img
+                        src={formData.photo_url}
+                        alt="Preview"
+                        className="w-8 h-8 rounded-full object-cover border border-[#a3e635] shrink-0"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-[#13241f] border border-[#234338] flex items-center justify-center text-slate-500 shrink-0">
+                        <Camera className="w-4 h-4 text-slate-500" />
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      value={formData.photo_url}
+                      onChange={(e) => setFormData({ ...formData, photo_url: e.target.value })}
+                      className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white text-[11px]"
+                      placeholder="Use Open Camera or paste photo URL / base64"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -836,14 +976,41 @@ export const EmployeesView: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Worker Photo / Avatar URL</label>
-                  <input
-                    type="url"
-                    value={editingEmp.photo_url || ''}
-                    onChange={(e) => setEditingEmp({ ...editingEmp, photo_url: e.target.value })}
-                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white"
-                    placeholder="https://images.unsplash.com/..."
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-300 font-semibold">Worker ID Photo (DOLE Compliant)</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPhotoCaptureTarget('EDIT');
+                        setIsPhotoCaptureOpen(true);
+                      }}
+                      className="px-2 py-0.5 bg-[#a3e635]/15 hover:bg-[#a3e635]/25 text-[#a3e635] border border-[#a3e635]/30 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Open live camera to capture high-res ID badge photo"
+                    >
+                      <Camera className="w-3 h-3" />
+                      <span>Open Camera</span>
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {editingEmp.photo_url ? (
+                      <img
+                        src={editingEmp.photo_url}
+                        alt="Preview"
+                        className="w-8 h-8 rounded-full object-cover border border-[#a3e635] shrink-0"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-[#13241f] border border-[#234338] flex items-center justify-center text-slate-500 shrink-0">
+                        <Camera className="w-4 h-4 text-slate-500" />
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      value={editingEmp.photo_url || ''}
+                      onChange={(e) => setEditingEmp({ ...editingEmp, photo_url: e.target.value })}
+                      className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white text-[11px]"
+                      placeholder="Use Open Camera or paste photo URL / base64"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1374,6 +1541,21 @@ export const EmployeesView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* HR Employee ID Photo Capture Modal (Priority 4 / Section 6) */}
+      <HrEmployeePhotoCaptureModal
+        isOpen={isPhotoCaptureOpen}
+        onClose={() => setIsPhotoCaptureOpen(false)}
+        employeeName={photoCaptureTarget === 'NEW' ? formData.name : (editingEmp?.name || '')}
+        currentPhotoUrl={photoCaptureTarget === 'NEW' ? formData.photo_url : editingEmp?.photo_url}
+        onPhotoSaved={(photoDataUrl) => {
+          if (photoCaptureTarget === 'NEW') {
+            setFormData((prev) => ({ ...prev, photo_url: photoDataUrl }));
+          } else if (editingEmp) {
+            setEditingEmp((prev) => (prev ? { ...prev, photo_url: photoDataUrl } : null));
+          }
+        }}
+      />
     </div>
   );
 };

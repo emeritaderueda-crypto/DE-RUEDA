@@ -532,23 +532,7 @@ export const TurnstileQrScannerModal: React.FC<TurnstileQrScannerModalProps> = (
                     className="px-4 py-2 bg-[#13241f] border border-[#234338] text-slate-200 hover:text-white font-semibold text-xs rounded-lg hover:bg-[#1a332c] flex items-center gap-1.5"
                   >
                     <Upload className="w-4 h-4 text-emerald-400" />
-                    Upload Badge Image
                   </button>
-
-                  {employees.length > 0 && (
-                    <button
-                      onClick={() => {
-                        const firstEmp = employees[0];
-                        handleDecodedPayload(
-                          JSON.stringify({ employee_id: firstEmp.employee_id, qr_version: firstEmp.qr_version })
-                        );
-                      }}
-                      className="px-4 py-2 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:text-white font-bold text-xs rounded-lg hover:bg-emerald-500/25 flex items-center gap-1.5"
-                    >
-                      <Sparkles className="w-4 h-4 text-[#a3e635]" />
-                      Scan Sample Badge
-                    </button>
-                  )}
                 </div>
               </div>
             )}
@@ -700,61 +684,6 @@ export const TurnstileQrScannerModal: React.FC<TurnstileQrScannerModalProps> = (
                 Log Attendance
               </button>
             </form>
-          </div>
-
-          {/* Quick Field Simulation Buttons */}
-          <div className="pt-2 border-t border-[#234338]">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#a3e635]" />
-                Simulate Direct Badge Touch (Physical Turnstile Tap):
-              </span>
-              <span className="text-[10px] text-slate-500">Tap to test engine</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-              {employees.slice(0, 6).map((e) => (
-                <button
-                  key={e.employee_id}
-                  onClick={() => {
-                    handleDecodedPayload(
-                      JSON.stringify({ employee_id: e.employee_id, qr_version: e.qr_version })
-                    );
-                  }}
-                  disabled={isProcessing}
-                  className="p-2.5 bg-[#13241f] border border-[#234338] hover:border-[#a3e635] rounded-xl text-left text-xs text-slate-300 hover:text-white transition-all hover:bg-[#193029] flex flex-col justify-between"
-                >
-                  <div className="font-bold text-white flex items-center justify-between">
-                    <span className="truncate">{e.name}</span>
-                    <span className="text-[10px] font-mono text-[#a3e635] bg-[#0e1a16] px-1.5 py-0.5 rounded border border-[#234338]">
-                      v{e.qr_version}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
-                    <span>{e.position}</span>
-                    <span className="font-mono text-emerald-400">{e.site_id}</span>
-                  </div>
-                </button>
-              ))}
-
-              {/* Security Test: Outdated QR Version Rejection */}
-              <button
-                onClick={() => {
-                  handleDecodedPayload(
-                    JSON.stringify({ employee_id: employees[0]?.employee_id, qr_version: 999 })
-                  );
-                }}
-                className="p-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-left text-xs text-red-300 hover:bg-red-500/20 transition-colors sm:col-span-2"
-              >
-                <div className="font-bold text-red-200 flex items-center gap-1.5">
-                  <ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />
-                  Test Reassigned Worker / Obsolete QR Badge (Security Audit)
-                </div>
-                <div className="text-[10px] text-red-400/90 mt-0.5">
-                  Verifies turnstile rejects outdated printed badges when worker was reassigned to another site
-                </div>
-              </button>
-            </div>
           </div>
         </div>
 

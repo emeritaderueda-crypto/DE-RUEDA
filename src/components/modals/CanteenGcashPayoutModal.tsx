@@ -90,7 +90,7 @@ export const CanteenGcashPayoutModal: React.FC<CanteenGcashPayoutModalProps> = (
         ? outstandingBalance
         : totalCanteenDeductions > 0
         ? totalCanteenDeductions
-        : 3500;
+        : 0;
 
       setAmount(initialAmount);
       setPurpose(`Canteen Settlement (${weekKey}) - ${site.code} ${site.name}`);

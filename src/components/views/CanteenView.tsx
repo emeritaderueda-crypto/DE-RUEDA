@@ -216,7 +216,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
     } else if (siteTotalCanteenDeductions > 0) {
       setDirectAmount(siteTotalCanteenDeductions);
     } else {
-      setDirectAmount(3500);
+      setDirectAmount(0);
     }
     if (selectedSite) {
       setDirectMemo(`Canteen Meal Settlement (${selectedWeek}) - ${selectedSite.code}`);

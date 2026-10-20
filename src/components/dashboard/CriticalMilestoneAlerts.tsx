@@ -373,24 +373,6 @@ export const CriticalMilestoneAlerts: React.FC<CriticalMilestoneAlertsProps> = (
             <span>{isDispatching ? 'Dispatching...' : 'Dispatch Push Alert Now'}</span>
           </button>
 
-          {/* Simulation Toggle */}
-          <button
-            onClick={() => {
-              setSimulationActive((v) => !v);
-              if (!simulationActive) {
-                setTimeout(() => playAlertChime(), 100);
-              }
-            }}
-            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 border transition-colors cursor-pointer ${
-              simulationActive
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                : 'bg-[#13241f] text-slate-400 border-[#234338] hover:text-slate-200'
-            }`}
-            title="Simulate a 48h critical deadline milestone to test the alert system and manager push dispatching"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>{simulationActive ? 'Stop Test' : 'Test 48h Alert'}</span>
-          </button>
         </div>
       </div>
 
