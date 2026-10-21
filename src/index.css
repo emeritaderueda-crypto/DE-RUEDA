@@ -6,14 +6,19 @@
 }
 
 :root {
-  --bg-base: #080f0d;
-  --bg-surface: #0e1a16;
-  --bg-card: #13241f;
-  --bg-card-hover: #192e27;
-  --bg-subtle: #1c352d;
-  --border: #234338;
-  --primary: #10b981;
-  --accent: #a3e635;
+  /* De Rueda Architectural Palette: Green, Dark Blue, Light Blue, White, Black + Pink Glitter Accent */
+  --bg-base: #060b18;          /* Obsidian Navy Black */
+  --bg-surface: #0a1329;       /* Deep Navy Slate */
+  --bg-card: #0f1c3d;          /* Dark Blue Card */
+  --bg-card-hover: #142550;    /* Interactive Dark Blue */
+  --bg-subtle: #192e61;        /* Subtle Border Slate */
+  --border: #1e3a8a;           /* Deep Blue Border */
+  --border-light: #2563eb33;   /* Light Blue Border Accent */
+  --primary: #10b981;          /* Emerald Construction Green */
+  --accent: #a3e635;           /* Glossy Lime Emblem Green */
+  --light-blue: #38bdf8;       /* Tech Light Blue */
+  --dark-blue: #0b1536;        /* Structural Dark Blue */
+  --pink-glitter: #f472b6;     /* Restrained Decorative Glitter Accent */
 }
 
 /* Custom Scrollbars */

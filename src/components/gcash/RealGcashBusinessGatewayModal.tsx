@@ -356,8 +356,8 @@ export const RealGcashBusinessGatewayModal: React.FC<RealGcashBusinessGatewayMod
             {/* Hub Access Verification Grid per Section 3 & 4 */}
             <div className="bg-[#0e1a16] border border-[#234338] rounded-2xl p-5 space-y-3">
               <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-[#a3e635]" />
-                <span>Three GCash Hubs & Security Clearance Matrix</span>
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>Corporate Payment Hubs &amp; Security Clearance Matrix</span>
               </h4>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
@@ -635,9 +635,8 @@ export const RealGcashBusinessGatewayModal: React.FC<RealGcashBusinessGatewayMod
                     onChange={(e: any) => setProviderTypeInput(e.target.value)}
                     className="w-full px-3 py-2 bg-[#13241f] border border-[#234338] rounded-xl text-xs text-white outline-none focus:border-emerald-400"
                   >
+                    <option value="paymongo">PayMongo Enterprise Payouts &amp; Payments API (Preferred)</option>
                     <option value="direct_gcash_business">Globe Telecom / Mynt Direct API (G-Xchange, Inc.)</option>
-                    <option value="paymongo">PayMongo Enterprise Disbursement API</option>
-                    <option value="xendit">Xendit Payouts &amp; Direct Bank Rail</option>
                     <option value="maya_business">Maya Enterprise Corporate Disbursements</option>
                   </select>
                 </div>

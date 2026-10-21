@@ -26,7 +26,9 @@ import {
   Wallet,
   UtensilsCrossed,
   QrCode,
+  CreditCard,
 } from 'lucide-react';
+import { DeRuedaLogo } from '../brand/DeRuedaLogo';
 
 export type PageId =
   | 'dashboard'
@@ -78,12 +80,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: Shield,
           badge: 'EMERITA',
         },
-        {
-          id: 'ceo_gcash' as PageId,
-          label: currentUser?.access_point === 'admin 1' ? 'Executive Payment Operations' : currentUser?.access_point === 'admin 2' ? 'Site Payment & Batch QR Hub' : 'Payment Records & Settlement',
-          icon: QrCode,
-          badge: currentUser?.access_point === 'admin 1' ? 'VOUCHERS' : currentUser?.access_point === 'admin 2' ? 'SITE OPS' : 'OFFICIAL QR',
-        },
       ],
     },
     {
@@ -92,9 +88,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'dashboard' as PageId, label: 'Dashboard', icon: LayoutDashboard },
         { id: 'employees' as PageId, label: 'Employees / HR', icon: Users },
         { id: 'sites' as PageId, label: 'Sites & Projects', icon: Building },
-        ...(currentUser?.access_point === 'admin 1'
-          ? [{ id: 'ceo_gcash' as PageId, label: 'Executive Payment Operations', icon: QrCode, badge: 'VOUCHERS' }]
-          : []),
       ],
     },
     {
@@ -104,9 +97,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'deductions' as PageId, label: 'Deductions & Advances', icon: BadgePercent },
         { id: 'canteen' as PageId, label: 'Canteen Weekly Stipend', icon: UtensilsCrossed, badge: 'GCASH' },
         { id: 'payroll' as PageId, label: 'Weekly Payroll', icon: Banknote },
-        ...(currentUser?.access_point === 'admin 2'
-          ? [{ id: 'ceo_gcash' as PageId, label: 'Site Payment & Batch QR Hub', icon: QrCode, badge: 'SITE OPS' }]
-          : []),
+        {
+          id: 'ceo_gcash' as PageId,
+          label: 'Payments & Transactions',
+          icon: CreditCard,
+          badge: 'PAYMONGO',
+        },
         { id: 'cashflow' as PageId, label: 'Cash Flow Disbursements', icon: TrendingDown },
         { id: 'payslips' as PageId, label: 'Payslips Hub (6/Page)', icon: FileSpreadsheet },
       ],
@@ -148,21 +144,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <aside
-        className={`fixed top-0 bottom-0 left-0 w-64 bg-[#0e1a16] border-r border-[#234338] z-50 flex flex-col transition-transform duration-200 ease-in-out lg:translate-x-0 ${
+        className={`fixed top-0 bottom-0 left-0 w-64 bg-[#0a1128] border-r border-[#1e3a8a]/40 z-50 flex flex-col transition-transform duration-200 ease-in-out lg:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } no-print`}
       >
-        {/* Brand Header */}
-        <div className="h-16 border-b border-[#234338] px-4 flex items-center justify-between bg-[#0e1a16]">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-linear-to-br from-[#10b981] to-[#a3e635] flex items-center justify-center font-black text-[#080f0d] text-base shadow-[0_0_12px_rgba(163,230,53,0.3)]">
-              <HardHat className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-sm font-extrabold tracking-tight text-white leading-tight">DE RUEDA</div>
-              <div className="text-[9px] text-[#a3e635] font-bold tracking-wider uppercase leading-tight">CONSTRUCTION MANAGEMENT SYSTEM</div>
-            </div>
-          </div>
+        {/* Brand Header with Preferred Architectural Emblem */}
+        <div className="h-16 border-b border-[#1e3a8a]/40 px-4 flex items-center justify-between bg-[#070d1f]">
+          <DeRuedaLogo size="sm" variant="horizontal" theme="dark" showSubtitle={true} />
           <button
             onClick={onClose}
             className="p-1 rounded-md text-slate-400 hover:text-white lg:hidden"
@@ -191,14 +179,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       }}
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${
                         isActive
-                          ? 'bg-[#13241f] text-[#a3e635] font-semibold border-l-2 border-[#a3e635]'
-                          : 'text-slate-400 hover:text-white hover:bg-[#13241f]'
+                          ? 'bg-[#0f1c3d] text-[#38bdf8] font-bold border-l-2 border-[#10b981] shadow-xs'
+                          : 'text-slate-300 hover:text-white hover:bg-[#11224d]'
                       }`}
                     >
-                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#a3e635]' : 'text-slate-400'}`} />
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#38bdf8]' : 'text-slate-400'}`} />
                       <span className="truncate flex-1">{item.label}</span>
                       {'badge' in item && item.badge && (
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+                        <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold shrink-0 ${
+                          item.badge === 'PAYMONGO'
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                            : item.badge === 'EMERITA'
+                            ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40'
+                            : 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                        }`}>
                           {item.badge}
                         </span>
                       )}
@@ -211,12 +205,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
 
         {/* User Session & Logout in Sidebar */}
-        <div className="p-3 border-t border-[#234338] bg-[#0c1613]">
+        <div className="p-3 border-t border-[#1e3a8a]/40 bg-[#070d1f]">
           {currentUser ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-7 h-7 rounded-lg bg-[#13241f] border border-[#234338] flex items-center justify-center text-[#a3e635] font-black text-xs uppercase shrink-0">
+                  <div className="w-7 h-7 rounded-lg bg-[#0f1c3d] border border-[#1e3a8a] flex items-center justify-center text-[#38bdf8] font-black text-xs uppercase shrink-0">
                     {currentUser.access_point[0]}
                   </div>
                   <div className="min-w-0">

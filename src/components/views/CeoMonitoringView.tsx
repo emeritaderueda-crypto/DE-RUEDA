@@ -24,6 +24,7 @@ import {
   History,
   Clock,
   Send,
+  CreditCard,
 } from 'lucide-react';
 
 interface CeoMonitoringViewProps {
@@ -129,10 +130,10 @@ export const CeoMonitoringView: React.FC<CeoMonitoringViewProps> = ({ onNavigate
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => onNavigate('ceo_gcash')}
-            className="px-3.5 py-2 bg-[#a3e635] hover:bg-[#84cc16] text-[#080f0d] font-black rounded-xl text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-md"
           >
-            <Wallet className="w-4 h-4" />
-            <span>Open CEO GCash Operations &rarr;</span>
+            <CreditCard className="w-4 h-4" />
+            <span>Open Payments &amp; Transactions &rarr;</span>
           </button>
 
           <button
@@ -174,9 +175,9 @@ export const CeoMonitoringView: React.FC<CeoMonitoringViewProps> = ({ onNavigate
             <span className="text-slate-400 text-[10px]">Total Outflows: ₱{(totalGcashDisbursed / 1000).toFixed(1)}k</span>
             <button
               onClick={() => onNavigate('ceo_gcash')}
-              className="text-[#a3e635] hover:underline font-semibold text-[11px] cursor-pointer"
+              className="text-emerald-400 hover:underline font-semibold text-[11px] cursor-pointer"
             >
-              Send GCash &rarr;
+              Manage Payments &rarr;
             </button>
           </div>
         </div>
@@ -289,16 +290,16 @@ export const CeoMonitoringView: React.FC<CeoMonitoringViewProps> = ({ onNavigate
               </div>
               <div>
                 <h3 className="text-sm font-bold text-white uppercase tracking-tight">
-                  Real-Time GCash Disbursement Ledger
+                  Real-Time Payments &amp; Transactions Ledger
                 </h3>
                 <span className="text-[10px] text-slate-400">Live reflection across all ERP dashboards</span>
               </div>
             </div>
             <button
               onClick={() => onNavigate('ceo_gcash')}
-              className="text-xs font-semibold text-[#a3e635] hover:underline cursor-pointer"
+              className="text-xs font-semibold text-emerald-400 hover:underline cursor-pointer"
             >
-              Launch GCash Terminal &rarr;
+              Open Payments Hub &rarr;
             </button>
           </div>
 

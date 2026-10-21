@@ -519,7 +519,7 @@ export type GCashPayoutStatus =
   | 'NEEDS_RECONCILIATION';
 
 export interface GCashGatewayConfig {
-  provider_type: 'direct_gcash_business' | 'paymongo' | 'xendit' | 'maya_business';
+  provider_type: 'paymongo' | 'direct_gcash_business' | 'maya_business' | 'xendit';
   environment: 'sandbox' | 'production';
   connection_status: 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'LOCKED' | 'SESSION_EXPIRED' | 'ERROR';
   merchant_id: string;
@@ -678,7 +678,7 @@ export interface CanteenAggregationSiteSummary {
 }
 
 // ----------------------------------------------------
-// Agreed Upgrade Types: GCash Hubs, RBAC & SMS Payslips
+// Agreed Corporate Hub Types: Corporate Payment Hubs, RBAC & SMS Payslips
 // ----------------------------------------------------
 
 export type GcashHubType =
@@ -968,6 +968,7 @@ export interface PaymentRecord {
   status: PaymentRecordStatus;
   approved_by: string;
   approved_at: string;
+  reference_number?: string;
   receipt_evidence?: PaymentReceiptEvidence;
   review_info?: PaymentReviewInfo;
   // Audit-Compliant SMS Confirmation & Outbox Queue Tracking

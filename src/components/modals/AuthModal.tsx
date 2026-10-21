@@ -11,7 +11,9 @@ import {
   Info,
   Eye,
   EyeOff,
+  Fingerprint,
 } from 'lucide-react';
+import { DeRuedaLogo } from '../brand/DeRuedaLogo';
 import {
   getStoredPassword,
   DEFAULT_CREDENTIALS,
@@ -110,13 +112,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-      <div className="w-full max-w-lg bg-[#0e1a16] border border-[#234338] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-[#234338] flex items-center justify-between bg-[#13241f]">
-          <div className="flex items-center gap-2 text-white font-bold text-sm">
-            <ShieldCheck className="w-5 h-5 text-[#a3e635]" />
-            <span>{currentUser ? 'Switch Access Point' : 'System Authentication'}</span>
-          </div>
+      <div className="w-full max-w-lg bg-[#0a1128] border border-[#1e3a8a] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        {/* Header with Architectural Brand Logo */}
+        <div className="px-5 py-4 border-b border-[#1e3a8a]/40 flex items-center justify-between bg-[#070d1f]">
+          <DeRuedaLogo size="sm" variant="horizontal" theme="dark" showSubtitle={true} />
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-white transition-colors cursor-pointer"
@@ -125,15 +124,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
         </div>
 
+        <div className="px-5 pt-4 text-center">
+          <h2 className="text-lg font-black text-white">Welcome Back</h2>
+          <p className="text-xs text-slate-300 mt-0.5">Sign in to your De Rueda Construction account</p>
+        </div>
+
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {/* Pre-Authorized Corporate Identity Notice */}
-          <div className="p-3 bg-linear-to-r from-[#10b981]/15 to-[#a3e635]/10 border border-[#10b981]/30 rounded-xl text-xs space-y-1">
-            <div className="flex items-center gap-1.5 font-bold text-emerald-300">
-              <ShieldCheck className="w-4 h-4 text-[#a3e635] shrink-0" />
-              <span>Pre-Authorized Corporate SSO &amp; Zero-Trust Authentication</span>
+          <div className="p-3 bg-linear-to-r from-blue-950/40 to-emerald-950/40 border border-[#1e3a8a]/60 rounded-xl text-xs space-y-1">
+            <div className="flex items-center gap-1.5 font-bold text-sky-300">
+              <ShieldCheck className="w-4 h-4 text-[#38bdf8] shrink-0" />
+              <span>Corporate SSO &amp; Multi-Factor Verification</span>
             </div>
             <p className="text-slate-300 text-[11px] leading-relaxed">
-              Enterprise access is bound strictly to pre-authorized corporate identities with enforced role-based access control, MFA protection, and audited session lineage.
+              Enterprise access is bound strictly to verified corporate identities with enforced role-based access control and audited session lineage.
             </p>
           </div>
 
@@ -293,21 +297,46 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
+          {/* Submit button */}
+          <button
+            type="submit"
+            className="w-full py-2.5 bg-[#0284c7] hover:bg-[#0369a1] text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <UserCheck className="w-4 h-4" />
+            <span>Login to System</span>
+          </button>
+
+          {/* Passkey / Biometrics Alternative (PDF Page 4) */}
+          <div className="relative flex py-1 items-center">
+            <div className="grow border-t border-[#1e3a8a]/40"></div>
+            <span className="shrink mx-2 text-[10px] text-slate-400 uppercase font-mono">or</span>
+            <div className="grow border-t border-[#1e3a8a]/40"></div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              const accounts = getAdminAccounts();
+              const account = accounts.find((a) => a.role === accessPoint) || accounts[0];
+              login(account.role, account.email);
+              if (onSuccessLogin) onSuccessLogin();
+              onClose();
+            }}
+            className="w-full py-2.5 bg-[#0f1c3d] hover:bg-[#142550] border border-[#1e3a8a] text-[#38bdf8] rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+          >
+            <Fingerprint className="w-4 h-4 text-[#38bdf8]" />
+            <span>Login with Passkey / Biometrics</span>
+          </button>
+
           {/* Footer actions */}
-          <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-[#234338]">
+          <div className="pt-2 flex items-center justify-between border-t border-[#1e3a8a]/40 text-xs">
+            <span className="text-slate-400">Pre-authorized company account</span>
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer"
+              className="text-slate-400 hover:text-white transition-colors cursor-pointer"
             >
               Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-[#a3e635] hover:bg-[#84cc16] text-[#080f0d] font-bold text-xs rounded-xl transition-all shadow-md shadow-[#a3e635]/20 flex items-center gap-1.5 cursor-pointer"
-            >
-              <UserCheck className="w-4 h-4" />
-              <span>Confirm & Authenticate</span>
             </button>
           </div>
         </form>

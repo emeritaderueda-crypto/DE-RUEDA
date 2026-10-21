@@ -13,6 +13,7 @@ import {
   Sparkles,
   Shield,
   Search,
+  CreditCard,
 } from 'lucide-react';
 
 interface RealtimeGcashStreamWidgetProps {
@@ -75,10 +76,10 @@ export const RealtimeGcashStreamWidget: React.FC<RealtimeGcashStreamWidgetProps>
           {onOpenCeoGcash && (
             <button
               onClick={onOpenCeoGcash}
-              className="px-3 py-1.5 bg-[#a3e635] hover:bg-[#84cc16] text-[#080f0d] font-bold rounded-lg text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+              className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
             >
-              <Shield className="w-3.5 h-3.5" />
-              <span>CEO GCash Hub &rarr;</span>
+              <CreditCard className="w-3.5 h-3.5" />
+              <span>Payments &amp; Transactions &rarr;</span>
             </button>
           )}
         </div>
@@ -86,12 +87,12 @@ export const RealtimeGcashStreamWidget: React.FC<RealtimeGcashStreamWidgetProps>
 
       {/* Summary Stat Counters */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
-        <div className="bg-[#13241f] border border-[#234338] rounded-lg p-2.5">
-          <div className="text-[11px] text-slate-400">GCash Corporate Reserves</div>
+        <div className="bg-[#0f1c3d] border border-[#1e3a8a]/50 rounded-lg p-2.5">
+          <div className="text-[11px] text-slate-400">Corporate Payment Reserves</div>
           <div className="text-lg font-bold font-mono text-white mt-0.5">
             ₱{gcashWalletBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </div>
-          <div className="text-[10px] text-emerald-400">● Liquid & Ready for Dispatch</div>
+          <div className="text-[10px] text-emerald-400">● Liquid &amp; Ready for Dispatch</div>
         </div>
 
         <div className="bg-[#13241f] border border-[#234338] rounded-lg p-2.5">

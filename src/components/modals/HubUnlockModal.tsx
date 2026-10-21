@@ -46,10 +46,10 @@ export const HubUnlockModal: React.FC<HubUnlockModalProps> = ({
       badge: 'EMERITA RESTRICTED',
       color: 'amber',
       defaultPinHint: 'Emerita0279',
-      desc: 'Direct execution of corporate GCash disbursements for weekly worker salaries, site operations, and emergency fuel funding.',
+      desc: 'Direct execution of corporate payment disbursements for weekly worker salaries, site operations, and emergency funding.',
     },
     exec_distribution_hub: {
-      name: 'Executive Operations GCash Distribution Hub',
+      name: 'Executive Operations Corporate Payment Hub',
       roleRequirement: 'Authorized for CEO & Admin 1 (HR Lead)',
       allowedRoles: ['ceo', 'admin 1'],
       badge: 'HR EXECUTIVE',
@@ -58,7 +58,7 @@ export const HubUnlockModal: React.FC<HubUnlockModalProps> = ({
       desc: 'Company-wide weekly salary batch execution, canteen concessionaire meal disbursements, and automated SMS payslip dispatch.',
     },
     admin2_distribution_hub: {
-      name: 'Time & Payroll Engine Site GCash Hub',
+      name: 'Time & Payroll Engine Site Payment Hub',
       roleRequirement: 'Authorized for CEO & Site-Scoped Admin 2',
       allowedRoles: ['ceo', 'admin 2'],
       badge: 'SITE OPS (ISOLATED)',

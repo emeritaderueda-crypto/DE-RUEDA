@@ -64,28 +64,28 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
-      <header className="h-16 bg-[#0e1a16] border-b border-[#234338] px-4 lg:px-6 flex items-center justify-between sticky top-0 z-30 gap-4 no-print">
+      <header className="h-16 bg-[#070d1f] border-b border-[#1e3a8a]/40 px-4 lg:px-6 flex items-center justify-between sticky top-0 z-30 gap-4 no-print">
         {/* Left: Mobile hamburger & Site selector */}
         <div className="flex items-center gap-3">
           <button
             onClick={onToggleSidebar}
-            className="p-2 rounded-lg border border-[#234338] text-slate-400 hover:text-white hover:bg-[#13241f] lg:hidden"
+            className="p-2 rounded-lg border border-[#1e3a8a]/50 text-slate-400 hover:text-white hover:bg-[#0f1c3d] lg:hidden"
             title="Toggle Navigation"
           >
             <Menu className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center gap-2 bg-[#13241f] border border-[#234338] px-3 py-1.5 rounded-lg text-xs">
-            <Building2 className="w-4 h-4 text-[#a3e635] shrink-0" />
+          <div className="flex items-center gap-2 bg-[#0f1c3d] border border-[#1e3a8a]/50 px-3 py-1.5 rounded-lg text-xs">
+            <Building2 className="w-4 h-4 text-[#38bdf8] shrink-0" />
             <span className="text-slate-400 font-medium hidden sm:inline">Project Site:</span>
             <select
               value={currentSite}
               onChange={(e) => setCurrentSite(e.target.value)}
-              className="bg-transparent text-[#a3e635] font-semibold outline-none cursor-pointer text-xs"
+              className="bg-transparent text-[#38bdf8] font-semibold outline-none cursor-pointer text-xs"
             >
-              <option value="ALL" className="bg-[#13241f] text-white">All Active Sites (Consolidated)</option>
+              <option value="ALL" className="bg-[#0f1c3d] text-white">All Active Sites (Consolidated)</option>
               {sites.map((s) => (
-                <option key={s.site_id} value={s.site_id} className="bg-[#13241f] text-white">
+                <option key={s.site_id} value={s.site_id} className="bg-[#0f1c3d] text-white">
                   {s.code} - {s.name}
                 </option>
               ))}

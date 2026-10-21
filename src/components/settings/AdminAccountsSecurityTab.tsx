@@ -233,7 +233,7 @@ export const AdminAccountsSecurityTab: React.FC = () => {
                   <th className="p-2.5">Corporate Role</th>
                   <th className="p-2.5">Restricted CEO Vault</th>
                   <th className="p-2.5">Executive Distribution Hub</th>
-                  <th className="p-2.5">Site-Scoped GCash Hub</th>
+                  <th className="p-2.5">Site-Scoped Payment Hub</th>
                   <th className="p-2.5">Site Boundary Permission</th>
                 </tr>
               </thead>

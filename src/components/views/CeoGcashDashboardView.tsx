@@ -118,14 +118,14 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
       badge: 'EMERITA RESTRICTED',
     },
     exec_distribution_hub: {
-      name: 'Executive Operations GCash Distribution Hub',
+      name: 'Executive Operations Corporate Payment Hub',
       shortName: 'Executive Hub',
       roleRequirement: 'CEO & Admin 1 (HR Lead)',
       allowedRoles: ['ceo', 'admin 1'],
       badge: 'HR EXECUTIVE',
     },
     admin2_distribution_hub: {
-      name: 'Time & Payroll Engine Site GCash Hub',
+      name: 'Time & Payroll Engine Site Payment Hub',
       shortName: 'Site Ops Hub',
       roleRequirement: 'CEO & Site-Scoped Admin 2',
       allowedRoles: ['ceo', 'admin 2'],

@@ -893,7 +893,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) return JSON.parse(saved);
     } catch {}
     return {
-      provider_type: 'direct_gcash_business',
+      provider_type: 'paymongo',
       environment: 'sandbox',
       connection_status: 'DISCONNECTED',
       merchant_id: '',

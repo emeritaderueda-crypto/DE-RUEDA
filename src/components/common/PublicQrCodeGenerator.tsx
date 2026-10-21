@@ -249,18 +249,18 @@ export const PublicQrCodeGenerator: React.FC = () => {
   };
 
   return (
-    <div id="qr-generator" className="bg-[#0e1a16] border border-[#234338] rounded-xl p-6 shadow-xl flex flex-col justify-between">
+    <div id="qr-generator" className="bg-[#0f1c3d] border border-[#1e3a8a] rounded-2xl p-6 shadow-xl flex flex-col justify-between">
       <div>
         {/* Card Header */}
-        <div className="flex items-center justify-between gap-3 pb-4 border-b border-[#234338]">
+        <div className="flex items-center justify-between gap-3 pb-4 border-b border-[#1e3a8a]/40">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
               <QrCode className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-extrabold text-white">Employee QR Code Generator</span>
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-[#a3e635]/15 text-[#a3e635] border border-[#a3e635]/30">
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-[#38bdf8]/15 text-[#38bdf8] border border-[#38bdf8]/30">
                   NO SIGN-IN REQUIRED
                 </span>
               </div>
@@ -270,7 +270,7 @@ export const PublicQrCodeGenerator: React.FC = () => {
             </div>
           </div>
 
-          <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/30">
+          <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-xl border border-emerald-500/30">
             <Lock className="w-3 h-3" />
             <span>PROTECTED CREDENTIAL</span>
           </div>
@@ -292,7 +292,7 @@ export const PublicQrCodeGenerator: React.FC = () => {
                   setSearchInput(e.target.value);
                   setDisambiguatedId(null);
                 }}
-                className="w-full bg-[#13241f] border border-[#234338] rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#a3e635]"
+                className="w-full bg-[#070d1f] border border-[#1e3a8a] rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400"
               />
             </div>
             <p className="text-[10px] text-slate-400 mt-1">
@@ -311,7 +311,7 @@ export const PublicQrCodeGenerator: React.FC = () => {
                   setSearchInput(e.employee_id);
                   setDisambiguatedId(null);
                 }}
-                className="px-2 py-0.5 rounded bg-[#13241f] hover:bg-[#1a332c] text-emerald-300 border border-[#234338] transition-colors"
+                className="px-2 py-0.5 rounded-lg bg-[#070d1f] hover:bg-[#0a1329] text-emerald-300 border border-[#1e3a8a] transition-colors"
               >
                 {e.name} ({e.employee_id})
               </button>
@@ -333,13 +333,13 @@ export const PublicQrCodeGenerator: React.FC = () => {
                   onClick={() => {
                     setDisambiguatedId(m.employee_id);
                   }}
-                  className="w-full p-2 bg-[#13241f] hover:bg-[#1a332c] border border-[#234338] rounded-lg text-left text-xs text-slate-200 hover:text-white flex items-center justify-between transition-colors"
+                  className="w-full p-2 bg-[#070d1f] hover:bg-[#0a1329] border border-[#1e3a8a] rounded-xl text-left text-xs text-slate-200 hover:text-white flex items-center justify-between transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <span className="font-bold">{m.name}</span>
                     <span className="text-[10px] text-slate-400">({m.position})</span>
                   </div>
-                  <span className="font-mono text-[#a3e635] font-bold text-[11px]">{m.employee_id}</span>
+                  <span className="font-mono text-emerald-400 font-bold text-[11px]">{m.employee_id}</span>
                 </button>
               ))}
             </div>
@@ -361,17 +361,17 @@ export const PublicQrCodeGenerator: React.FC = () => {
 
         {/* Case 3: Empty Search */}
         {matchResult.status === 'EMPTY' && (
-          <div className="mt-4 p-4 bg-[#13241f] border border-[#234338] rounded-xl text-center text-xs text-slate-400">
+          <div className="mt-4 p-4 bg-[#070d1f] border border-[#1e3a8a]/50 rounded-xl text-center text-xs text-slate-400">
             Please enter your registered full name or Employee ID to generate your pass.
           </div>
         )}
 
         {/* Case 4: Unambiguous Verified Match -> Generate Official QR Badge */}
         {matchResult.status === 'MATCHED' && currentWorker && (
-          <div className="mt-5 p-4 rounded-xl bg-[#080f0d] border border-[#234338] shadow-inner space-y-4">
+          <div className="mt-5 p-4 rounded-xl bg-[#070d1f] border border-[#1e3a8a] shadow-inner space-y-4">
             <div className="flex flex-col sm:flex-row items-center gap-4">
               {/* Authentic SVG QR Code */}
-              <div className="shrink-0 bg-white p-2.5 rounded-lg shadow-md border-2 border-[#10b981] flex flex-col items-center">
+              <div className="shrink-0 bg-white p-2.5 rounded-xl shadow-md border-2 border-emerald-500 flex flex-col items-center">
                 <div
                   dangerouslySetInnerHTML={{ __html: qrSvg }}
                   className="w-[140px] h-[140px] flex items-center justify-center"
@@ -384,7 +384,7 @@ export const PublicQrCodeGenerator: React.FC = () => {
               {/* Worker Credential Information (No Sensitive Financial / HR Info Leaked) */}
               <div className="flex-1 min-w-0 text-center sm:text-left space-y-1.5">
                 <div className="flex items-center justify-center sm:justify-start gap-1.5">
-                  <HardHat className="w-3.5 h-3.5 text-[#a3e635]" />
+                  <HardHat className="w-3.5 h-3.5 text-emerald-400" />
                   <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider">
                     DRC Verified Credential &bull; Ver {currentWorker.qr_version || 1}
                   </span>
@@ -394,7 +394,7 @@ export const PublicQrCodeGenerator: React.FC = () => {
                   {currentWorker.name}
                 </div>
 
-                <div className="inline-block px-2 py-0.5 rounded bg-[#13241f] border border-[#234338] text-[#a3e635] font-mono font-bold text-xs">
+                <div className="inline-block px-2 py-0.5 rounded-lg bg-[#0f1c3d] border border-[#1e3a8a] text-emerald-400 font-mono font-bold text-xs">
                   {currentWorker.employee_id}
                 </div>
 
@@ -417,13 +417,13 @@ export const PublicQrCodeGenerator: React.FC = () => {
             </div>
 
             {/* Turnstile Non-Guessable Payload Tag */}
-            <div className="pt-2.5 border-t border-[#13241f] flex items-center justify-between text-[10px] text-slate-400">
+            <div className="pt-2.5 border-t border-[#1e3a8a]/40 flex items-center justify-between text-[10px] text-slate-400">
               <span className="truncate">
-                Payload Token: <code className="text-[#a3e635] font-mono">{qrPayload}</code>
+                Payload Token: <code className="text-emerald-400 font-mono">{qrPayload}</code>
               </span>
               <button
                 onClick={handleCopyPayload}
-                className="text-slate-400 hover:text-white flex items-center gap-1 font-mono shrink-0 ml-2"
+                className="text-slate-400 hover:text-white flex items-center gap-1 font-mono shrink-0 ml-2 cursor-pointer"
                 title="Copy QR payload string"
               >
                 {copied ? (
@@ -445,11 +445,11 @@ export const PublicQrCodeGenerator: React.FC = () => {
 
       {/* Action Buttons for Download / Print */}
       {matchResult.status === 'MATCHED' && currentWorker && (
-        <div className="mt-5 grid grid-cols-2 gap-2.5 pt-3 border-t border-[#234338]">
+        <div className="mt-5 grid grid-cols-2 gap-2.5 pt-3 border-t border-[#1e3a8a]/40">
           <button
             onClick={handleDownloadBadge}
             disabled={downloading}
-            className="py-2.5 px-3 bg-[#a3e635] text-[#080f0d] hover:bg-[#84cc16] font-extrabold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+            className="py-2.5 px-3 bg-emerald-600 text-white hover:bg-emerald-500 font-extrabold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
           >
             {downloading ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -461,7 +461,7 @@ export const PublicQrCodeGenerator: React.FC = () => {
 
           <button
             onClick={handlePrintBadge}
-            className="py-2.5 px-3 bg-[#13241f] border border-[#234338] text-white hover:border-[#10b981] hover:text-[#a3e635] font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+            className="py-2.5 px-3 bg-[#0a1128] border border-[#1e3a8a] text-white hover:border-emerald-400 hover:text-emerald-400 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Print Physical Card</span>

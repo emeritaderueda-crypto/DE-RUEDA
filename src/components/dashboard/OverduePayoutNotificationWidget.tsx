@@ -175,9 +175,9 @@ export const OverduePayoutNotificationWidget: React.FC<OverduePayoutNotification
 
           <button
             onClick={() => onNavigate('ceo_gcash')}
-            className="px-3.5 py-1.5 bg-[#a3e635] hover:bg-[#bef264] text-[#080f0d] rounded-lg text-xs font-black flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
           >
-            <span>Resolve in Payment Hub</span>
+            <span>Resolve in Payments Hub</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
 
