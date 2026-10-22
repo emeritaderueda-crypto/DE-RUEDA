@@ -153,7 +153,7 @@ export const EmployeesPayoutSummaryDashboard: React.FC<EmployeesPayoutSummaryDas
               Workforce Payout Analytics
             </span>
             <span className="px-2 py-0.5 rounded text-[10px] font-mono text-slate-400 bg-[#13241f] border border-[#234338]">
-              15 Employees / Site &bull; 60 Total
+              {enterpriseTotals.totalEmployees} Personnel &bull; {sites.length} Sites
             </span>
           </div>
           <h2 className="text-base sm:text-lg font-black text-white mt-1 flex items-center gap-2">
@@ -225,7 +225,12 @@ export const EmployeesPayoutSummaryDashboard: React.FC<EmployeesPayoutSummaryDas
         </div>
       </div>
 
-      {/* Per-Site 4-Grid Breakdown (15 Employees per Site) */}
+      {/* Per-Site Breakdown */}
+      {siteStats.length === 0 ? (
+        <div className="p-6 text-center text-slate-500 text-xs border border-dashed border-[#234338] rounded-xl">
+          No project sites registered yet. Register your first site under Sites &amp; Projects to monitor location-based payroll status.
+        </div>
+      ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {siteStats.map((site) => {
           const sitePendingPct = site.totalEmployees > 0
@@ -314,6 +319,7 @@ export const EmployeesPayoutSummaryDashboard: React.FC<EmployeesPayoutSummaryDas
           );
         })}
       </div>
+      )}
 
       {/* Interactive Status Filter Chips */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#234338]">

@@ -583,15 +583,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             <div className="mt-3.5 pt-3 border-t border-[#234338]/60 flex items-center justify-between text-[11px]">
               <div className="flex items-center gap-1.5 flex-wrap">
-                {sites.map((s) => (
-                  <span
-                    key={s.site_id}
-                    className="px-1.5 py-0.5 rounded bg-[#0e1a16] text-[10px] font-mono font-bold text-slate-300 border border-[#234338]"
-                    title={`${s.code}: ${s.name}`}
-                  >
-                    {s.code}
-                  </span>
-                ))}
+                {sites.length === 0 ? (
+                  <span className="text-[10px] text-slate-500 italic">No sites registered</span>
+                ) : (
+                  sites.map((s) => (
+                    <span
+                      key={s.site_id}
+                      className="px-1.5 py-0.5 rounded bg-[#0e1a16] text-[10px] font-mono font-bold text-slate-300 border border-[#234338]"
+                      title={`${s.code}: ${s.name}`}
+                    >
+                      {s.code}
+                    </span>
+                  ))
+                )}
               </div>
               <button
                 onClick={() => onNavigate('sites')}
@@ -1384,28 +1388,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="space-y-2.5 flex-1">
-            {sites.map((s) => (
-              <div
-                key={s.site_id}
-                className="p-3 bg-[#13241f] border border-[#234338] rounded-lg flex items-center justify-between gap-3"
-              >
-                <div>
-                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <span className="text-[#a3e635]">{s.code}:</span>
-                    <span>{s.name}</span>
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    {s.location} &bull; Supervisor: <strong className="text-slate-300">{s.supervisor}</strong>
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide">
-                    {s.project_status}
-                  </span>
-                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">{s.end_date}</div>
-                </div>
+            {sites.length === 0 ? (
+              <div className="p-6 text-center text-slate-500 text-xs border border-dashed border-[#234338] rounded-lg">
+                No project sites registered yet. Register your first site in Sites &amp; Projects.
               </div>
-            ))}
+            ) : (
+              sites.map((s) => (
+                <div
+                  key={s.site_id}
+                  className="p-3 bg-[#13241f] border border-[#234338] rounded-lg flex items-center justify-between gap-3"
+                >
+                  <div>
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span className="text-[#a3e635]">{s.code}:</span>
+                      <span>{s.name}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      {s.location} &bull; Supervisor: <strong className="text-slate-300">{s.supervisor}</strong>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide">
+                      {s.project_status}
+                    </span>
+                    <div className="text-[10px] text-slate-500 font-mono mt-0.5">{s.end_date}</div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
 
           <div className="mt-3 pt-3 border-t border-[#234338] flex items-center justify-between text-xs text-slate-400">

@@ -374,7 +374,32 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'DERUEDA_ERP_V1';
+const STORAGE_KEY = 'DERUEDA_ERP_V2';
+
+// Purge legacy sample data from previous builds if found
+try {
+  if (typeof window !== 'undefined' && localStorage.getItem('DERUEDA_ERP_CLEAN_SAMPLES_V2') !== 'true') {
+    const legacyKeys = [
+      'DERUEDA_ERP_V1_EMPLOYEES',
+      'DERUEDA_ERP_V1_SITES',
+      'DERUEDA_ERP_V1_ATTENDANCE',
+      'DERUEDA_ERP_V1_PAYROLL',
+      'DERUEDA_ERP_V1_PAYMENT_RECORDS',
+      'DERUEDA_ERP_V1_DTR_WEEKS',
+      'DERUEDA_ERP_V1_PROCUREMENT_TIMELINE',
+      'DERUEDA_ERP_GANTT_MILESTONES_V3',
+      'DERUEDA_ERP_V2_EMPLOYEES',
+      'DERUEDA_ERP_V2_SITES',
+      'DERUEDA_ERP_V2_ATTENDANCE',
+      'DERUEDA_ERP_V2_PAYROLL',
+      'DERUEDA_ERP_V2_PAYMENT_RECORDS',
+      'DERUEDA_ERP_V2_DTR_WEEKS',
+      'DERUEDA_ERP_V2_PROCUREMENT_TIMELINE',
+    ];
+    legacyKeys.forEach((k) => localStorage.removeItem(k));
+    localStorage.setItem('DERUEDA_ERP_CLEAN_SAMPLES_V2', 'true');
+  }
+} catch {}
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // When URL first opens, all accounts are strictly logged out for privacy and protection
@@ -551,17 +576,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_PAYMENT_RECORDS`);
-      if (saved) {
-        const parsed: PaymentRecord[] = JSON.parse(saved);
-        const existingIds = new Set(parsed.map((p) => p.id));
-        const missing = FIFTEEN_PAYMENT_RECORDS_PER_SITE.filter((p) => !existingIds.has(p.id));
-        if (missing.length > 0) {
-          const merged = [...missing, ...parsed];
-          localStorage.setItem(`${STORAGE_KEY}_PAYMENT_RECORDS`, JSON.stringify(merged));
-          return merged;
-        }
-        return parsed;
-      }
+      if (saved) return JSON.parse(saved);
       return INITIAL_PAYMENT_RECORDS;
     } catch {
       return INITIAL_PAYMENT_RECORDS;
@@ -622,17 +637,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [employees, setEmployees] = useState<Employee[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_EMPLOYEES`);
-      if (saved) {
-        const parsed: Employee[] = JSON.parse(saved);
-        const existingIds = new Set(parsed.map((e) => e.employee_id));
-        const missing = FIFTEEN_EMPLOYEES_PER_SITE.filter((e) => !existingIds.has(e.employee_id));
-        if (missing.length > 0) {
-          const merged = [...parsed, ...missing];
-          localStorage.setItem(`${STORAGE_KEY}_EMPLOYEES`, JSON.stringify(merged));
-          return merged;
-        }
-        return parsed;
-      }
+      if (saved) return JSON.parse(saved);
       return INITIAL_EMPLOYEES;
     } catch {
       return INITIAL_EMPLOYEES;
@@ -642,18 +647,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [sites, setSites] = useState<Site[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_SITES`);
-      if (saved) {
-        const parsed: Site[] = JSON.parse(saved);
-        return parsed.map((s) => {
-          const init = INITIAL_SITES.find((i) => i.site_id === s.site_id);
-          return {
-            ...s,
-            canteen_vendor_name: s.canteen_vendor_name || init?.canteen_vendor_name || `${s.name} Canteen Concessionaire`,
-            canteen_gcash_number: s.canteen_gcash_number || init?.canteen_gcash_number || '09171234567',
-            canteen_contact_person: s.canteen_contact_person || init?.canteen_contact_person || 'Canteen Manager',
-          };
-        });
-      }
+      if (saved) return JSON.parse(saved);
       return INITIAL_SITES;
     } catch {
       return INITIAL_SITES;
@@ -663,17 +657,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_ATTENDANCE`);
-      if (saved) {
-        const parsed: AttendanceRecord[] = JSON.parse(saved);
-        const existingIds = new Set(parsed.map((a) => a.attendance_id));
-        const missing = FIFTEEN_ATTENDANCE_PER_SITE.filter((a) => !existingIds.has(a.attendance_id));
-        if (missing.length > 0) {
-          const merged = [...parsed, ...missing];
-          localStorage.setItem(`${STORAGE_KEY}_ATTENDANCE`, JSON.stringify(merged));
-          return merged;
-        }
-        return parsed;
-      }
+      if (saved) return JSON.parse(saved);
       return INITIAL_ATTENDANCE;
     } catch {
       return INITIAL_ATTENDANCE;
@@ -710,17 +694,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [payroll, setPayroll] = useState<PayrollRecord[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_PAYROLL`);
-      if (saved) {
-        const parsed: PayrollRecord[] = JSON.parse(saved);
-        const existingIds = new Set(parsed.map((p) => p.payroll_id));
-        const missing = FIFTEEN_PAYROLLS_PER_SITE.filter((p) => !existingIds.has(p.payroll_id));
-        if (missing.length > 0) {
-          const merged = [...parsed, ...missing];
-          localStorage.setItem(`${STORAGE_KEY}_PAYROLL`, JSON.stringify(merged));
-          return merged;
-        }
-        return parsed;
-      }
+      if (saved) return JSON.parse(saved);
       return INITIAL_PAYROLL;
     } catch {
       return INITIAL_PAYROLL;
@@ -1033,29 +1007,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // 3. Weekly Canteen Deduction PDF Batches & AI Copilot Review
-  const [canteenPdfBatches, setCanteenPdfBatches] = useState<CanteenPdfReviewBatch[]>([
-    {
-      batch_id: 'CANTEEN-BATCH-2026W42-S1',
-      file_name: 'Concessionaire_Statement_Site001_Week42.pdf',
-      file_size: 245760,
-      upload_timestamp: '2026-10-16T14:30:00+08:00',
-      site_id: 'SITE-001',
-      week_key: '2026-W42',
-      status: 'PENDING_REVIEW',
-      total_extracted_amount: 2450.0,
-      flagged_count: 0,
-      extracted_items: [
-        { id: 'EXT-1', employee_id: 'EMP-0001', employee_name: 'Juan Dela Cruz', date: '2026-10-16', meal_type: '5-Day Lunch Pack', amount: 350.0, is_matched: true, is_flagged: false, approved: true },
-        { id: 'EXT-2', employee_id: 'EMP-0002', employee_name: 'Pedro Santos', date: '2026-10-16', meal_type: '4-Day Meal Allocation', amount: 280.0, is_matched: true, is_flagged: false, approved: true },
-        { id: 'EXT-3', employee_id: 'EMP-0003', employee_name: 'Miguel Reyes', date: '2026-10-16', meal_type: '5-Day Lunch Pack', amount: 350.0, is_matched: true, is_flagged: false, approved: true },
-        { id: 'EXT-4', employee_id: 'EMP-0004', employee_name: 'Alan Garcia', date: '2026-10-16', meal_type: '5-Day Lunch Pack', amount: 350.0, is_matched: true, is_flagged: false, approved: true },
-        { id: 'EXT-5', employee_id: 'EMP-0005', employee_name: 'Ramon Torres', date: '2026-10-16', meal_type: '3-Day Meal Charges', amount: 210.0, is_matched: true, is_flagged: false, approved: true },
-        { id: 'EXT-6', employee_id: 'EMP-0006', employee_name: 'Luis Mendoza', date: '2026-10-16', meal_type: '5-Day Lunch Pack', amount: 350.0, is_matched: true, is_flagged: false, approved: true },
-        { id: 'EXT-7', employee_id: 'EMP-0007', employee_name: 'Erick Salvador', date: '2026-10-16', meal_type: '3-Day Meal Charges', amount: 210.0, is_matched: true, is_flagged: false, approved: true },
-        { id: 'EXT-8', employee_id: 'EMP-0008', employee_name: 'Mario Aquino', date: '2026-10-16', meal_type: '5-Day Lunch Pack', amount: 350.0, is_matched: true, is_flagged: false, approved: true },
-      ],
-    },
-  ]);
+  const [canteenPdfBatches, setCanteenPdfBatches] = useState<CanteenPdfReviewBatch[]>([]);
 
   const uploadCanteenPdfBatch = (batch: CanteenPdfReviewBatch) => {
     setCanteenPdfBatches((prev) => [batch, ...prev]);
@@ -4332,6 +4284,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       last_connected_at: null,
     });
     setEmployees(INITIAL_EMPLOYEES);
+    setSites(INITIAL_SITES);
     setPayroll(INITIAL_PAYROLL);
     setAttendance(INITIAL_ATTENDANCE);
     setDtrChanges([]);
@@ -4355,7 +4308,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         action: 'FACTORY_RESET',
         entity: 'SYSTEM',
         entity_id: 'ROOT',
-        after_value: 'Factory Default Start executed. Initialized 15 employees per site with salary awaiting payout release.',
+        after_value: 'Factory Default Start executed. Pristine clean ERP state with zero sample sites, zero sample projects, and zero sample employees.',
         timestamp: new Date().toISOString(),
       },
     ]);

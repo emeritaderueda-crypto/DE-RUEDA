@@ -1,0 +1,6 @@
+Contact: mailto:security@deruedaconstruction.com
+Expires: 2027-12-31T23:59:59.000Z
+Preferred-Languages: en, fil
+Policy: https://deruedaconstruction.com/security-policy
+Canonical: https://deruedaconstruction.com/.well-known/security.txt
+Acknowledgments: https://deruedaconstruction.com/security-hall-of-fame

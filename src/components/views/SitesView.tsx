@@ -199,7 +199,23 @@ export const SitesView: React.FC = () => {
 
       {/* Sites Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {sites.map((site) => {
+        {sites.length === 0 ? (
+          <div className="col-span-full p-12 text-center bg-[#0e1a16] border border-dashed border-[#234338] rounded-2xl">
+            <Building className="w-10 h-10 text-lime-400 mx-auto mb-3 opacity-60" />
+            <h3 className="text-base font-bold text-white">No Project Sites Registered</h3>
+            <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+              Your system is clean and ready. Click "Register New Project Site" to add your construction projects or site offices.
+            </p>
+            <button
+              onClick={() => setIsAddOpen(true)}
+              className="mt-4 px-4 py-2 bg-[#a3e635] text-[#080f0d] font-bold text-xs rounded-lg hover:bg-[#84cc16] transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Register New Project Site</span>
+            </button>
+          </div>
+        ) : (
+          sites.map((site) => {
           const assignedWorkers = employees.filter((e) => e.site_id === site.site_id && e.status === 'active');
           const isSelected = currentSite === site.site_id;
 
@@ -432,7 +448,8 @@ export const SitesView: React.FC = () => {
               </div>
             </div>
           );
-        })}
+        })
+      )}
       </div>
 
       {/* Add Site Modal */}

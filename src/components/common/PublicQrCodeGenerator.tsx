@@ -22,7 +22,7 @@ import {
 export const PublicQrCodeGenerator: React.FC = () => {
   const { employees, sites } = useApp();
 
-  const [searchInput, setSearchInput] = useState<string>('Juan Dela Cruz');
+  const [searchInput, setSearchInput] = useState<string>('');
   const [disambiguatedId, setDisambiguatedId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);

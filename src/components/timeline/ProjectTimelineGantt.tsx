@@ -67,8 +67,8 @@ export const ProjectTimelineGantt: React.FC<ProjectTimelineGanttProps> = ({
 
   // Form State for New/Edit Procurement
   const [procForm, setProcForm] = useState<Omit<ProcurementTimelineItem, 'id'>>({
-    site_id: 'SITE-001',
-    site_name: 'Mariveles Industrial Park Warehouse A',
+    site_id: sites[0]?.site_id || '',
+    site_name: sites[0]?.name || '',
     material_name: '',
     category: 'Structural',
     supplier: '',
@@ -301,10 +301,10 @@ export const ProjectTimelineGantt: React.FC<ProjectTimelineGanttProps> = ({
               onClick={() => {
                 setEditingProcurement(null);
                 setProcForm({
-                  site_id: siteFilter !== 'ALL' ? siteFilter : 'SITE-001',
+                  site_id: siteFilter !== 'ALL' ? siteFilter : (sites[0]?.site_id || ''),
                   site_name:
                     sites.find((s) => s.site_id === siteFilter)?.name ||
-                    'Mariveles Industrial Park Warehouse A',
+                    (sites[0]?.name || 'Unassigned Site'),
                   material_name: '',
                   category: 'Structural',
                   supplier: '',

@@ -72,20 +72,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { currentUser } = useApp();
   const navSections = [
     {
-      title: 'Restricted CEO Vault',
-      items: [
-        {
-          id: 'ceo_monitoring' as PageId,
-          label: 'CEO Monitoring Hub',
-          icon: Shield,
-          badge: 'EMERITA',
-        },
-      ],
-    },
-    {
       title: 'Executive & Operations',
       items: [
-        { id: 'dashboard' as PageId, label: 'Dashboard', icon: LayoutDashboard },
+        { id: 'dashboard' as PageId, label: 'Executive Dashboard', icon: LayoutDashboard },
         { id: 'employees' as PageId, label: 'Employees / HR', icon: Users },
         { id: 'sites' as PageId, label: 'Sites & Projects', icon: Building },
       ],
@@ -96,15 +85,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'attendance' as PageId, label: 'Attendance / DTR', icon: Clock },
         { id: 'deductions' as PageId, label: 'Deductions & Advances', icon: BadgePercent },
         { id: 'canteen' as PageId, label: 'Canteen Weekly Stipend', icon: UtensilsCrossed, badge: 'GCASH' },
-        { id: 'payroll' as PageId, label: 'Weekly Payroll', icon: Banknote },
+        { id: 'payroll' as PageId, label: 'Weekly Worker Payroll', icon: Banknote },
+        { id: 'payslips' as PageId, label: 'Payslips Hub (6/Page)', icon: FileSpreadsheet },
+        { id: 'cashflow' as PageId, label: 'Cash Flow Disbursements', icon: TrendingDown },
+      ],
+    },
+    {
+      title: 'Customer Billing & Finance',
+      items: [
         {
           id: 'ceo_gcash' as PageId,
-          label: 'Payments & Transactions',
+          label: 'Customer Payments (PayMongo)',
           icon: CreditCard,
-          badge: 'PAYMONGO',
+          badge: 'GATEWAY',
         },
-        { id: 'cashflow' as PageId, label: 'Cash Flow Disbursements', icon: TrendingDown },
-        { id: 'payslips' as PageId, label: 'Payslips Hub (6/Page)', icon: FileSpreadsheet },
       ],
     },
     {

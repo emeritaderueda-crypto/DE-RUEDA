@@ -746,25 +746,28 @@ export const GcashHubOverviewTab: React.FC<GcashHubOverviewTabProps> = ({
             </div>
 
             <div className="space-y-2">
-              {[
-                { date: 'Oct 21, 2026 08:12 AM', name: 'Ramon Bautista', mobile: '0917 123 4567', status: 'Sent' },
-                { date: 'Oct 21, 2026 08:10 AM', name: 'Maria Santos', mobile: '0917 765 4321', status: 'Sent' },
-                { date: 'Oct 21, 2026 08:08 AM', name: 'Pedro Ramos', mobile: '0920 111 2233', status: 'Sent' },
-                { date: 'Oct 21, 2026 08:05 AM', name: 'Juan Dela Cruz', mobile: '0918 234 5678', status: 'Sent' },
-              ].map((sms, i) => (
-                <div
-                  key={i}
-                  className="p-2.5 bg-[#070d1f] border border-[#1e3a8a]/40 rounded-xl flex items-center justify-between gap-2 text-xs"
-                >
-                  <div>
-                    <div className="font-bold text-white text-[11px]">{sms.name}</div>
-                    <div className="text-[10px] text-slate-400 font-mono">{sms.mobile} &bull; {sms.date}</div>
-                  </div>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    {sms.status}
-                  </span>
+              {smsOutbox.length === 0 ? (
+                <div className="p-4 text-center text-slate-500 text-xs bg-[#070d1f] border border-[#1e3a8a]/40 rounded-xl">
+                  No SMS payslip dispatches in queue. Automated notifications are sent upon salary verification.
                 </div>
-              ))}
+              ) : (
+                smsOutbox.slice(0, 4).map((sms) => (
+                  <div
+                    key={sms.job_id}
+                    className="p-2.5 bg-[#070d1f] border border-[#1e3a8a]/40 rounded-xl flex items-center justify-between gap-2 text-xs"
+                  >
+                    <div>
+                      <div className="font-bold text-white text-[11px]">{sms.recipient_name}</div>
+                      <div className="text-[10px] text-slate-400 font-mono">
+                        {sms.recipient_mobile} &bull; {new Date(sms.sent_at || sms.queued_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      {sms.status}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -939,11 +942,15 @@ export const GcashHubOverviewTab: React.FC<GcashHubOverviewTabProps> = ({
                   onChange={(e) => setSelectedSingleEmpId(e.target.value)}
                   className="w-full px-3 py-2 bg-[#070d1f] border border-[#1e3a8a] rounded-lg text-sm text-white"
                 >
-                  {employees.map((emp) => (
-                    <option key={emp.employee_id} value={emp.employee_id}>
-                      {emp.name} ({emp.employee_id}) - {emp.position} [GCash: {emp.gcash_number || '0917-000-0000'}]
-                    </option>
-                  ))}
+                  {employees.length === 0 ? (
+                    <option value="">No employees enrolled yet</option>
+                  ) : (
+                    employees.map((emp) => (
+                      <option key={emp.employee_id} value={emp.employee_id}>
+                        {emp.name} ({emp.employee_id}) - {emp.position} [GCash: {emp.gcash_number || '0917-000-0000'}]
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 

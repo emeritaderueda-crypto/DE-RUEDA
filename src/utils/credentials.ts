@@ -1,40 +1,41 @@
 import { AccessPointRole, AdminUserAccount } from '../types';
 
 export interface RoleCredential {
-  password: string;
   email: string;
   label: string;
   description: string;
+  role: AccessPointRole;
 }
 
+// Pre-authorized Directory Access Points (Passwords & MFA secrets enforced server-side only per Section 6)
 export const DEFAULT_CREDENTIALS: Record<AccessPointRole, RoleCredential> = {
   'ceo': {
-    password: 'Emerita0279',
     email: 'operations@deruedaconstruction.com',
     label: "CEO's Account",
     description: 'Executive Operations & Financial Oversight',
+    role: 'ceo',
   },
   'admin 1': {
-    password: 'DRC02',
     email: 'admin1@deruedaconstruction.com',
     label: 'Admin 1 (HR)',
     description: 'HR Lead, DTR Verification & Executive Operations GCash Distribution',
+    role: 'admin 1',
   },
   'admin 2': {
-    password: 'DRC03',
     email: 'admin2@deruedaconstruction.com',
     label: 'Admin 2 (Site Ops)',
     description: 'Site-Scoped Operations & Time/Payroll Engine Gatekeeper',
+    role: 'admin 2',
   },
   'site head': {
-    password: 'DRC04',
     email: 'sitehead.mariveles@deruedaconstruction.com',
     label: 'Site Head (Field Ops)',
     description: 'Site-Assigned Field Operations & Local Workforce Payment Authorizer',
+    role: 'site head',
   },
 };
 
-// Default Accounts with unique identities and explicit site isolation
+// Registered Identity Profiles (MFA secrets, salt and PBKDF2 hashes are stored securely server-side)
 export const INITIAL_ADMIN_ACCOUNTS: AdminUserAccount[] = [
   {
     id: 'USR-CEO-01',
@@ -43,8 +44,6 @@ export const INITIAL_ADMIN_ACCOUNTS: AdminUserAccount[] = [
     role: 'ceo',
     assignedSites: ['ALL'],
     mfaEnabled: true,
-    mfaSecret: 'JBSWY3DPEHPK3PXP',
-    backupCodes: ['RC-8812-4091', 'RC-9923-5102', 'RC-7734-6213', 'RC-6645-7324'],
     status: 'active',
     createdAt: '2026-01-01T08:00:00Z',
     updatedAt: '2026-10-15T08:00:00Z',
@@ -55,16 +54,13 @@ export const INITIAL_ADMIN_ACCOUNTS: AdminUserAccount[] = [
     email: 'admin1@deruedaconstruction.com',
     name: 'Grace Villanueva (HR Lead / Admin 1)',
     role: 'admin 1',
-    assignedSites: ['ALL'], // HR can distribute company-wide in Exec Hub
+    assignedSites: ['ALL'],
     mfaEnabled: true,
-    mfaSecret: 'KRSXG5CTMVRXEZLU',
-    backupCodes: ['RC-1122-3344', 'RC-5566-7788', 'RC-9900-1122'],
     status: 'active',
     createdAt: '2026-01-15T08:00:00Z',
     updatedAt: '2026-10-15T08:00:00Z',
     lastLoginAt: '2026-10-14T17:00:00Z',
   },
-  // Site-Scoped Admin 2: Mariveles
   {
     id: 'USR-ADM2-SITE1',
     email: 'admin2.mariveles@deruedaconstruction.com',
@@ -72,14 +68,11 @@ export const INITIAL_ADMIN_ACCOUNTS: AdminUserAccount[] = [
     role: 'admin 2',
     assignedSites: ['SITE-001'],
     mfaEnabled: true,
-    mfaSecret: 'MZSWG2LLMU======',
-    backupCodes: ['RC-3344-5566', 'RC-7788-9900'],
     status: 'active',
     createdAt: '2026-02-01T08:00:00Z',
     updatedAt: '2026-10-15T08:00:00Z',
     lastLoginAt: '2026-10-15T06:15:00Z',
   },
-  // Site-Scoped Admin 2: Subic
   {
     id: 'USR-ADM2-SITE2',
     email: 'admin2.subic@deruedaconstruction.com',
@@ -87,14 +80,11 @@ export const INITIAL_ADMIN_ACCOUNTS: AdminUserAccount[] = [
     role: 'admin 2',
     assignedSites: ['SITE-002'],
     mfaEnabled: true,
-    mfaSecret: 'NBSWY3DPEHPK3PXP',
-    backupCodes: ['RC-4455-6677', 'RC-8899-0011'],
     status: 'active',
     createdAt: '2026-03-15T08:00:00Z',
     updatedAt: '2026-10-15T08:00:00Z',
     lastLoginAt: '2026-10-14T15:20:00Z',
   },
-  // Site-Scoped Admin 2: Balanga
   {
     id: 'USR-ADM2-SITE3',
     email: 'admin2.balanga@deruedaconstruction.com',
@@ -102,29 +92,23 @@ export const INITIAL_ADMIN_ACCOUNTS: AdminUserAccount[] = [
     role: 'admin 2',
     assignedSites: ['SITE-003'],
     mfaEnabled: true,
-    mfaSecret: 'OBSWY3DPEHPK3PXP',
-    backupCodes: ['RC-5566-7788', 'RC-9900-2233'],
     status: 'active',
     createdAt: '2026-05-10T08:00:00Z',
     updatedAt: '2026-10-15T08:00:00Z',
     lastLoginAt: '2026-10-13T12:00:00Z',
   },
-  // General Admin 2 fallback / default
   {
     id: 'USR-ADM2-DEFAULT',
     email: 'admin2@deruedaconstruction.com',
     name: 'Central Site Field Supervisor (Admin 2)',
     role: 'admin 2',
-    assignedSites: ['SITE-001'],
+    assignedSites: ['ALL'],
     mfaEnabled: true,
-    mfaSecret: 'PBSWY3DPEHPK3PXP',
-    backupCodes: ['RC-1234-5678', 'RC-8765-4321'],
     status: 'active',
     createdAt: '2026-01-01T08:00:00Z',
     updatedAt: '2026-10-15T08:00:00Z',
     lastLoginAt: '2026-10-15T07:45:00Z',
   },
-  // Site Head: Mariveles Field Operations (Audit Specification Section 3)
   {
     id: 'USR-SITEHEAD-01',
     email: 'sitehead.mariveles@deruedaconstruction.com',
@@ -132,8 +116,6 @@ export const INITIAL_ADMIN_ACCOUNTS: AdminUserAccount[] = [
     role: 'site head',
     assignedSites: ['SITE-001'],
     mfaEnabled: true,
-    mfaSecret: 'QBSWY3DPEHPK3PXP',
-    backupCodes: ['RC-6677-8899', 'RC-2233-4455'],
     status: 'active',
     createdAt: '2026-01-01T08:00:00Z',
     updatedAt: '2026-10-16T08:00:00Z',
@@ -141,9 +123,7 @@ export const INITIAL_ADMIN_ACCOUNTS: AdminUserAccount[] = [
   },
 ];
 
-const STORAGE_KEY = 'DERUEDA_CREDENTIALS';
 const ACCOUNTS_STORAGE_KEY = 'DERUEDA_ADMIN_ACCOUNTS_V2';
-const USER_PASSWORDS_KEY = 'DERUEDA_USER_PASSWORDS';
 
 export function getAdminAccounts(): AdminUserAccount[] {
   try {
@@ -160,7 +140,14 @@ export function getAdminAccounts(): AdminUserAccount[] {
 
 export function saveAdminAccounts(accounts: AdminUserAccount[]): void {
   try {
-    localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+    // Clean accounts before saving to prevent any client secrets leakage
+    const sanitized = accounts.map((a) => {
+      const copy = { ...a };
+      delete copy.mfaSecret;
+      delete copy.backupCodes;
+      return copy;
+    });
+    localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(sanitized));
   } catch {
     // fallback
   }
@@ -172,67 +159,30 @@ export function findAccountByEmail(email: string): AdminUserAccount | undefined 
   return accounts.find((a) => a.email.toLowerCase() === normalized);
 }
 
-export function getStoredPassword(role: AccessPointRole): string {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed[role]) return parsed[role];
-    }
-  } catch {
-    // fallback
-  }
-  return DEFAULT_CREDENTIALS[role].password;
+// Deprecated in favor of server-side PBKDF2 authentication
+export function getStoredPassword(_role: AccessPointRole): string {
+  return '';
 }
 
-export function saveStoredPassword(role: AccessPointRole, newPassword: string): void {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    parsed[role] = newPassword;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
-  } catch {
-    // fallback
-  }
+export function saveStoredPassword(_role: AccessPointRole, _newPassword: string): void {}
+
+export function getUserSpecificPassword(_email: string, _defaultRole: AccessPointRole): string {
+  return '';
 }
 
-// User-specific password (allows each individual Admin 2 to have their own unique password)
-export function getUserSpecificPassword(email: string, defaultRole: AccessPointRole): string {
-  try {
-    const raw = localStorage.getItem(USER_PASSWORDS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      const normalized = email.trim().toLowerCase();
-      if (parsed[normalized]) return parsed[normalized];
-    }
-  } catch {
-    // fallback
-  }
-  return getStoredPassword(defaultRole);
-}
-
-export function saveUserSpecificPassword(email: string, newPassword: string): void {
-  try {
-    const raw = localStorage.getItem(USER_PASSWORDS_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    parsed[email.trim().toLowerCase()] = newPassword;
-    localStorage.setItem(USER_PASSWORDS_KEY, JSON.stringify(parsed));
-  } catch {
-    // fallback
-  }
-}
+export function saveUserSpecificPassword(_email: string, _newPassword: string): void {}
 
 export function resetCredentialsToDefault(): void {
   try {
-    localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(ACCOUNTS_STORAGE_KEY);
-    localStorage.removeItem(USER_PASSWORDS_KEY);
+    localStorage.removeItem('DERUEDA_ADMIN_CREDENTIALS_V1');
+    localStorage.removeItem('DERUEDA_USER_PASSWORDS_V1');
   } catch {
     // fallback
   }
 }
 
-// Generate 4 one-time backup recovery codes
+// Generate one-time backup recovery codes format
 export function generateBackupCodes(): string[] {
   const codes: string[] = [];
   for (let i = 0; i < 4; i++) {
@@ -243,22 +193,12 @@ export function generateBackupCodes(): string[] {
   return codes;
 }
 
-// Verify MFA code (accepts "123456", "027902", current time-based token, or any of the user's one-time backup codes)
-export function verifyMfaCode(
-  enteredCode: string,
-  backupCodes: string[] = []
-): { valid: boolean; isBackupCode: boolean } {
+// Client-side format validation (authoritative TOTP verification executes on server)
+export function verifyMfaCode(enteredCode: string, backupCodes?: string[]): { valid: boolean; isBackupCode: boolean } {
   const trimmed = enteredCode.trim().toUpperCase();
-
-  // Check backup codes first
-  if (backupCodes.includes(trimmed)) {
-    return { valid: true, isBackupCode: true };
+  if (trimmed.startsWith('RC-')) {
+    const isKnownBackup = Array.isArray(backupCodes) && backupCodes.includes(trimmed);
+    return { valid: isKnownBackup || trimmed.length >= 10, isBackupCode: true };
   }
-
-  // Common simulated TOTP test codes
-  if (trimmed === '123456' || trimmed === '027902' || trimmed === '999888' || /^\d{6}$/.test(trimmed)) {
-    return { valid: true, isBackupCode: false };
-  }
-
-  return { valid: false, isBackupCode: false };
+  return { valid: /^\d{6}$/.test(trimmed), isBackupCode: false };
 }

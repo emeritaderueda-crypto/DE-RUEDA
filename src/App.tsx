@@ -141,7 +141,12 @@ const MainAppContent: React.FC = () => {
           />
         );
       case 'ceo_monitoring':
-        return <CeoMonitoringView onNavigate={handleNavigate} />;
+        return (
+          <DashboardView
+            onNavigate={handleNavigate}
+            onOpenQrScanner={() => handleNavigate('attendance')}
+          />
+        );
       case 'ceo_gcash':
         return <PaymentRecordsHubView onNavigate={handleNavigate} />;
       case 'employees':

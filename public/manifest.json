@@ -1,0 +1,17 @@
+{
+  "short_name": "De Rueda ERP",
+  "name": "De Rueda Construction Management System",
+  "description": "Unified enterprise ERP for De Rueda Construction Inc.",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#080f0d",
+  "theme_color": "#a3e635",
+  "display": "standalone",
+  "orientation": "portrait-primary"
+}

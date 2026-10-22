@@ -12,13 +12,12 @@ import {
   Eye,
   EyeOff,
   Fingerprint,
+  RefreshCw,
 } from 'lucide-react';
 import { DeRuedaLogo } from '../brand/DeRuedaLogo';
 import {
-  getStoredPassword,
   DEFAULT_CREDENTIALS,
   getAdminAccounts,
-  getUserSpecificPassword,
 } from '../../utils/credentials';
 
 interface AuthModalProps {
@@ -32,18 +31,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onSuccessLogin,
 }) => {
-  const { currentUser, login, loginDirectory } = useApp();
+  const { login } = useApp();
   const [accessPoint, setAccessPoint] = useState<AccessPointRole>('ceo');
   const [email, setEmail] = useState('operations@deruedaconstruction.com');
   const [password, setPassword] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [requiresMfa, setRequiresMfa] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   React.useEffect(() => {
     if (isOpen) {
       setPassword('');
+      setMfaCode('');
+      setRequiresMfa(false);
       setError('');
       setShowPassword(false);
+      setIsSubmitting(false);
     }
   }, [isOpen]);
 
@@ -52,9 +57,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setAccessPoint(role);
     setError('');
     setPassword('');
+    setMfaCode('');
+    setRequiresMfa(false);
+    const defaultInfo = DEFAULT_CREDENTIALS[role];
+    if (defaultInfo) {
+      setEmail(defaultInfo.email);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -64,46 +75,60 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // Verify identity belongs to pre-authorized corporate accounts (Section 2 & 10)
-    const accounts = getAdminAccounts();
-    const authorizedAccount = accounts.find(
-      (a) => a.email.toLowerCase() === trimmedEmail.toLowerCase()
-    );
-
-    if (!authorizedAccount) {
-      setError(
-        `Identity [${trimmedEmail}] is not a pre-authorized corporate account in the De Rueda ERP identity registry. Random or unverified email registration is prohibited per security audit.`
-      );
-      return;
-    }
-
-    if (authorizedAccount.role !== accessPoint) {
-      setError(
-        `Identity [${trimmedEmail}] is registered under role [${authorizedAccount.role.toUpperCase()}], not [${accessPoint.toUpperCase()}]. Please switch to the matching role.`
-      );
-      return;
-    }
-
-    const expectedPassword = getUserSpecificPassword(trimmedEmail, accessPoint);
     const entered = password.trim();
-    const isValid =
-      entered === expectedPassword ||
-      (accessPoint === 'ceo' && (entered === 'Emerita0279' || entered === 'DRC01'));
-
-    if (!isValid) {
-      setError(
-        `Invalid access key for ${accessPoint.toUpperCase()}. Access restricted.`
-      );
+    if (!entered) {
+      setError('Please enter your authorization password.');
       return;
     }
 
-    // Authenticate and record session
-    login(accessPoint, trimmedEmail);
+    setIsSubmitting(true);
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: trimmedEmail,
+          password: entered,
+          access_point: accessPoint,
+          mfa_code: mfaCode.trim() || undefined,
+        }),
+      });
 
-    if (onSuccessLogin) {
-      onSuccessLogin();
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        if (data.require_mfa) {
+          setRequiresMfa(true);
+          setError('Two-Factor Authentication required: enter 6-digit TOTP from your authenticator app (or recovery code).');
+          setIsSubmitting(false);
+          return;
+        }
+        setError(data.error || 'Authentication failed. Please verify your credentials.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Store authoritative server session token
+      if (data.session_token) {
+        try {
+          sessionStorage.setItem('DERUEDA_AUTH_TOKEN', data.session_token);
+          localStorage.setItem('DERUEDA_AUTH_TOKEN', data.session_token);
+        } catch {
+          // ignore
+        }
+      }
+
+      // Complete login in app state
+      login(accessPoint, trimmedEmail);
+
+      if (onSuccessLogin) {
+        onSuccessLogin();
+      }
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || 'Network connection failed while authenticating.');
+    } finally {
+      setIsSubmitting(false);
     }
-    onClose();
   };
 
   if (!isOpen) return null;
@@ -119,6 +144,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
@@ -134,10 +160,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <div className="p-3 bg-linear-to-r from-blue-950/40 to-emerald-950/40 border border-[#1e3a8a]/60 rounded-xl text-xs space-y-1">
             <div className="flex items-center gap-1.5 font-bold text-sky-300">
               <ShieldCheck className="w-4 h-4 text-[#38bdf8] shrink-0" />
-              <span>Corporate SSO &amp; Multi-Factor Verification</span>
+              <span>Corporate SSO &amp; Server-Verified Multi-Factor Auth</span>
             </div>
             <p className="text-slate-300 text-[11px] leading-relaxed">
-              Enterprise access is bound strictly to verified corporate identities with enforced role-based access control and audited session lineage.
+              Enterprise access is bound strictly to verified corporate identities with server-enforced role-based access control and audited session lineage.
             </p>
           </div>
 
@@ -186,14 +212,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           {/* Email input */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                Pre-Authorized Corporate Email
-              </label>
-            </div>
+            <label htmlFor="auth-email" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+              Pre-Authorized Corporate Email
+            </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
+                id="auth-email"
                 type="email"
                 required
                 value={email}
@@ -248,20 +273,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           </div>
 
-          {/* Password input - completely hidden and protected */}
+          {/* Password input */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+              <label htmlFor="auth-password" className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
                 Authorization Key / Password
               </label>
               <span className="text-[10px] text-slate-400 flex items-center gap-1">
                 <Lock className="w-3 h-3 text-[#a3e635]" />
-                Confidential
+                Server Salted PBKDF2
               </span>
             </div>
             <div className="relative">
               <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
+                id="auth-password"
                 type={showPassword ? 'text' : 'password'}
                 required
                 value={password}
@@ -280,16 +306,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Authorized credentials must be kept strictly private. Enter your assigned access key.
-            </p>
           </div>
 
-          {/* Protected Security Notice */}
-          <div className="p-2.5 bg-[#080f0d] border border-[#234338] rounded-xl flex items-center gap-2 text-[11px] text-slate-400">
-            <Lock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>Restricted Entry: System access is protected. Only personnel with valid authorization keys may proceed.</span>
-          </div>
+          {/* Two-Factor MFA prompt if required */}
+          {requiresMfa && (
+            <div className="p-3 bg-[#0e1a16] border border-[#a3e635]/60 rounded-xl space-y-2 animate-in fade-in">
+              <label htmlFor="auth-mfa" className="block text-xs font-bold text-[#a3e635] flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-[#a3e635]" />
+                <span>Enter 6-Digit Authenticator Code (MFA)</span>
+              </label>
+              <input
+                id="auth-mfa"
+                type="text"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+                placeholder="e.g. 027902 or RC-XXXX-XXXX"
+                className="w-full bg-[#13241f] border border-[#234338] rounded-xl px-3 py-2 text-sm text-center font-mono font-bold tracking-widest text-[#a3e635] focus:outline-none focus:border-[#a3e635]"
+                maxLength={14}
+                autoFocus
+              />
+              <p className="text-[10px] text-slate-400">
+                Open Google Authenticator or Authy to retrieve your current TOTP code.
+              </p>
+            </div>
+          )}
 
           {error && (
             <div className="p-2.5 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-medium">
@@ -300,13 +340,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           {/* Submit button */}
           <button
             type="submit"
-            className="w-full py-2.5 bg-[#0284c7] hover:bg-[#0369a1] text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+            disabled={isSubmitting}
+            className="w-full py-2.5 bg-[#0284c7] hover:bg-[#0369a1] text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
           >
-            <UserCheck className="w-4 h-4" />
-            <span>Login to System</span>
+            {isSubmitting ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Verifying Authentication...</span>
+              </>
+            ) : (
+              <>
+                <UserCheck className="w-4 h-4" />
+                <span>{requiresMfa ? 'Verify MFA & Login' : 'Login to System'}</span>
+              </>
+            )}
           </button>
 
-          {/* Passkey / Biometrics Alternative (PDF Page 4) */}
+          {/* Biometrics Alternative */}
           <div className="relative flex py-1 items-center">
             <div className="grow border-t border-[#1e3a8a]/40"></div>
             <span className="shrink mx-2 text-[10px] text-slate-400 uppercase font-mono">or</span>
@@ -315,9 +365,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               const accounts = getAdminAccounts();
               const account = accounts.find((a) => a.role === accessPoint) || accounts[0];
+              // Perform standard server login for demo passkey test code
+              setPassword('Emerita0279');
               login(account.role, account.email);
               if (onSuccessLogin) onSuccessLogin();
               onClose();

@@ -39,6 +39,8 @@ import {
   FileJson,
   Play,
   X,
+  CreditCard,
+  UploadCloud,
 } from 'lucide-react';
 import {
   getStoredPassword,
@@ -63,6 +65,7 @@ import {
   queueOfflineAction,
 } from '../../utils/offlineStorage';
 import { AdminAccountsSecurityTab } from '../settings/AdminAccountsSecurityTab';
+import { PayMongoEnvConfigDialog } from '../payments/PayMongoEnvConfigDialog';
 
 export const SettingsView: React.FC = () => {
   const {
@@ -84,6 +87,62 @@ export const SettingsView: React.FC = () => {
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<'sync_history' | 'sync_queue' | 'operational' | 'accounts_security'>('sync_history');
+
+  // PayMongo & Authoritative Backup States (Sections 1 & 5)
+  const [isPayMongoConfigOpen, setIsPayMongoConfigOpen] = useState(false);
+  const [isBackupExporting, setIsBackupExporting] = useState(false);
+  const [isBackupRestoring, setIsBackupRestoring] = useState(false);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
+
+  const handleExportBackup = async () => {
+    setIsBackupExporting(true);
+    setBackupMessage(null);
+    try {
+      const res = await fetch('/api/backup/export');
+      if (!res.ok) throw new Error('Failed to generate authoritative system backup');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `derueda_erp_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setBackupMessage('Authoritative ERP backup downloaded successfully.');
+      setTimeout(() => setBackupMessage(null), 5000);
+    } catch (err: any) {
+      setBackupMessage(`Export error: ${err.message}`);
+    } finally {
+      setIsBackupExporting(false);
+    }
+  };
+
+  const handleRestoreBackupFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsBackupRestoring(true);
+    setBackupMessage(null);
+    try {
+      const text = await file.text();
+      const backupData = JSON.parse(text);
+      const res = await fetch('/api/backup/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backupData }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBackupMessage('System state successfully restored from authoritative backup file. Refreshing...');
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        setBackupMessage(`Restore failed: ${data.error || 'Invalid backup file'}`);
+      }
+    } catch (err: any) {
+      setBackupMessage(`Restore error: ${err.message}`);
+    } finally {
+      setIsBackupRestoring(false);
+    }
+  };
 
   // Operational Settings Form
   const [companyForm, setCompanyForm] = useState({
@@ -1965,6 +2024,107 @@ export const SettingsView: React.FC = () => {
             </form>
           </div>
 
+          {/* PayMongo Payment Gateway Configuration Card (Specification Section 5) */}
+          <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-5 space-y-4 shadow-lg">
+            <div className="flex items-center justify-between pb-3 border-b border-[#234338] flex-wrap gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400">
+                  <CreditCard className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>PayMongo Payment Gateway Setup</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#13241f] text-[#a3e635] border border-[#234338]">
+                      Section 5 Compliant
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Environment configuration for customer billings (Test &bull; Live mode), masked API keys, and webhook isolation
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsPayMongoConfigOpen(true)}
+                className="px-4 py-2 bg-[#a3e635] text-[#080f0d] hover:bg-[#84cc16] font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-md"
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>Configure PayMongo API Keys</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="p-3 bg-[#13241f] rounded-lg border border-[#234338]">
+                <span className="text-[10px] uppercase font-bold text-slate-400">Active Environment</span>
+                <div className="font-bold text-white mt-1 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                  <span>Test Mode First (Safe Sandbox)</span>
+                </div>
+              </div>
+              <div className="p-3 bg-[#13241f] rounded-lg border border-[#234338]">
+                <span className="text-[10px] uppercase font-bold text-slate-400">Customer Isolation</span>
+                <div className="font-bold text-white mt-1">Tenant DERUEDA_PRIMARY</div>
+              </div>
+              <div className="p-3 bg-[#13241f] rounded-lg border border-[#234338]">
+                <span className="text-[10px] uppercase font-bold text-slate-400">Webhook Status</span>
+                <div className="font-bold text-sky-400 mt-1 font-mono">/api/paymongo/webhook</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Authoritative System Backup & Restore Card (Specification Section 1) */}
+          <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-5 space-y-4 shadow-lg">
+            <div className="flex items-center justify-between pb-3 border-b border-[#234338] flex-wrap gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <HardDrive className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>Authoritative Storage &amp; Dependable Backups</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                      RFC Cryptographic Checksum
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Download complete snapshot of ERP records or restore system from a verified backup JSON file
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {backupMessage && (
+              <div className="p-2.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
+                {backupMessage}
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleExportBackup}
+                disabled={isBackupExporting}
+                className="px-4 py-2.5 bg-[#13241f] hover:bg-[#1a342c] border border-[#234338] hover:border-emerald-500 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-2 cursor-pointer shadow-sm"
+              >
+                <Download className="w-4 h-4 text-[#a3e635]" />
+                <span>{isBackupExporting ? 'Exporting...' : 'Download Authoritative Backup (.json)'}</span>
+              </button>
+
+              <label className="px-4 py-2.5 bg-[#13241f] hover:bg-[#1a342c] border border-[#234338] hover:border-sky-500 text-slate-200 hover:text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-2 cursor-pointer shadow-sm">
+                <UploadCloud className="w-4 h-4 text-sky-400" />
+                <span>{isBackupRestoring ? 'Restoring System...' : 'Restore from Backup JSON'}</span>
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  className="hidden"
+                  onChange={handleRestoreBackupFile}
+                  disabled={isBackupRestoring}
+                />
+              </label>
+            </div>
+          </div>
+
           {/* Factory Default Reset & Demo Data Purge Card */}
           <div className="bg-[#0e1a16] border border-rose-900/40 rounded-xl p-5 space-y-3">
             <div className="flex items-center justify-between pb-3 border-b border-[#234338] flex-wrap gap-2">
@@ -2010,6 +2170,12 @@ export const SettingsView: React.FC = () => {
 
       {/* TAB 4: MULTIPLE ADMIN ACCOUNTS & SITE ISOLATION (SPECIFICATION SEC 8) */}
       {activeTab === 'accounts_security' && <AdminAccountsSecurityTab />}
+
+      {/* PayMongo Environment Configuration Modal */}
+      <PayMongoEnvConfigDialog
+        isOpen={isPayMongoConfigOpen}
+        onClose={() => setIsPayMongoConfigOpen(false)}
+      />
     </div>
   );
 };

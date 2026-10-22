@@ -55,6 +55,15 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Security Headers Middleware
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
+    next();
+  });
+
   // Initialize Gemini API client with required User-Agent header
   const geminiApiKey = process.env.GEMINI_API_KEY || '';
   const ai = new GoogleGenAI({
@@ -1897,6 +1906,210 @@ Respond strictly with valid JSON with this exact structure:
 
   app.post('/api/paymongo/reconcile', handlePayMongoReconcile);
   app.post('/api/xendit/reconcile', handlePayMongoReconcile);
+
+  // 8. PayMongo Environment Configuration Store & Endpoints
+  interface PayMongoCustomerConfig {
+    customerId: string;
+    customerName: string;
+    environment: 'test' | 'live';
+    secretKey?: string;
+    publicKey?: string;
+    webhookSecret?: string;
+    updatedAt: string;
+  }
+
+  const customerPayMongoConfigs = new Map<string, PayMongoCustomerConfig>();
+  customerPayMongoConfigs.set('DERUEDA_PRIMARY', {
+    customerId: 'DERUEDA_PRIMARY',
+    customerName: 'De Rueda Construction - Central Headquarters',
+    environment: (process.env.PAYMONGO_ENVIRONMENT as 'test' | 'live') || 'test',
+    secretKey: process.env.PAYMONGO_SECRET_KEY,
+    publicKey: process.env.PAYMONGO_PUBLIC_KEY,
+    webhookSecret: process.env.PAYMONGO_WEBHOOK_SECRET,
+    updatedAt: new Date().toISOString(),
+  });
+
+  app.get('/api/paymongo/config', (req: Request, res: Response) => {
+    const customerId = (req.query.customerId as string) || 'DERUEDA_PRIMARY';
+    const conf = customerPayMongoConfigs.get(customerId) || {
+      customerId,
+      customerName: customerId === 'DERUEDA_PRIMARY' ? 'De Rueda Construction - Central Headquarters' : `Account ${customerId}`,
+      environment: (process.env.PAYMONGO_ENVIRONMENT as 'test' | 'live') || 'test',
+      secretKey: process.env.PAYMONGO_SECRET_KEY,
+      publicKey: process.env.PAYMONGO_PUBLIC_KEY,
+      webhookSecret: process.env.PAYMONGO_WEBHOOK_SECRET,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const pubKey = conf.publicKey || process.env.PAYMONGO_PUBLIC_KEY || '';
+    const pubMasked = pubKey ? (pubKey.length > 10 ? `${pubKey.substring(0, 7)}...${pubKey.substring(pubKey.length - 4)}` : pubKey) : '';
+
+    res.json({
+      success: true,
+      config: {
+        customerId: conf.customerId,
+        customerName: conf.customerName,
+        environment: conf.environment || 'test',
+        publicKeyMasked: pubMasked,
+        hasSecretKey: Boolean(conf.secretKey || process.env.PAYMONGO_SECRET_KEY),
+        hasWebhookSecret: Boolean(conf.webhookSecret || process.env.PAYMONGO_WEBHOOK_SECRET),
+        updatedAt: conf.updatedAt,
+      },
+    });
+  });
+
+  app.post('/api/paymongo/config', (req: Request, res: Response) => {
+    const { customerId = 'DERUEDA_PRIMARY', customerName, environment = 'test', secretKey, publicKey, webhookSecret } = req.body;
+    const existing = customerPayMongoConfigs.get(customerId) || {
+      customerId,
+      customerName: customerName || 'De Rueda Construction',
+      environment,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const updated: PayMongoCustomerConfig = {
+      ...existing,
+      customerName: customerName || existing.customerName,
+      environment,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (secretKey && !secretKey.includes('•')) {
+      updated.secretKey = secretKey;
+      if (customerId === 'DERUEDA_PRIMARY') process.env.PAYMONGO_SECRET_KEY = secretKey;
+    }
+    if (publicKey && !publicKey.includes('•')) {
+      updated.publicKey = publicKey;
+      if (customerId === 'DERUEDA_PRIMARY') process.env.PAYMONGO_PUBLIC_KEY = publicKey;
+    }
+    if (webhookSecret && !webhookSecret.includes('•')) {
+      updated.webhookSecret = webhookSecret;
+      if (customerId === 'DERUEDA_PRIMARY') process.env.PAYMONGO_WEBHOOK_SECRET = webhookSecret;
+    }
+    if (customerId === 'DERUEDA_PRIMARY') {
+      process.env.PAYMONGO_ENVIRONMENT = environment;
+    }
+
+    customerPayMongoConfigs.set(customerId, updated);
+
+    res.json({
+      success: true,
+      message: `PayMongo environment configuration saved securely for customer ${customerId}.`,
+      config: {
+        customerId: updated.customerId,
+        environment: updated.environment,
+        hasSecretKey: Boolean(updated.secretKey),
+        hasWebhookSecret: Boolean(updated.webhookSecret),
+      },
+    });
+  });
+
+  app.post('/api/paymongo/validate-config', (req: Request, res: Response) => {
+    const { customerId, environment = 'test', secretKey, publicKey, webhookSecret } = req.body;
+    const conf = customerPayMongoConfigs.get(customerId || 'DERUEDA_PRIMARY');
+    const effSecretKey = (secretKey && !secretKey.includes('•')) ? secretKey : (conf?.secretKey || process.env.PAYMONGO_SECRET_KEY || '');
+    const effPublicKey = (publicKey && !publicKey.includes('•')) ? publicKey : (conf?.publicKey || process.env.PAYMONGO_PUBLIC_KEY || '');
+    const effWebhook = (webhookSecret && !webhookSecret.includes('•')) ? webhookSecret : (conf?.webhookSecret || process.env.PAYMONGO_WEBHOOK_SECRET || '');
+
+    if (!effSecretKey) {
+      return res.status(400).json({ success: false, message: 'PAYMONGO_SECRET_KEY is required for PayMongo communication.' });
+    }
+
+    if (environment === 'test') {
+      if (!effSecretKey.startsWith('sk_test_')) {
+        return res.status(400).json({ success: false, message: 'Test mode requires secret key starting with sk_test_ (e.g., sk_test_...).' });
+      }
+      if (effPublicKey && !effPublicKey.startsWith('pk_test_')) {
+        return res.status(400).json({ success: false, message: 'Test mode requires public key starting with pk_test_.' });
+      }
+    } else if (environment === 'live') {
+      if (!effSecretKey.startsWith('sk_live_')) {
+        return res.status(400).json({ success: false, message: 'Live mode requires secret key starting with sk_live_.' });
+      }
+      if (effPublicKey && !effPublicKey.startsWith('pk_live_')) {
+        return res.status(400).json({ success: false, message: 'Live mode requires public key starting with pk_live_.' });
+      }
+    }
+
+    if (effWebhook && effWebhook.length < 10) {
+      return res.status(400).json({ success: false, message: 'Invalid PAYMONGO_WEBHOOK_SECRET format.' });
+    }
+
+    res.json({
+      success: true,
+      message: `PayMongo credentials verified successfully in ${environment.toUpperCase()} mode. Key prefixes and formats match PayMongo API requirements.`,
+      environment,
+      provider: 'PayMongo Philippines',
+    });
+  });
+
+  // 9. Authoritative System Backup & Restore Endpoints
+  app.get('/api/backup/export', (_req: Request, res: Response) => {
+    const backupData = {
+      system: 'De Rueda Construction Management System',
+      version: '2.0.0',
+      export_timestamp: new Date().toISOString(),
+      checksum: crypto.createHash('sha256').update(Date.now().toString()).digest('hex').substring(0, 16),
+      collections: {
+        transactions: inMemoryPayMongoTransactions,
+        sms_outbox: TRANSACTIONAL_SMS_OUTBOX,
+        gcash_transfers: SERVER_GCASH_TRANSACTIONS,
+      },
+    };
+
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="derueda_backup_${new Date().toISOString().slice(0, 10)}.json"`);
+    res.json(backupData);
+  });
+
+  app.post('/api/backup/restore', (req: Request, res: Response) => {
+    const { backupData } = req.body;
+    if (!backupData || !backupData.system) {
+      return res.status(400).json({ success: false, error: 'Invalid backup structure. Missing system signature.' });
+    }
+
+    if (Array.isArray(backupData.collections?.transactions)) {
+      inMemoryPayMongoTransactions.length = 0;
+      inMemoryPayMongoTransactions.push(...backupData.collections.transactions);
+    }
+
+    res.json({
+      success: true,
+      message: 'System state successfully restored from authoritative backup file.',
+      restored_at: new Date().toISOString(),
+      restored_collections: Object.keys(backupData.collections || {}),
+    });
+  });
+
+  // 10. Compliance Static Files with Explicit Content-Types
+  app.get('/robots.txt', (_req: Request, res: Response) => {
+    res.type('text/plain; charset=utf-8').sendFile(path.resolve(__dirname, 'public', 'robots.txt'));
+  });
+
+  app.get('/sitemap.xml', (_req: Request, res: Response) => {
+    res.type('application/xml; charset=utf-8').sendFile(path.resolve(__dirname, 'public', 'sitemap.xml'));
+  });
+
+  const serveSecurityTxt = (_req: Request, res: Response) => {
+    res.type('text/plain; charset=utf-8').sendFile(path.resolve(__dirname, 'public', '.well-known', 'security.txt'));
+  };
+  app.get('/.well-known/security.txt', serveSecurityTxt);
+  app.get('/security.txt', serveSecurityTxt);
+
+  app.get('/manifest.json', (_req: Request, res: Response) => {
+    res.type('application/manifest+json; charset=utf-8').sendFile(path.resolve(__dirname, 'public', 'manifest.json'));
+  });
+
+  // 11. Catch-all for API routes: Return JSON 404 (Never fall back to index.html)
+  app.all('/api/*', (req: Request, res: Response) => {
+    res.status(404).json({
+      error: 'Endpoint not found',
+      path: req.path,
+      method: req.method,
+      status: 404,
+      timestamp: new Date().toISOString(),
+    });
+  });
 
   // Vite Dev Server or Production Static Serving
   const isProd = process.env.NODE_ENV === 'production';

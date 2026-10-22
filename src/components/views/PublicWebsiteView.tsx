@@ -287,26 +287,32 @@ export const PublicWebsiteView: React.FC<PublicWebsiteViewProps> = ({
             <h2 className="text-2xl sm:text-3xl font-extrabold text-white mt-1">Featured Construction Projects</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {sites.map((site) => (
-              <div key={site.site_id} className="p-5 bg-[#0a1128] border border-[#1e3a8a]/50 rounded-xl space-y-3 shadow-lg hover:border-emerald-500/50 transition-all">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono font-bold text-emerald-400">{site.code}</span>
-                  <span className="text-[10px] font-bold text-emerald-300 uppercase bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                    {site.project_status}
-                  </span>
+          {sites.length === 0 ? (
+            <div className="p-8 text-center bg-[#0a1128] border border-[#1e3a8a]/40 rounded-xl text-xs text-slate-400">
+              Active commercial site developments and construction projects will be featured here upon project site commissioning.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {sites.map((site) => (
+                <div key={site.site_id} className="p-5 bg-[#0a1128] border border-[#1e3a8a]/50 rounded-xl space-y-3 shadow-lg hover:border-emerald-500/50 transition-all">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-mono font-bold text-emerald-400">{site.code}</span>
+                    <span className="text-[10px] font-bold text-emerald-300 uppercase bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      {site.project_status}
+                    </span>
+                  </div>
+                  <h3 className="font-bold text-sm text-white">{site.name}</h3>
+                  <div className="text-xs text-slate-400 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                    <span>{site.location}</span>
+                  </div>
+                  <div className="text-xs text-slate-400">
+                    Site Head: <strong className="text-slate-300">{site.supervisor}</strong>
+                  </div>
                 </div>
-                <h3 className="font-bold text-sm text-white">{site.name}</h3>
-                <div className="text-xs text-slate-400 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                  <span>{site.location}</span>
-                </div>
-                <div className="text-xs text-slate-400">
-                  Site Head: <strong className="text-slate-300">{site.supervisor}</strong>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

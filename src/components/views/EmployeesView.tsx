@@ -77,7 +77,7 @@ export const EmployeesView: React.FC = () => {
     name: '',
     position: 'Lead Mason / Foreman',
     daily_rate: 750,
-    site_id: 'SITE-001',
+    site_id: sites[0]?.site_id || '',
     category: 'Site-Based' as 'Site-Based' | 'Office-Based',
     photo_url: '',
     email: '',
