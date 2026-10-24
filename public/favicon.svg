@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="14" fill="#080f0d"/>
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="none" stroke="#234338" stroke-width="2"/>
+  <!-- De Rueda Construction Icon (Stylized D & R Construction Structure) -->
+  <path d="M 18 16 L 36 16 C 44 16 48 20 48 26 C 48 31 44 35 37 35 L 26 35 L 26 48 L 18 48 Z" fill="#a3e635"/>
+  <path d="M 26 23 L 34 23 C 37 23 39 24.5 39 26 C 39 27.5 37 29 34 29 L 26 29 Z" fill="#080f0d"/>
+  <!-- Construction beam accent -->
+  <path d="M 33 34 L 46 48 L 38 48 L 27 36 Z" fill="#10b981"/>
+</svg>

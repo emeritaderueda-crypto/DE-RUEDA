@@ -178,9 +178,9 @@ export const MessagesView: React.FC = () => {
             </span>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
-            <span className="flex items-center gap-1 text-emerald-400 font-medium">
+            <span className="flex items-center gap-1 text-[#a3e635] font-medium">
               <ShieldCheck className="w-3.5 h-3.5 text-[#a3e635]" />
-              Verified Enterprise Channel
+              Internal Enterprise Communications (Role-Isolated)
             </span>
             <span>&bull;</span>
             <span>Site Supervisors, Engineers & Executive Leadership</span>

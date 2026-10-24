@@ -27,15 +27,19 @@ import {
   UtensilsCrossed,
   QrCode,
   CreditCard,
+  Briefcase,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { DeRuedaLogo } from '../brand/DeRuedaLogo';
 
 export type PageId =
   | 'dashboard'
+  | 'clients'
+  | 'sites'
+  | 'adjustments'
+  | 'employees'
   | 'ceo_monitoring'
   | 'ceo_gcash'
-  | 'employees'
-  | 'sites'
   | 'attendance'
   | 'deductions'
   | 'canteen'
@@ -75,8 +79,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'Executive & Operations',
       items: [
         { id: 'dashboard' as PageId, label: 'Executive Dashboard', icon: LayoutDashboard },
-        { id: 'employees' as PageId, label: 'Employees / HR', icon: Users },
+        { id: 'clients' as PageId, label: 'Client Management', icon: Briefcase, badge: 'CLIENT' },
         { id: 'sites' as PageId, label: 'Sites & Projects', icon: Building },
+        { id: 'adjustments' as PageId, label: 'Project Adjustments', icon: SlidersHorizontal, badge: 'GATE' },
+        { id: 'employees' as PageId, label: 'Employees / HR', icon: Users },
       ],
     },
     {

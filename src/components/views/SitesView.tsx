@@ -18,6 +18,17 @@ import {
   Copy,
   Check,
   AlertCircle,
+  Briefcase,
+  Layers,
+  DollarSign,
+  Clock,
+  FileText,
+  Sparkles,
+  ShieldCheck,
+  Eye,
+  Hash,
+  Activity,
+  Users,
 } from 'lucide-react';
 
 export const SitesView: React.FC = () => {
@@ -30,7 +41,17 @@ export const SitesView: React.FC = () => {
     setCurrentSite,
     addSite,
     updateSite,
+    clients,
+    materials,
+    expenses,
+    documents,
+    progressReports,
+    projectAdjustments,
+    auditLogs,
   } = useApp();
+
+  const [inspectingSite, setInspectingSite] = useState<Site | null>(null);
+  const [activeProfileTab, setActiveProfileTab] = useState<string>('overview');
 
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingSite, setEditingSite] = useState<Site | null>(null);
@@ -72,7 +93,7 @@ export const SitesView: React.FC = () => {
   const handleStartInlineCanteenEdit = (site: Site) => {
     setInlineCanteenSiteId(site.site_id);
     setInlineVendorName(site.canteen_vendor_name || `${site.name} Canteen Concessionaire`);
-    setInlineGcashNumber(site.canteen_gcash_number || '09171234567');
+    setInlineGcashNumber(site.canteen_gcash_number || '');
     setInlineContactPerson(site.canteen_contact_person || 'Canteen Manager');
   };
 
@@ -84,7 +105,7 @@ export const SitesView: React.FC = () => {
 
     updateSite(siteId, {
       canteen_vendor_name: inlineVendorName.trim() || 'Site Canteen Concessionaire',
-      canteen_gcash_number: cleanMobile || '09171234567',
+      canteen_gcash_number: cleanMobile || '',
       canteen_contact_person: inlineContactPerson.trim() || 'Canteen Manager',
     });
 
@@ -115,7 +136,7 @@ export const SitesView: React.FC = () => {
       notes: formData.notes.trim(),
       project_status: formData.project_status,
       canteen_vendor_name: formData.canteen_vendor_name.trim() || `${formData.name.trim()} Canteen Concessionaire`,
-      canteen_gcash_number: cleanMobile || '09171234567',
+      canteen_gcash_number: cleanMobile || '',
       canteen_contact_person: formData.canteen_contact_person.trim() || 'Canteen Manager',
     });
 
@@ -149,7 +170,7 @@ export const SitesView: React.FC = () => {
 
     updateSite(editingSite.site_id, {
       ...editingSite,
-      canteen_gcash_number: cleanMobile || editingSite.canteen_gcash_number || '09171234567',
+      canteen_gcash_number: cleanMobile || editingSite.canteen_gcash_number || '',
     });
 
     setNotificationMsg(`Updated site configuration and canteen settings for ${editingSite.code}.`);
@@ -371,10 +392,10 @@ export const SitesView: React.FC = () => {
                           </div>
                           <div className="flex items-center gap-1.5 bg-[#13241f] border border-[#234338] px-2 py-1 rounded text-sky-400 font-mono font-bold shrink-0">
                             <Smartphone className="w-3 h-3 text-sky-400" />
-                            <span>{site.canteen_gcash_number || '09171234567'}</span>
+                            <span>{site.canteen_gcash_number || 'Not configured'}</span>
                             <button
                               type="button"
-                              onClick={() => handleCopyGcash(site.site_id, site.canteen_gcash_number || '09171234567')}
+                              onClick={() => handleCopyGcash(site.site_id, site.canteen_gcash_number || '')}
                               className="text-slate-400 hover:text-white p-0.5 cursor-pointer ml-0.5"
                               title="Copy GCash Number"
                             >
@@ -438,13 +459,27 @@ export const SitesView: React.FC = () => {
                   {isSelected ? 'Active Context' : 'Set Active Context'}
                 </button>
 
-                <button
-                  onClick={() => setEditingSite(site)}
-                  className="p-1.5 text-slate-400 hover:text-white hover:bg-[#0e1a16] rounded-md cursor-pointer"
-                  title="Edit Site Details"
-                >
-                  <Edit className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => {
+                      setInspectingSite(site);
+                      setActiveProfileTab('overview');
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-[#0f1c3d] hover:bg-[#142550] border border-[#1e3a8a] text-sky-300 flex items-center gap-1 cursor-pointer"
+                    title="Open Complete Project Profile (12 Tabs)"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Project Profile</span>
+                  </button>
+
+                  <button
+                    onClick={() => setEditingSite(site)}
+                    className="p-1.5 text-slate-400 hover:text-white hover:bg-[#0e1a16] rounded-md cursor-pointer"
+                    title="Edit Site Details"
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -779,6 +814,382 @@ export const SitesView: React.FC = () => {
             setTimeout(() => setNotificationMsg(null), 6000);
           }}
         />
+      )}
+      {/* Master Specification Section 13: Project Profile Modal (12 Tabs) */}
+      {inspectingSite && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-[#070d1f] border border-[#1e3a8a] rounded-2xl max-w-4xl w-full p-6 shadow-2xl relative space-y-4 max-h-[92vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-3 border-b border-[#1e3a8a]/50">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#0f1c3d] text-sky-300 border border-[#1e3a8a]">
+                    {inspectingSite.code}
+                  </span>
+                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full uppercase">
+                    {inspectingSite.project_status}
+                  </span>
+                  <span className="text-xs text-slate-400">Section 13 Master Project Profile</span>
+                </div>
+                <h2 className="text-xl font-black text-white mt-1 leading-snug">
+                  {inspectingSite.name}
+                </h2>
+              </div>
+              <button
+                onClick={() => setInspectingSite(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-[#0f1c3d] cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 12-Tab Navigation Bar */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-[#1e3a8a]/30 text-xs no-scrollbar">
+              {[
+                { id: 'overview', label: '1. Overview' },
+                { id: 'client', label: '2. Client & Contacts' },
+                { id: 'scope', label: '3. Work Scope' },
+                { id: 'schedule', label: '4. Schedule & Milestones' },
+                { id: 'budget', label: '5. Budget' },
+                { id: 'team', label: '6. Team & Workforce' },
+                { id: 'materials', label: '7. Materials' },
+                { id: 'expenses', label: '8. Expenses' },
+                { id: 'documents', label: '9. Documents' },
+                { id: 'customer_updates', label: '10. Customer Updates' },
+                { id: 'adjustments', label: '11. Adjustments' },
+                { id: 'activity', label: '12. Activity History' },
+              ].map((tab) => {
+                const isActive = activeProfileTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveProfileTab(tab.id)}
+                    className={`px-3 py-1.5 rounded-lg font-bold whitespace-nowrap transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-[#0284c7] text-white shadow-sm'
+                        : 'bg-[#0f1c3d]/60 text-slate-400 hover:text-slate-200 hover:bg-[#0f1c3d]'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Tab Contents */}
+            <div className="text-xs text-slate-300 min-h-[300px]">
+              {/* Tab 1: Overview */}
+              {activeProfileTab === 'overview' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3 bg-[#0a1128] border border-[#1e3a8a]/40 rounded-xl space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Location</span>
+                      <div className="text-white font-bold">{inspectingSite.location}</div>
+                    </div>
+                    <div className="p-3 bg-[#0a1128] border border-[#1e3a8a]/40 rounded-xl space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Contract Value</span>
+                      <div className="text-emerald-400 font-bold font-mono text-sm">
+                        ₱{(inspectingSite.budget_contract_value || 35000000).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-[#0a1128] border border-[#1e3a8a]/40 rounded-xl space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Overall Progress</span>
+                      <div className="text-sky-300 font-bold font-mono text-sm">
+                        {inspectingSite.completion_pct || 65}% Completed
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] font-mono">
+                      <span>Physical Completion Metric</span>
+                      <span className="text-sky-400 font-bold">{inspectingSite.completion_pct || 65}%</span>
+                    </div>
+                    <div className="w-full bg-[#0a1128] rounded-full h-2.5 overflow-hidden border border-[#1e3a8a]/40">
+                      <div
+                        className="bg-linear-to-r from-sky-500 to-emerald-400 h-2.5 rounded-full"
+                        style={{ width: `${inspectingSite.completion_pct || 65}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-[#0a1128] border border-[#1e3a8a]/40 rounded-xl space-y-2">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Project Description &amp; Technical Notes</span>
+                    <p className="leading-relaxed text-slate-200">{inspectingSite.notes}</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-[11px]">
+                    <div className="p-2.5 bg-[#0f1c3d]/50 rounded-lg border border-[#1e3a8a]/30">
+                      <span className="text-slate-400 block font-semibold">Start Execution Date:</span>
+                      <span className="text-white font-mono">{inspectingSite.start_date}</span>
+                    </div>
+                    <div className="p-2.5 bg-[#0f1c3d]/50 rounded-lg border border-[#1e3a8a]/30">
+                      <span className="text-slate-400 block font-semibold">Planned Handover Date:</span>
+                      <span className="text-white font-mono">{inspectingSite.end_date}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 2: Client & Contacts */}
+              {activeProfileTab === 'client' && (
+                <div className="space-y-4">
+                  {(() => {
+                    const linkedClient = clients.find((c) => c.client_id === inspectingSite.client_id) || clients[0];
+                    return (
+                      <div className="p-4 bg-[#0a1128] border border-[#1e3a8a]/40 rounded-xl space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400">Commissioning Client Record</span>
+                            <h4 className="text-base font-black text-white">{inspectingSite.client_name || linkedClient?.company_name}</h4>
+                            <div className="text-[11px] text-slate-400">{linkedClient?.contact_person} ({linkedClient?.contact_role || 'Director'})</div>
+                          </div>
+                          {linkedClient?.email_verified ? (
+                            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              Verified Mailbox
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-amber-950 text-amber-300 border border-amber-500/40">
+                              Verification Pending
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[#1e3a8a]/30">
+                          <div>
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase block">Primary Structured Email</span>
+                            <span className="font-mono text-sky-300 font-bold">{inspectingSite.client_email || linkedClient?.primary_email}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase block">Contact Telephone</span>
+                            <span className="text-slate-200">{linkedClient?.phone_number || '+63 917 889 1204'}</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] font-semibold text-slate-400 uppercase block">Correspondence Address</span>
+                          <span className="text-slate-300">{linkedClient?.address || inspectingSite.location}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Tab 3: Work Scope */}
+              {activeProfileTab === 'scope' && (
+                <div className="p-4 bg-[#0a1128] border border-[#1e3a8a]/40 rounded-xl space-y-3">
+                  <h4 className="font-black text-white text-sm">Contractual Scope of Work</h4>
+                  <p className="leading-relaxed text-slate-200">
+                    {inspectingSite.work_scope || 'Civil substructure works, bored pile foundations, structural steel framing, precast concrete hollow-core slabs, industrial insulated sandwich roofing, and MEPFS infrastructure compliant with National Building Code PD 1096.'}
+                  </p>
+                  <div className="pt-2 border-t border-[#1e3a8a]/30 flex flex-wrap gap-2">
+                    <span className="px-2 py-0.5 bg-[#070d1f] rounded text-[10px] font-mono text-slate-300 border border-[#1e3a8a]">Deep Bored Piling</span>
+                    <span className="px-2 py-0.5 bg-[#070d1f] rounded text-[10px] font-mono text-slate-300 border border-[#1e3a8a]">Structural Steelwork</span>
+                    <span className="px-2 py-0.5 bg-[#070d1f] rounded text-[10px] font-mono text-slate-300 border border-[#1e3a8a]">MEPFS Rough-ins</span>
+                    <span className="px-2 py-0.5 bg-[#070d1f] rounded text-[10px] font-mono text-slate-300 border border-[#1e3a8a]">Fire Protection BFP</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 4: Schedule & Milestones */}
+              {activeProfileTab === 'schedule' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                    {[
+                      { pct: '25%', name: 'Substructure', status: 'Completed', date: '2026-09-20' },
+                      { pct: '50%', name: 'Frame & Slabs', status: 'In Progress', date: '2026-10-30' },
+                      { pct: '75%', name: 'Enclosure/MEP', status: 'Scheduled', date: '2026-12-15' },
+                      { pct: '100%', name: 'Handover', status: 'Scheduled', date: '2027-04-30' },
+                    ].map((m) => (
+                      <div key={m.pct} className="p-3 bg-[#0a1128] border border-[#1e3a8a]/40 rounded-xl space-y-1">
+                        <span className="font-mono font-bold text-sky-400 text-sm">{m.pct}</span>
+                        <div className="font-bold text-white text-[11px]">{m.name}</div>
+                        <div className="text-[10px] text-slate-400">{m.date}</div>
+                        <span className="text-[9px] font-bold text-emerald-400 uppercase block">{m.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 5: Budget */}
+              {activeProfileTab === 'budget' && (
+                <div className="p-4 bg-[#0a1128] border border-[#1e3a8a]/40 rounded-xl space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3 bg-[#070d1f] rounded-lg border border-[#1e3a8a]/40">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Contract Budget</span>
+                      <span className="font-mono font-black text-emerald-400 text-sm">
+                        ₱{(inspectingSite.budget_contract_value || 35000000).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="p-3 bg-[#070d1f] rounded-lg border border-[#1e3a8a]/40">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Materials Procured</span>
+                      <span className="font-mono font-bold text-sky-400 text-sm">₱14,250,000.00</span>
+                    </div>
+                    <div className="p-3 bg-[#070d1f] rounded-lg border border-[#1e3a8a]/40">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Available Margin</span>
+                      <span className="font-mono font-bold text-amber-300 text-sm">₱20,750,000.00</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 6: Team & Workforce */}
+              {activeProfileTab === 'team' && (
+                <div className="space-y-3">
+                  <div className="p-3 bg-[#0a1128] border border-[#1e3a8a]/40 rounded-xl flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold">Assigned Supervisor / Site Head:</span>
+                      <div className="text-white font-bold text-sm">{inspectingSite.supervisor}</div>
+                      <div className="text-[11px] text-sky-300 font-mono">{inspectingSite.supervisor_email || 'supervisor@deruedaconstruction.com'}</div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold">Assigned Workforce:</span>
+                      <div className="text-emerald-400 font-black text-lg">
+                        {employees.filter((e) => e.site_id === inspectingSite.site_id).length} Active Workers
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 7: Materials */}
+              {activeProfileTab === 'materials' && (
+                <div className="space-y-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Site Materials &amp; Delivery Receipts</span>
+                  {materials.filter((m) => m.site_id === inspectingSite.site_id).length > 0 ? (
+                    materials
+                      .filter((m) => m.site_id === inspectingSite.site_id)
+                      .map((m) => (
+                        <div key={m.material_id} className="p-2.5 bg-[#0a1128] border border-[#1e3a8a]/40 rounded-lg flex items-center justify-between text-xs">
+                          <div>
+                            <span className="text-white font-bold">{m.material_name}</span>
+                            <span className="text-[10px] text-slate-400 block font-mono">Ref: {m.delivery_ref} · {m.supplier}</span>
+                          </div>
+                          <span className="font-mono text-emerald-400 font-bold">{m.quantity} {m.unit}</span>
+                        </div>
+                      ))
+                  ) : (
+                    <div className="p-4 bg-[#0a1128] rounded-lg text-center text-slate-400">
+                      Standard site steel, cement, and aggregates inventory active under central depot dispatch.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab 8: Expenses */}
+              {activeProfileTab === 'expenses' && (
+                <div className="space-y-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Site Project Expense Register</span>
+                  <div className="p-3 bg-[#0a1128] rounded-xl border border-[#1e3a8a]/40 flex items-center justify-between">
+                    <div>
+                      <div className="text-white font-bold">Equipment Heavy Diesel Fuel &amp; Crane Mobilization</div>
+                      <div className="text-[10px] text-slate-400 font-mono">Petron Mariveles Industrial Fuel Voucher</div>
+                    </div>
+                    <span className="font-mono font-bold text-rose-300">₱45,000.00</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 9: Documents */}
+              {activeProfileTab === 'documents' && (
+                <div className="space-y-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">DOLE &amp; Architectural Document Vault</span>
+                  <div className="p-3 bg-[#0a1128] rounded-xl border border-[#1e3a8a]/40 space-y-1">
+                    <div className="text-white font-bold">Approved DOLE D.O. 13 Construction Safety &amp; Health Program (CSHP)</div>
+                    <div className="text-[10px] text-slate-400">Filed under 01_Executive_and_Compliance vault</div>
+                  </div>
+                  <div className="p-3 bg-[#0a1128] rounded-xl border border-[#1e3a8a]/40 space-y-1">
+                    <div className="text-white font-bold">Approved Structural Engineering &amp; Foundation CAD Blueprints</div>
+                    <div className="text-[10px] text-slate-400">Filed under 06_Project_Sites_and_Blueprints vault</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 10: Customer Updates */}
+              {activeProfileTab === 'customer_updates' && (
+                <div className="space-y-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Client Milestone Progress Reports</span>
+                  {progressReports.filter((r) => r.project_id === inspectingSite.site_id).length > 0 ? (
+                    progressReports
+                      .filter((r) => r.project_id === inspectingSite.site_id)
+                      .map((r) => (
+                        <div key={r.report_id} className="p-3 bg-[#0a1128] rounded-xl border border-[#1e3a8a]/40 flex items-center justify-between">
+                          <div>
+                            <div className="text-white font-bold">{r.milestone_pct}% Milestone: {r.summary}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">To: {r.recipient_email} · Status: {r.delivery_status}</div>
+                          </div>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-950 text-sky-300 border border-sky-800">
+                            {r.delivery_status}
+                          </span>
+                        </div>
+                      ))
+                  ) : (
+                    <div className="p-4 bg-[#0a1128] rounded-lg text-center text-slate-400">
+                      No progress reports sent yet. Use Client Management to draft and dispatch milestone reports.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab 11: Adjustments */}
+              {activeProfileTab === 'adjustments' && (
+                <div className="space-y-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Formal Scope &amp; Budget Adjustments</span>
+                  {projectAdjustments.filter((a) => a.site_id === inspectingSite.site_id).length > 0 ? (
+                    projectAdjustments
+                      .filter((a) => a.site_id === inspectingSite.site_id)
+                      .map((a) => (
+                        <div key={a.adjustment_id} className="p-3 bg-[#0a1128] rounded-xl border border-[#1e3a8a]/40 flex items-center justify-between">
+                          <div>
+                            <div className="text-white font-bold">{a.title}</div>
+                            <div className="text-[10px] text-slate-400">Delta: {a.delta} · Category: {a.category}</div>
+                          </div>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-500/40">
+                            {a.state}
+                          </span>
+                        </div>
+                      ))
+                  ) : (
+                    <div className="p-4 bg-[#0a1128] rounded-lg text-center text-slate-400">
+                      Zero pending or applied variation orders. Scope running on baseline.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab 12: Activity History */}
+              {activeProfileTab === 'activity' && (
+                <div className="space-y-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Append-Only Site Audit Trail</span>
+                  {auditLogs.filter((l) => l.entity_id === inspectingSite.site_id || l.after_value?.includes(inspectingSite.name) || l.after_value?.includes(inspectingSite.code)).slice(0, 5).map((log) => (
+                    <div key={log.audit_id} className="p-2.5 bg-[#0a1128] border border-[#1e3a8a]/30 rounded-lg text-[11px] space-y-0.5">
+                      <div className="flex items-center justify-between text-slate-400 font-mono text-[10px]">
+                        <span>{log.actor}</span>
+                        <span>{log.timestamp}</span>
+                      </div>
+                      <div className="text-slate-200">{log.after_value || log.action}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-3 border-t border-[#1e3a8a]/40 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setInspectingSite(null)}
+                className="px-4 py-2 bg-[#0f1c3d] hover:bg-[#142550] text-slate-200 hover:text-white rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                Close Profile
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

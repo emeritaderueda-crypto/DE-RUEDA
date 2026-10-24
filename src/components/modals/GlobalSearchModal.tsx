@@ -142,7 +142,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     // Search Canteen & Concessionaires
     sites.forEach((s) => {
       const vendor = s.canteen_vendor_name || `${s.name} Canteen`;
-      const gcash = s.canteen_gcash_number || '09171234567';
+      const gcash = s.canteen_gcash_number || '';
       if (
         vendor.toLowerCase().includes(q) ||
         gcash.includes(q) ||

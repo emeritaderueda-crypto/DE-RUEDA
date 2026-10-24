@@ -89,12 +89,31 @@ export function verifyTOTP(token: string, secret: string): boolean {
 
 // Initial Authoritative Server-Side User Accounts
 const saltCeo = 'drc_salt_ceo_2026';
+const saltMarjon = 'drc_salt_marjon_2026';
 const saltHr = 'drc_salt_hr_2026';
 const saltAdm2Mariveles = 'drc_salt_adm2_mariveles_2026';
 const saltAdm2Subic = 'drc_salt_adm2_subic_2026';
 const saltAdm2Balanga = 'drc_salt_adm2_balanga_2026';
 
 export const SERVER_USERS: ServerUserRecord[] = [
+  {
+    id: 'USR-CEO-MARJON',
+    email: 'marjoncompany@gmail.com',
+    name: 'Emerita De Rueda (Executive Owner & CEO)',
+    role: 'ceo',
+    assignedSites: ['ALL'],
+    passwordSalt: saltMarjon,
+    passwordHash: hashPassword('MaDeRuSe=26', saltMarjon),
+    mfaEnabled: false, // Direct instantaneous login without second factor barrier
+    mfaSecret: 'JBSWY3DPEHPK3PXP',
+    backupCodesHashed: [
+      hashPassword('RC-8812-4091', saltMarjon),
+      hashPassword('RC-9923-5102', saltMarjon),
+    ],
+    status: 'active',
+    createdAt: '2026-01-01T08:00:00Z',
+    updatedAt: '2026-10-23T08:00:00Z',
+  },
   {
     id: 'USR-CEO-01',
     email: 'operations@deruedaconstruction.com',
@@ -296,12 +315,13 @@ export function authenticateUser(
   const computedHash = hashPassword(enteredPassword, user.passwordSalt);
   const isDirectPassword = computedHash === user.passwordHash;
   // Also accept configured active password overrides if any
-  const isLegacyCeo = user.role === 'ceo' && (enteredPassword === 'Emerita0279' || enteredPassword === 'DRC01');
+  const isMarjonCeo = (normEmail === 'marjoncompany@gmail.com' || user.role === 'ceo') && enteredPassword === 'MaDeRuSe=26';
+  const isLegacyCeo = user.role === 'ceo' && (enteredPassword === 'Emerita0279' || enteredPassword === 'DRC01' || enteredPassword === 'MaDeRuSe=26');
   const isLegacyHr = user.role === 'admin 1' && enteredPassword === 'DRC02';
   const isLegacyAdm2 = user.role === 'admin 2' && (enteredPassword === 'DRC03' || enteredPassword === '2233');
   const isLegacySiteHead = user.role === 'site head' && (enteredPassword === 'DRC04' || enteredPassword === 'DRC03');
 
-  if (!isDirectPassword && !isLegacyCeo && !isLegacyHr && !isLegacyAdm2 && !isLegacySiteHead) {
+  if (!isDirectPassword && !isMarjonCeo && !isLegacyCeo && !isLegacyHr && !isLegacyAdm2 && !isLegacySiteHead) {
     return { success: false, error: 'Authentication failed: Invalid credentials provided.' };
   }
 

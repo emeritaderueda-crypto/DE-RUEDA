@@ -228,23 +228,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               />
             </div>
             {/* Quick pre-set authorized corporate identities */}
-            <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
-              <span>Authorized identities:</span>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400">
+              <span className="font-semibold text-slate-300">Quick Login:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setAccessPoint('ceo');
+                  setEmail('marjoncompany@gmail.com');
+                  setPassword('MaDeRuSe=26');
+                }}
+                className="px-2 py-0.5 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 font-bold rounded border border-emerald-500/50 cursor-pointer shadow-xs flex items-center gap-1"
+              >
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                <span>CEO: marjoncompany@gmail.com</span>
+              </button>
               <button
                 type="button"
                 onClick={() => {
                   setAccessPoint('ceo');
                   setEmail('operations@deruedaconstruction.com');
+                  setPassword('Emerita0279');
                 }}
                 className="px-1.5 py-0.5 bg-[#13241f] hover:bg-[#234338] text-slate-300 rounded border border-[#234338] cursor-pointer"
               >
-                CEO
+                CEO (operations)
               </button>
               <button
                 type="button"
                 onClick={() => {
                   setAccessPoint('admin 1');
                   setEmail('admin1@deruedaconstruction.com');
+                  setPassword('DRC02');
                 }}
                 className="px-1.5 py-0.5 bg-[#13241f] hover:bg-[#234338] text-slate-300 rounded border border-[#234338] cursor-pointer"
               >
@@ -255,20 +269,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 onClick={() => {
                   setAccessPoint('admin 2');
                   setEmail('admin2.mariveles@deruedaconstruction.com');
+                  setPassword('DRC03');
                 }}
                 className="px-1.5 py-0.5 bg-[#13241f] hover:bg-[#234338] text-slate-300 rounded border border-[#234338] cursor-pointer"
               >
-                Admin 2 (Mariveles)
+                Admin 2
               </button>
               <button
                 type="button"
                 onClick={() => {
                   setAccessPoint('site head');
                   setEmail('sitehead.mariveles@deruedaconstruction.com');
+                  setPassword('DRC04');
                 }}
                 className="px-1.5 py-0.5 bg-[#13241f] hover:bg-[#234338] text-slate-300 rounded border border-[#234338] cursor-pointer"
               >
-                Site Head (Mariveles)
+                Site Head
               </button>
             </div>
           </div>

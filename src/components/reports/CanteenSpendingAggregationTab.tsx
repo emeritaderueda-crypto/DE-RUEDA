@@ -151,7 +151,7 @@ export const CanteenSpendingAggregationTab: React.FC = () => {
           site_code: site.code,
           site_name: site.name,
           vendor_name: site.canteen_vendor_name || 'Project Canteen Concessionaire',
-          gcash_number: site.canteen_gcash_number || '09171234567',
+          gcash_number: site.canteen_gcash_number || 'Not configured',
           week_key: d.week_key,
           amount: Number(d.canteen || 0),
           notes: d.notes || 'Weekly meal withholding',
@@ -254,7 +254,7 @@ export const CanteenSpendingAggregationTab: React.FC = () => {
           agg.site.code,
           agg.site.name,
           agg.site.canteen_vendor_name || 'Concessionaire',
-          agg.site.canteen_gcash_number || '09171234567',
+          agg.site.canteen_gcash_number || 'Not configured',
           w.employee_id,
           w.name,
           w.position,
@@ -625,7 +625,7 @@ export const CanteenSpendingAggregationTab: React.FC = () => {
           {siteAggregations.map((agg) => {
             const isExpanded = !!expandedSites[agg.site.site_id];
             const siteVendor = agg.site.canteen_vendor_name || 'Project Canteen Concessionaire';
-            const siteGcash = agg.site.canteen_gcash_number || '09171234567';
+            const siteGcash = agg.site.canteen_gcash_number || 'Not configured';
 
             return (
               <div
@@ -948,7 +948,7 @@ export const CanteenSpendingAggregationTab: React.FC = () => {
                     <div className="flex items-center justify-between text-slate-400">
                       <span>GCash Number:</span>
                       <span className="font-mono text-emerald-400">
-                        {agg.site.canteen_gcash_number || '09171234567'}
+                        {agg.site.canteen_gcash_number || 'Not configured'}
                       </span>
                     </div>
                   </div>
@@ -1032,7 +1032,7 @@ export const CanteenSpendingAggregationTab: React.FC = () => {
                   </h3>
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Concessionaire: {drillDownSite.site.canteen_vendor_name || 'Project Canteen'} &bull; GCash: {drillDownSite.site.canteen_gcash_number || '09171234567'}
+                  Concessionaire: {drillDownSite.site.canteen_vendor_name || 'Project Canteen'} &bull; GCash: {drillDownSite.site.canteen_gcash_number || 'Not configured'}
                 </p>
               </div>
 

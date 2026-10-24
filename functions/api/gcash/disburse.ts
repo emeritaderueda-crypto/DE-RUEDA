@@ -53,8 +53,8 @@ function generateGCashReceiptSvg(params: {
   <!-- GCash Logo Branding -->
   <text x="50" y="65" font-size="28" font-weight="900" fill="#ffffff" letter-spacing="-0.5">GCash</text>
   <circle cx="152" cy="52" r="5" fill="#a3e635"/>
-  <text x="50" y="92" font-size="12" font-weight="700" fill="#bae6fd" letter-spacing="1.5">MERCHANT DIRECT DISBURSEMENT</text>
-  <text x="50" y="112" font-size="11" font-weight="500" fill="#e0f2fe">De Rueda Construction Enterprise Portal</text>
+  <text x="50" y="92" font-size="12" font-weight="700" fill="#bae6fd" letter-spacing="1.5">SANDBOX DISBURSEMENT SIMULATION</text>
+  <text x="50" y="112" font-size="11" font-weight="500" fill="#e0f2fe">De Rueda Construction Enterprise Portal (Simulation)</text>
 
   <!-- Verified Icon Badge -->
   <g transform="translate(430, 45)">
@@ -64,12 +64,12 @@ function generateGCashReceiptSvg(params: {
   </g>
 
   <!-- Success Heading -->
-  <text x="270" y="185" font-size="20" font-weight="800" fill="#0f172a" text-anchor="middle">Payment Sent Successfully</text>
+  <text x="270" y="185" font-size="20" font-weight="800" fill="#0f172a" text-anchor="middle">Payment Voucher Created</text>
   <text x="270" y="208" font-size="12" font-weight="500" fill="#64748b" text-anchor="middle">${dateFormatted} · ${timeFormatted} (PHT)</text>
 
   <!-- Amount Highlight -->
   <rect x="50" y="225" width="440" height="90" rx="14" fill="#f0f7ff" stroke="#bfdbfe" stroke-width="1.5"/>
-  <text x="270" y="258" font-size="13" font-weight="700" fill="#005ce6" text-anchor="middle" letter-spacing="0.5">TOTAL SALARY DISBURSED</text>
+  <text x="270" y="258" font-size="13" font-weight="700" fill="#005ce6" text-anchor="middle" letter-spacing="0.5">SIMULATED SALARY DISBURSED</text>
   <text x="270" y="295" font-size="32" font-weight="900" fill="#003b99" text-anchor="middle" font-family="monospace">PHP ${formattedAmount}</text>
 
   <!-- Recipient Card -->
@@ -102,26 +102,26 @@ function generateGCashReceiptSvg(params: {
 
     <!-- Row 5 -->
     <text x="0" y="172" font-size="12" font-weight="600" fill="#64748b">Disbursement Fee</text>
-    <text x="440" y="172" font-size="12" font-weight="800" fill="#10b981" text-anchor="end">PHP 0.00 (Enterprise Free)</text>
+    <text x="440" y="172" font-size="12" font-weight="800" fill="#10b981" text-anchor="end">PHP 0.00 (Enterprise Sandbox)</text>
     <line x1="0" y1="187" x2="440" y2="187" stroke="#f1f5f9" stroke-width="1.5"/>
 
     <!-- Row 6 -->
     <text x="0" y="210" font-size="12" font-weight="600" fill="#64748b">Payment Status</text>
-    <text x="440" y="210" font-size="12" font-weight="800" fill="#10b981" text-anchor="end">COMPLETED (DIRECT INSTAPAY)</text>
+    <text x="440" y="210" font-size="12" font-weight="800" fill="#0284c7" text-anchor="end">SIMULATION RECORDED (PENDING BANK SETTLEMENT)</text>
     <line x1="0" y1="225" x2="440" y2="225" stroke="#cbd5e1" stroke-width="1.5"/>
   </g>
 
   <!-- Security Verification Stamp -->
   <g transform="translate(50, 680)">
-    <rect x="0" y="0" width="440" height="52" rx="10" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1"/>
-    <text x="16" y="24" font-size="11" font-weight="700" fill="#065f46">OFFICIAL ELECTRONIC RECEIPT VOUCHER</text>
-    <text x="16" y="40" font-size="9.5" font-weight="500" fill="#047857">Automatically verified &amp; uploaded to DRC Document Vault (04_Payroll_and_Disbursements)</text>
-    <text x="424" y="32" font-size="10" font-weight="800" fill="#059669" text-anchor="end">BSP REGULATED</text>
+    <rect x="0" y="0" width="440" height="52" rx="10" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1"/>
+    <text x="16" y="24" font-size="11" font-weight="700" fill="#0369a1">SIMULATED ELECTRONIC RECEIPT VOUCHER</text>
+    <text x="16" y="40" font-size="9.5" font-weight="500" fill="#0284c7">Internal simulation voucher recorded in DRC Document Vault (04_Payroll_and_Disbursements)</text>
+    <text x="424" y="32" font-size="10" font-weight="800" fill="#0284c7" text-anchor="end">DRC SANDBOX</text>
   </g>
 
   <!-- Bottom Disclaimers -->
-  <text x="270" y="755" font-size="9" font-weight="500" fill="#94a3b8" text-anchor="middle">Powered by GCash for Business API · Merchant ID: DRC-GCASH-ENT-2026</text>
-  <text x="270" y="770" font-size="8.5" font-weight="400" fill="#cbd5e1" text-anchor="middle">This document is electronically generated and holds full legal and DOLE audit validity.</text>
+  <text x="270" y="755" font-size="9" font-weight="500" fill="#94a3b8" text-anchor="middle">Powered by De Rueda ERP Sandbox Simulation Mode · Merchant ID: DRC-GCASH-ENT-2026</text>
+  <text x="270" y="770" font-size="8.5" font-weight="400" fill="#cbd5e1" text-anchor="middle">Sandbox Simulation Mode · Non-Financial ERP Testing Voucher</text>
 </svg>`;
 
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
@@ -212,19 +212,21 @@ export async function onRequestPost(context: { request: Request }): Promise<Resp
         success: true,
         transaction_id: transactionId,
         reference_no: referenceNo,
-        status: 'COMPLETED',
+        status: 'SIMULATION_PROCESSED',
+        is_sandbox_simulation: true,
         amount: numAmount,
         currency: 'PHP',
         timestamp,
-        merchant_name: 'DE RUEDA CONSTRUCTION INC.',
+        merchant_name: 'DE RUEDA CONSTRUCTION INC. (SANDBOX)',
         merchant_id: 'DRC-GCASH-ENT-2026',
         recipient_name: employee_name,
         recipient_mobile: cleanMobile,
         fee: 0.0,
         receipt_url: receiptUrl,
         receipt_file_name: receiptFileName,
-        network_response_code: '0000_SUCCESS_DISBURSED',
-        message: `Weekly salary of PHP ${numAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} sent successfully to ${employee_name} via GCash.`,
+        network_response_code: 'SANDBOX_SIMULATION_RECORDED',
+        disclaimer: 'Transaction recorded in ERP sandbox simulation mode. Official bank settlement requires verified enterprise GCash/PayMongo credentials or manual bank portal file disbursement.',
+        message: `Simulation voucher of PHP ${numAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} recorded for ${employee_name}.`,
       }),
       {
         headers: { 'Content-Type': 'application/json' },

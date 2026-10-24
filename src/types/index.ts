@@ -78,12 +78,24 @@ export interface CanteenPdfReviewBatch {
   posted_by?: string;
 }
 
+export type ProjectMasterStatus =
+  | 'Draft'
+  | 'Ongoing'
+  | 'Paused'
+  | 'Completed'
+  | 'Cancelled/Unfinished'
+  | 'Archived'
+  | 'Restored'
+  | 'Active'
+  | 'In Progress'
+  | 'On Hold';
+
 export interface Site {
   site_id: string;
   code: string;
   name: string;
   location: string;
-  project_status: 'Active' | 'In Progress' | 'On Hold' | 'Completed';
+  project_status: ProjectMasterStatus;
   supervisor: string;
   supervisor_email?: string;
   start_date: string;
@@ -94,6 +106,116 @@ export interface Site {
   canteen_vendor_name?: string;
   canteen_gcash_number?: string;
   canteen_contact_person?: string;
+  // Master Specification additions (Section 4 & 13)
+  client_id?: string;
+  client_name?: string;
+  client_email?: string;
+  budget_contract_value?: number;
+  work_scope?: string;
+  completion_pct?: number;
+}
+
+export interface ClientRecord {
+  client_id: string; // e.g. CLI-001
+  client_type: 'individual' | 'company' | 'organization' | 'government';
+  company_name: string;
+  contact_person: string;
+  contact_role?: string;
+  primary_email: string;
+  secondary_email?: string;
+  email_verified: boolean;
+  email_verified_at?: string;
+  phone_number?: string;
+  address?: string;
+  preferred_channel?: 'Email' | 'Phone' | 'SMS' | 'Portal';
+  consent_marketing?: boolean;
+  status: 'active' | 'archived' | 'lead';
+  internal_notes?: string; // Restricted visibility per Section 4
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ReportDeliveryStatus =
+  | 'Draft'
+  | 'Ready for Review'
+  | 'Approved'
+  | 'Sending'
+  | 'Sent / Accepted'
+  | 'Delivered'
+  | 'Failed / Bounced'
+  | 'Cancelled'
+  | 'Needs Review';
+
+export interface ClientProgressReport {
+  report_id: string;
+  project_id: string;
+  project_name: string;
+  client_id: string;
+  client_name: string;
+  recipient_email: string;
+  milestone_pct: number; // e.g. 25, 50, 75, 100
+  reporting_period: string;
+  summary: string;
+  completed_work: string;
+  current_activities: string;
+  next_steps: string;
+  delays_issues?: string;
+  photos: Array<{ url: string; caption: string; date: string }>;
+  prepared_by: string;
+  approved_by?: string;
+  approved_at?: string;
+  delivery_status: ReportDeliveryStatus;
+  send_attempt: number;
+  sent_at?: string;
+  delivery_event?: string;
+  version: number;
+  created_at: string;
+}
+
+export type AdjustmentCategory =
+  | 'Work Scope'
+  | 'Budget & Financial Limit'
+  | 'Schedule & Milestones'
+  | 'Site Operational Details'
+  | 'Staffing & Supervision'
+  | 'Materials & Inventory'
+  | 'Expense Allocation';
+
+export type AdjustmentWorkflowState =
+  | 'Draft'
+  | 'Submitted'
+  | 'Under Review'
+  | 'Approved'
+  | 'Rejected'
+  | 'Returned for Changes'
+  | 'Applied'
+  | 'Cancelled';
+
+export interface ProjectAdjustment {
+  adjustment_id: string; // e.g. ADJ-001
+  project_id: string;
+  project_name: string;
+  site_id: string;
+  category: AdjustmentCategory;
+  title: string;
+  detailed_reason: string;
+  requester: string;
+  requester_role: string;
+  requested_effective_date: string;
+  before_value: string;
+  proposed_after_value: string;
+  delta: string;
+  impact_summary: string;
+  affected_modules: string[]; // e.g. ['Budget', 'Schedule', 'Materials', 'Payroll']
+  state: AdjustmentWorkflowState;
+  reviewer_approver?: string;
+  decision_timestamp?: string;
+  decision_notes?: string;
+  application_timestamp?: string;
+  version: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AttendanceRecord {

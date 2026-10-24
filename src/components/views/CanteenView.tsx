@@ -146,7 +146,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
   React.useEffect(() => {
     if (selectedSite) {
       setVendorNameInput(selectedSite.canteen_vendor_name || `${selectedSite.name} Canteen Concessionaire`);
-      setGcashNumberInput(selectedSite.canteen_gcash_number || '09171234567');
+      setGcashNumberInput(selectedSite.canteen_gcash_number || '');
       setContactPersonInput(selectedSite.canteen_contact_person || 'Canteen Manager');
       setIsEditingConfig(false);
 
@@ -161,7 +161,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
               timestamp: '2026-10-15 08:30',
               changed_by: 'Emerita De Rueda (CEO)',
               vendor: selectedSite.canteen_vendor_name || `${selectedSite.name} Concessionaire`,
-              gcash: selectedSite.canteen_gcash_number || '09171234567',
+              gcash: selectedSite.canteen_gcash_number || 'Not configured',
               contact: selectedSite.canteen_contact_person || 'Concessionaire Manager',
             },
           ]);
@@ -959,11 +959,11 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                     <div className="flex items-center gap-1.5 bg-[#080f0d] px-2.5 py-1 rounded border border-[#234338]">
                       <Smartphone className="w-3.5 h-3.5 text-sky-400" />
                       <span className="font-mono font-bold text-white text-xs">
-                        {selectedSite?.canteen_gcash_number || '09171234567'}
+                        {selectedSite?.canteen_gcash_number || 'Not configured'}
                       </span>
                       <button
                         type="button"
-                        onClick={() => handleCopy(selectedSite?.canteen_gcash_number || '09171234567', 'site-gcash')}
+                        onClick={() => handleCopy(selectedSite?.canteen_gcash_number || '', 'site-gcash')}
                         className="text-slate-400 hover:text-white p-0.5 cursor-pointer ml-0.5"
                         title="Copy GCash Number"
                       >
@@ -982,13 +982,13 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                   <div
                     className="shrink-0 bg-white p-1 rounded-lg"
                     dangerouslySetInnerHTML={{
-                      __html: generateSvgQRCode(selectedSite?.canteen_gcash_number || '09171234567', 68),
+                      __html: generateSvgQRCode(selectedSite?.canteen_gcash_number || 'NOT_CONFIGURED', 68),
                     }}
                   />
                   <div className="min-w-0">
                     <div className="text-[10px] uppercase font-bold text-slate-400">GCash Concessionaire QR</div>
                     <div className="text-xs font-bold text-white truncate">{selectedSite?.canteen_vendor_name || 'Site Canteen'}</div>
-                    <div className="text-[11px] font-mono text-[#a3e635]">{selectedSite?.canteen_gcash_number || '09171234567'}</div>
+                    <div className="text-[11px] font-mono text-[#a3e635]">{selectedSite?.canteen_gcash_number || 'Not configured'}</div>
                     <div className="text-[10px] text-slate-400">Account: {selectedSite?.canteen_contact_person || 'Accredited Operator'}</div>
                   </div>
                 </div>
@@ -1112,7 +1112,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                     <input
                       type="text"
                       disabled
-                      value={targetPayoutSite?.canteen_gcash_number || '09171234567'}
+                      value={targetPayoutSite?.canteen_gcash_number || 'Not configured'}
                       className="w-full pl-8 pr-3 py-2 bg-[#13241f] border border-[#234338] rounded-lg text-white font-mono font-bold cursor-not-allowed text-xs"
                     />
                   </div>
@@ -2144,7 +2144,7 @@ export const CanteenView: React.FC<CanteenViewProps> = ({ onNavigate }) => {
                   <div className="mt-1">
                     <span className="text-slate-500 font-semibold uppercase text-[10px]">GCash Mobile:</span>{' '}
                     <span className="font-mono font-bold text-sky-700">
-                      {selectedSite?.canteen_gcash_number || '09171234567'}
+                      {selectedSite?.canteen_gcash_number || 'Not configured'}
                     </span>
                   </div>
                   <div className="mt-1">

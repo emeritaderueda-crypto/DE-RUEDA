@@ -146,7 +146,7 @@ export const DeductionsView: React.FC = () => {
               </span>
             </div>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Concessionaire: <strong className="text-slate-200">{currentTargetSite?.canteen_vendor_name || 'Project Canteen'}</strong> &bull; GCash: <span className="font-mono text-sky-400 font-bold">{currentTargetSite?.canteen_gcash_number || '09171234567'}</span>
+              Concessionaire: <strong className="text-slate-200">{currentTargetSite?.canteen_vendor_name || 'Project Canteen'}</strong> &bull; GCash: <span className="font-mono text-sky-400 font-bold">{currentTargetSite?.canteen_gcash_number || 'Not configured'}</span>
             </p>
           </div>
         </div>

@@ -81,7 +81,7 @@ export const CanteenGcashPayoutModal: React.FC<CanteenGcashPayoutModalProps> = (
   useEffect(() => {
     if (isOpen && site) {
       setVendorName(site.canteen_vendor_name || `${site.name} Canteen Concessionaire`);
-      setGcashNumber(site.canteen_gcash_number || '09171234567');
+      setGcashNumber(site.canteen_gcash_number || '');
       setContactPerson(site.canteen_contact_person || 'Canteen Manager');
 
       const initialAmount = defaultAmount !== undefined && defaultAmount > 0

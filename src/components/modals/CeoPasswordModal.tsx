@@ -140,9 +140,9 @@ export const CeoPasswordModal: React.FC<CeoPasswordModalProps> = ({
           </div>
         </form>
 
-        <div className="pt-2 border-t border-[#234338]/60 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+        <div className="pt-2 border-t border-[#234338]/60 flex items-center justify-between text-[10px] text-slate-400 font-mono">
           <span>DE RUEDA EXECUTIVE CIPHER</span>
-          <span>EMERITA PROTOCOL ACTIVE</span>
+          <span>CEO AUTH PROTOCOL ACTIVE</span>
         </div>
       </div>
     </div>

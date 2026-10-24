@@ -563,38 +563,16 @@ Respond with JSON:
       const authHeader = (req.headers['authorization'] || '').toString();
       const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
       const session = getServerSession(token);
-
-      let userRole = session?.user?.role;
-      let assignedSites = session?.user?.assignedSites || ['ALL'];
-      let userEmail = session?.user?.email;
-
       if (!session) {
-        // Fallback for developer / internal calls only if explicitly provided in headers, but strictly typed
-        const legacyRole = (req.headers['x-user-role'] || '').toString().toLowerCase();
-        if (
-          legacyRole &&
-          (legacyRole.includes('ceo') ||
-            legacyRole.includes('admin 1') ||
-            legacyRole.includes('admin 2') ||
-            legacyRole.includes('site head') ||
-            legacyRole.includes('site_head'))
-        ) {
-          userRole = legacyRole.includes('ceo')
-            ? 'ceo'
-            : legacyRole.includes('admin 1')
-            ? 'admin 1'
-            : legacyRole.includes('site head') || legacyRole.includes('site_head')
-            ? 'site head'
-            : 'admin 2';
-          assignedSites = (req.headers['x-assigned-sites'] || 'ALL').toString().split(',').map((s) => s.trim().toUpperCase());
-          userEmail = (req.headers['x-user-email'] || 'dev@deruedaconstruction.com').toString();
-        } else {
-          return res.status(401).json({
-            success: false,
-            error: 'Authentication Required (401): Active server session token is required to access protected ERP endpoints.',
-          });
-        }
+        return res.status(401).json({
+          success: false,
+          error: 'Authentication Required (401): Active server session token is required to access protected ERP endpoints. Please authenticate with valid credentials.',
+        });
       }
+
+      const userRole = session.user.role;
+      const assignedSites = session.user.assignedSites || ['ALL'];
+      const userEmail = session.user.email;
 
       // Role check
       if (!allowedRoles.includes(userRole!)) {
@@ -1555,6 +1533,7 @@ Respond strictly with valid JSON with this exact structure:
     failure_reason?: string;
     webhook_confirmed_at?: string;
     reconciled: boolean;
+    is_simulation?: boolean;
   }
 
   const inMemoryPayMongoTransactions: PayMongoTransactionRecord[] = [
@@ -1779,27 +1758,23 @@ Respond strictly with valid JSON with this exact structure:
         recipient_id: recipient_id || 'EMP-GENERAL',
         amount: Number(amount),
         currency: 'PHP',
-        status: 'PENDING', // Never treat clicked button as confirmed; starts PENDING
+        status: 'PENDING', // PENDING until confirmed by signed provider webhook or manual reconciliation
         idempotency_key: effectiveIdemKey,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         approved_by: approved_by || 'De Rueda Finance',
         reconciled: false,
+        is_simulation: true,
       };
 
       inMemoryPayMongoTransactions.unshift(newTx);
 
-      // Auto-simulate provider confirmation callback in sandbox mode
-      setTimeout(() => {
-        newTx.status = 'SUCCESS';
-        newTx.updated_at = new Date().toISOString();
-        newTx.webhook_confirmed_at = new Date().toISOString();
-        newTx.reconciled = true;
-      }, 1200);
+      // Audited: Payouts must never auto-flip to SUCCESS via setTimeout.
+      // Status remains PENDING until verified webhook event or manual reconciliation.
 
       return res.json({
         success: true,
-        message: 'Payout request dispatched to PayMongo. Status: PENDING provider confirmation.',
+        message: 'Payout request dispatched. Status: PENDING provider confirmation via signed webhook or manual reconciliation.',
         transaction: newTx,
       });
     } catch (err: any) {
@@ -1842,10 +1817,63 @@ Respond strictly with valid JSON with this exact structure:
   app.post('/api/paymongo/payments/create-link', handlePayMongoCreateLink);
   app.post('/api/xendit/payments/create-link', handlePayMongoCreateLink);
 
-  // 6. Idempotent Webhook Endpoint (PayMongo Signature Verification)
+  // 6. Idempotent Webhook Endpoint (Timing-Safe PayMongo Signature Verification)
   const handlePayMongoWebhook = (req: Request, res: Response) => {
     try {
-      const paymongoSignature = req.headers['paymongo-signature'] || req.headers['x-callback-token'];
+      const signatureHeader = (req.headers['paymongo-signature'] || req.headers['x-callback-token'] || '').toString();
+      const webhookSecret = process.env.PAYMONGO_WEBHOOK_SECRET_KEY || process.env.PAYMONGO_WEBHOOK_SECRET || '';
+
+      // Verify webhook signature if webhook secret is configured
+      if (webhookSecret) {
+        if (!signatureHeader) {
+          return res.status(401).json({ error: 'Missing PayMongo webhook signature header (paymongo-signature)' });
+        }
+
+        // Header pattern: "t=1620000000,te=test_sig,li=live_sig"
+        const parts = signatureHeader.split(',').reduce<Record<string, string>>((acc, item) => {
+          const [key, val] = item.trim().split('=');
+          if (key && val) acc[key.trim()] = val.trim();
+          return acc;
+        }, {});
+
+        const timestamp = parts['t'] || '';
+        const signature = parts['te'] || parts['li'] || signatureHeader;
+
+        if (timestamp) {
+          const nowSeconds = Math.floor(Date.now() / 1000);
+          const eventSeconds = parseInt(timestamp, 10);
+          if (!isNaN(eventSeconds) && Math.abs(nowSeconds - eventSeconds) > 600) {
+            return res.status(401).json({ error: 'PayMongo webhook timestamp outside allowable tolerance (10 minutes)' });
+          }
+        }
+
+        const rawBody = JSON.stringify(req.body);
+        const signedPayload = timestamp ? `${timestamp}.${rawBody}` : rawBody;
+        const expectedSig = crypto.createHmac('sha256', webhookSecret).update(signedPayload).digest('hex');
+
+        let isValid = false;
+        try {
+          const sigBuf = Buffer.from(signature, 'hex');
+          const expBuf = Buffer.from(expectedSig, 'hex');
+          if (sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf)) {
+            isValid = true;
+          } else {
+            // Check direct body signature fallback
+            const altSig = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
+            const altBuf = Buffer.from(altSig, 'hex');
+            if (sigBuf.length === altBuf.length && crypto.timingSafeEqual(sigBuf, altBuf)) {
+              isValid = true;
+            }
+          }
+        } catch {
+          isValid = false;
+        }
+
+        if (!isValid) {
+          return res.status(401).json({ error: 'PayMongo webhook HMAC signature mismatch (timingSafeEqual validation failed)' });
+        }
+      }
+
       const event = req.body;
       const eventId = event?.id || `EVT-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
 
@@ -1855,7 +1883,7 @@ Respond strictly with valid JSON with this exact structure:
       }
       processedPayMongoEventIds.add(eventId);
 
-      console.log(`[PayMongo Webhook] Received verified event: ${event?.type || event?.event || 'payout.paid'} (${eventId})`);
+      console.log(`[PayMongo Webhook] Verified event received: ${event?.type || event?.event || 'payout.paid'} (${eventId})`);
 
       // If payload refers to an existing transaction, update status to confirmed
       const targetRef = event?.data?.attributes?.external_id || event?.external_id || event?.reference_id;
@@ -1925,11 +1953,11 @@ Respond strictly with valid JSON with this exact structure:
     environment: (process.env.PAYMONGO_ENVIRONMENT as 'test' | 'live') || 'test',
     secretKey: process.env.PAYMONGO_SECRET_KEY,
     publicKey: process.env.PAYMONGO_PUBLIC_KEY,
-    webhookSecret: process.env.PAYMONGO_WEBHOOK_SECRET,
+    webhookSecret: process.env.PAYMONGO_WEBHOOK_SECRET_KEY || process.env.PAYMONGO_WEBHOOK_SECRET,
     updatedAt: new Date().toISOString(),
   });
 
-  app.get('/api/paymongo/config', (req: Request, res: Response) => {
+  app.get('/api/paymongo/config', requireServerAuth(['ceo', 'admin 1']), (req: Request, res: Response) => {
     const customerId = (req.query.customerId as string) || 'DERUEDA_PRIMARY';
     const conf = customerPayMongoConfigs.get(customerId) || {
       customerId,
@@ -1937,7 +1965,7 @@ Respond strictly with valid JSON with this exact structure:
       environment: (process.env.PAYMONGO_ENVIRONMENT as 'test' | 'live') || 'test',
       secretKey: process.env.PAYMONGO_SECRET_KEY,
       publicKey: process.env.PAYMONGO_PUBLIC_KEY,
-      webhookSecret: process.env.PAYMONGO_WEBHOOK_SECRET,
+      webhookSecret: process.env.PAYMONGO_WEBHOOK_SECRET_KEY || process.env.PAYMONGO_WEBHOOK_SECRET,
       updatedAt: new Date().toISOString(),
     };
 
@@ -1952,13 +1980,13 @@ Respond strictly with valid JSON with this exact structure:
         environment: conf.environment || 'test',
         publicKeyMasked: pubMasked,
         hasSecretKey: Boolean(conf.secretKey || process.env.PAYMONGO_SECRET_KEY),
-        hasWebhookSecret: Boolean(conf.webhookSecret || process.env.PAYMONGO_WEBHOOK_SECRET),
+        hasWebhookSecret: Boolean(conf.webhookSecret || process.env.PAYMONGO_WEBHOOK_SECRET_KEY || process.env.PAYMONGO_WEBHOOK_SECRET),
         updatedAt: conf.updatedAt,
       },
     });
   });
 
-  app.post('/api/paymongo/config', (req: Request, res: Response) => {
+  app.post('/api/paymongo/config', requireServerAuth(['ceo', 'admin 1']), (req: Request, res: Response) => {
     const { customerId = 'DERUEDA_PRIMARY', customerName, environment = 'test', secretKey, publicKey, webhookSecret } = req.body;
     const existing = customerPayMongoConfigs.get(customerId) || {
       customerId,
@@ -1974,17 +2002,21 @@ Respond strictly with valid JSON with this exact structure:
       updatedAt: new Date().toISOString(),
     };
 
-    if (secretKey && !secretKey.includes('•')) {
+    // Protect against overwriting real keys with masked placeholders
+    if (secretKey && !secretKey.includes('•') && !secretKey.includes('...')) {
       updated.secretKey = secretKey;
       if (customerId === 'DERUEDA_PRIMARY') process.env.PAYMONGO_SECRET_KEY = secretKey;
     }
-    if (publicKey && !publicKey.includes('•')) {
+    if (publicKey && !publicKey.includes('•') && !publicKey.includes('...')) {
       updated.publicKey = publicKey;
       if (customerId === 'DERUEDA_PRIMARY') process.env.PAYMONGO_PUBLIC_KEY = publicKey;
     }
-    if (webhookSecret && !webhookSecret.includes('•')) {
+    if (webhookSecret && !webhookSecret.includes('•') && !webhookSecret.includes('...')) {
       updated.webhookSecret = webhookSecret;
-      if (customerId === 'DERUEDA_PRIMARY') process.env.PAYMONGO_WEBHOOK_SECRET = webhookSecret;
+      if (customerId === 'DERUEDA_PRIMARY') {
+        process.env.PAYMONGO_WEBHOOK_SECRET_KEY = webhookSecret;
+        process.env.PAYMONGO_WEBHOOK_SECRET = webhookSecret;
+      }
     }
     if (customerId === 'DERUEDA_PRIMARY') {
       process.env.PAYMONGO_ENVIRONMENT = environment;
@@ -2004,12 +2036,14 @@ Respond strictly with valid JSON with this exact structure:
     });
   });
 
-  app.post('/api/paymongo/validate-config', (req: Request, res: Response) => {
+  app.post('/api/paymongo/validate-config', requireServerAuth(['ceo', 'admin 1']), (req: Request, res: Response) => {
     const { customerId, environment = 'test', secretKey, publicKey, webhookSecret } = req.body;
     const conf = customerPayMongoConfigs.get(customerId || 'DERUEDA_PRIMARY');
-    const effSecretKey = (secretKey && !secretKey.includes('•')) ? secretKey : (conf?.secretKey || process.env.PAYMONGO_SECRET_KEY || '');
-    const effPublicKey = (publicKey && !publicKey.includes('•')) ? publicKey : (conf?.publicKey || process.env.PAYMONGO_PUBLIC_KEY || '');
-    const effWebhook = (webhookSecret && !webhookSecret.includes('•')) ? webhookSecret : (conf?.webhookSecret || process.env.PAYMONGO_WEBHOOK_SECRET || '');
+    const effSecretKey = (secretKey && !secretKey.includes('•') && !secretKey.includes('...')) ? secretKey : (conf?.secretKey || process.env.PAYMONGO_SECRET_KEY || '');
+    const effPublicKey = (publicKey && !publicKey.includes('•') && !publicKey.includes('...')) ? publicKey : (conf?.publicKey || process.env.PAYMONGO_PUBLIC_KEY || '');
+    const effWebhook = (webhookSecret && !webhookSecret.includes('•') && !webhookSecret.includes('...'))
+      ? webhookSecret
+      : (conf?.webhookSecret || process.env.PAYMONGO_WEBHOOK_SECRET_KEY || process.env.PAYMONGO_WEBHOOK_SECRET || '');
 
     if (!effSecretKey) {
       return res.status(400).json({ success: false, message: 'PAYMONGO_SECRET_KEY is required for PayMongo communication.' });
@@ -2032,27 +2066,63 @@ Respond strictly with valid JSON with this exact structure:
     }
 
     if (effWebhook && effWebhook.length < 10) {
-      return res.status(400).json({ success: false, message: 'Invalid PAYMONGO_WEBHOOK_SECRET format.' });
+      return res.status(400).json({ success: false, message: 'Invalid PAYMONGO_WEBHOOK_SECRET format (minimum 10 characters).' });
     }
 
     res.json({
       success: true,
-      message: `PayMongo credentials verified successfully in ${environment.toUpperCase()} mode. Key prefixes and formats match PayMongo API requirements.`,
+      message: `Format and prefix checks passed (${environment.toUpperCase()} mode format validated). Key prefixes match PayMongo API requirements. Credentials are saved.`,
       environment,
       provider: 'PayMongo Philippines',
     });
   });
 
-  // 9. Authoritative System Backup & Restore Endpoints
-  app.get('/api/backup/export', (_req: Request, res: Response) => {
+  // Snapshot store for pre-restore rollback safety
+  let lastPreRestoreSnapshot: any = null;
+
+  // 9. Authoritative System Backup & Restore Endpoints (CEO Role Restricted)
+  app.get('/api/backup/export', requireServerAuth(['ceo']), (req: Request, res: Response) => {
+    // Sanitize export: Never leak internal tokens, hashed passwords, or private API secrets
+    const sanitizedTransactions = inMemoryPayMongoTransactions.map((tx) => ({
+      id: tx.id,
+      reference: tx.reference,
+      channel: tx.channel,
+      recipient_name: tx.recipient_name,
+      recipient_mobile: tx.recipient_mobile,
+      recipient_id: tx.recipient_id,
+      amount: tx.amount,
+      currency: tx.currency,
+      status: tx.status,
+      idempotency_key: tx.idempotency_key,
+      created_at: tx.created_at,
+      updated_at: tx.updated_at,
+      approved_by: tx.approved_by,
+      reconciled: tx.reconciled,
+      webhook_confirmed_at: tx.webhook_confirmed_at,
+      is_simulation: tx.is_simulation,
+    }));
+
+    const sanitizedOutbox = TRANSACTIONAL_SMS_OUTBOX.map((sms) => ({
+      job_id: sms.job_id,
+      payment_id: sms.payment_id,
+      recipient_mobile: sms.recipient_mobile,
+      recipient_name: sms.recipient_name,
+      sms_body: sms.sms_body,
+      status: sms.status,
+      queued_at: sms.queued_at,
+      amount: sms.amount,
+      reference_no: sms.reference_no,
+    }));
+
     const backupData = {
       system: 'De Rueda Construction Management System',
       version: '2.0.0',
       export_timestamp: new Date().toISOString(),
+      exported_by: (req as any).authenticatedUser?.email || 'CEO Authorized',
       checksum: crypto.createHash('sha256').update(Date.now().toString()).digest('hex').substring(0, 16),
       collections: {
-        transactions: inMemoryPayMongoTransactions,
-        sms_outbox: TRANSACTIONAL_SMS_OUTBOX,
+        transactions: sanitizedTransactions,
+        sms_outbox: sanitizedOutbox,
         gcash_transfers: SERVER_GCASH_TRANSACTIONS,
       },
     };
@@ -2062,15 +2132,48 @@ Respond strictly with valid JSON with this exact structure:
     res.json(backupData);
   });
 
-  app.post('/api/backup/restore', (req: Request, res: Response) => {
+  app.post('/api/backup/restore', requireServerAuth(['ceo']), (req: Request, res: Response) => {
     const { backupData } = req.body;
-    if (!backupData || !backupData.system) {
-      return res.status(400).json({ success: false, error: 'Invalid backup structure. Missing system signature.' });
+    if (!backupData || backupData.system !== 'De Rueda Construction Management System') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid backup structure. Missing or incorrect system signature (De Rueda Construction Management System required).',
+      });
     }
+
+    if (!backupData.version || !backupData.collections) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid backup payload: version and collections properties are required.',
+      });
+    }
+
+    // Atomic pre-restore snapshot in memory for rollback capability
+    const snapshotId = `SNAP-${Date.now()}`;
+    lastPreRestoreSnapshot = {
+      snapshot_id: snapshotId,
+      created_at: new Date().toISOString(),
+      created_by: (req as any).authenticatedUser?.email || 'CEO Action',
+      collections: {
+        transactions: [...inMemoryPayMongoTransactions],
+        sms_outbox: [...TRANSACTIONAL_SMS_OUTBOX],
+        gcash_transfers: [...SERVER_GCASH_TRANSACTIONS],
+      },
+    };
 
     if (Array.isArray(backupData.collections?.transactions)) {
       inMemoryPayMongoTransactions.length = 0;
       inMemoryPayMongoTransactions.push(...backupData.collections.transactions);
+    }
+
+    if (Array.isArray(backupData.collections?.sms_outbox)) {
+      TRANSACTIONAL_SMS_OUTBOX.length = 0;
+      TRANSACTIONAL_SMS_OUTBOX.push(...backupData.collections.sms_outbox);
+    }
+
+    if (Array.isArray(backupData.collections?.gcash_transfers)) {
+      SERVER_GCASH_TRANSACTIONS.length = 0;
+      SERVER_GCASH_TRANSACTIONS.push(...backupData.collections.gcash_transfers);
     }
 
     res.json({
@@ -2078,6 +2181,8 @@ Respond strictly with valid JSON with this exact structure:
       message: 'System state successfully restored from authoritative backup file.',
       restored_at: new Date().toISOString(),
       restored_collections: Object.keys(backupData.collections || {}),
+      snapshot_id: snapshotId,
+      rollback_available: Boolean(lastPreRestoreSnapshot),
     });
   });
 
@@ -2098,6 +2203,14 @@ Respond strictly with valid JSON with this exact structure:
 
   app.get('/manifest.json', (_req: Request, res: Response) => {
     res.type('application/manifest+json; charset=utf-8').sendFile(path.resolve(__dirname, 'public', 'manifest.json'));
+  });
+
+  app.get('/favicon.ico', (_req: Request, res: Response) => {
+    res.type('image/x-icon').sendFile(path.resolve(__dirname, 'public', 'favicon.ico'));
+  });
+
+  app.get('/favicon.svg', (_req: Request, res: Response) => {
+    res.type('image/svg+xml').sendFile(path.resolve(__dirname, 'public', 'favicon.svg'));
   });
 
   // 11. Catch-all for API routes: Return JSON 404 (Never fall back to index.html)

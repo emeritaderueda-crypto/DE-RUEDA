@@ -256,7 +256,7 @@ export const ReportsView: React.FC = () => {
             const emp = employees.find((e) => e.employee_id === d.employee_id);
             const siteObj = sites.find((s) => s.site_id === d.site_id);
             const vendorName = siteObj?.canteen_vendor_name || 'Project Canteen Concessionaire';
-            const gcashNo = siteObj?.canteen_gcash_number || '09171234567';
+            const gcashNo = siteObj?.canteen_gcash_number || 'Not configured';
 
             // Check if GCash payout has been settled for this site
             const sitePayouts = gcashTransactions.filter(

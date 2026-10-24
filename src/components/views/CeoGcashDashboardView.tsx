@@ -267,7 +267,7 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
   const handleStartEditCanteen = (s: Site) => {
     setInlineEditingSiteId(s.site_id);
     setCanteenVendorNameInput(s.canteen_vendor_name || `${s.name} Canteen Concessionaire`);
-    setCanteenGcashInput(s.canteen_gcash_number || '09171234567');
+    setCanteenGcashInput(s.canteen_gcash_number || '');
   };
 
   const handleSaveCanteen = (siteId: string) => {
@@ -277,7 +277,7 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
     }
     updateSite(siteId, {
       canteen_vendor_name: canteenVendorNameInput.trim(),
-      canteen_gcash_number: cleanMobile || '09171234567',
+      canteen_gcash_number: cleanMobile || '',
     });
     setInlineEditingSiteId(null);
     setNotificationMsg(`Updated canteen concessionaire & GCash details for ${siteId}.`);
@@ -1149,7 +1149,7 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
                         </div>
                         <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-sky-400">
                           <Smartphone className="w-3.5 h-3.5 shrink-0" />
-                          <span>{s.canteen_gcash_number || '09171234567'}</span>
+                          <span>{s.canteen_gcash_number || 'Not configured'}</span>
                         </div>
                       </>
                     )}
