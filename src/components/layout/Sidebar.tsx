@@ -127,6 +127,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       title: 'Administration',
       items: [
+        { id: 'ceo_monitoring' as PageId, label: 'CEO Command Vault', icon: Shield, badge: 'CEO' },
         { id: 'settings' as PageId, label: 'System Settings', icon: Settings },
         { id: 'audit' as PageId, label: 'Audit Activity Log', icon: History },
       ],

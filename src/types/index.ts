@@ -13,23 +13,52 @@ export interface UserSession {
   is_active: number;
 }
 
+export interface EmployeeTransferRecord {
+  transfer_id: string;
+  from_site_id: string;
+  from_site_name?: string;
+  to_site_id: string;
+  to_site_name?: string;
+  transfer_date: string;
+  effective_date: string;
+  reason: string;
+  remarks?: string;
+  approved_by: string;
+  timestamp: string;
+}
+
 export interface Employee {
   employee_id: string;
   name: string;
   position: string;
+  department?: string;
+  employment_type?: 'Regular' | 'Project-Based' | 'Contractual' | 'Probationary';
   email: string;
   contact_number: string;
   sss_number: string;
   philhealth_number: string;
+  tin_number?: string;
   gcash_number: string;
   daily_rate: number;
   site_id: string;
   category?: 'Site-Based' | 'Office-Based' | 'Office Based Staff (HQ)';
   photo_url?: string;
-  status: 'active' | 'archived' | 'on_leave';
+  status: 'active' | 'archived' | 'on_leave' | 'inactive' | 'terminated' | 'transferred';
   qr_version: number;
   documents?: string;
   drive_link?: string;
+  date_hired?: string;
+  birth_date?: string;
+  gender?: string;
+  civil_status?: string;
+  blood_type?: string;
+  address?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  transfer_history?: EmployeeTransferRecord[];
+  termination_date?: string;
+  termination_reason?: string;
+  termination_remarks?: string;
   created_at: string;
   updated_at: string;
 }
@@ -823,14 +852,62 @@ export interface AdminUserAccount {
   email: string;
   name: string;
   role: AccessPointRole;
+  position?: string;
   assignedSites: string[]; // e.g. ['SITE-001'] or ['ALL']
+  company?: string;
   mfaEnabled: boolean;
   mfaSecret?: string;
   backupCodes?: string[];
-  status: 'active' | 'suspended';
+  status: 'active' | 'pending_approval' | 'suspended' | 'rejected';
   createdAt: string;
   updatedAt: string;
   lastLoginAt?: string;
+  invitationId?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+}
+
+export interface EnterpriseInvitation {
+  id: string;
+  token: string;
+  email: string;
+  company: string;
+  assignedRole: AccessPointRole;
+  assignedPosition: string;
+  assignedSites: string[];
+  createdBy: string;
+  createdAt: string;
+  expiresAt: string;
+  status: 'PENDING' | 'ACCEPTED' | 'REVOKED' | 'EXPIRED';
+  usedAt?: string;
+  usedByUserId?: string;
+  notes?: string;
+}
+
+export interface PendingAccountRecord {
+  id: string;
+  email: string;
+  name: string;
+  role: AccessPointRole;
+  position: string;
+  assignedSites: string[];
+  company: string;
+  status: 'pending_approval' | 'active' | 'suspended' | 'rejected';
+  invitationId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SecurityAuditLogRecord {
+  id: string;
+  timestamp: string;
+  action: string;
+  actorEmail: string;
+  actorRole: string;
+  targetEmail?: string;
+  details: string;
+  status: 'SUCCESS' | 'FAILED' | 'BLOCKED';
+  ipAddress?: string;
 }
 
 export type SmsNotificationType = 'PAYSLIP' | 'DTR_FINALIZED';

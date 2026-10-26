@@ -10,6 +10,16 @@ import {
   getServerSession,
   revokeServerSession,
   UserRole,
+  createInvitation,
+  revokeInvitation,
+  validateInvitationToken,
+  acceptInvitationAndRegister,
+  reviewPendingAccount,
+  getSecurityAuditLogs,
+  invalidateAllSessions,
+  SERVER_INVITATIONS,
+  SERVER_USERS,
+  SECURITY_AUDIT_LOGS,
 } from './src/server/auth.js';
 import {
   executeDisbursement,
@@ -500,6 +510,11 @@ Respond with JSON:
   // 1. Authoritative Server-Side Authentication & Session Enforcement (Audit Phase 1)
   // =========================================================================
 
+  // =========================================================================
+  // 1. Authoritative Server-Side Authentication & Session Enforcement (Audit Phase 1)
+  // Formal Security Replacement: Invitation-Only, Verified Accounts, Position-Based RBAC
+  // =========================================================================
+
   app.post('/api/auth/login', (req: Request, res: Response) => {
     try {
       const { email, password, mfa_code, access_point } = req.body;
@@ -509,6 +524,14 @@ Respond with JSON:
 
       const authResult = authenticateUser(email, password, mfa_code, access_point as UserRole);
       if (!authResult.success) {
+        if (authResult.pendingApproval) {
+          return res.status(403).json({
+            success: false,
+            pending_approval: true,
+            code: 'ACCOUNT_PENDING_APPROVAL',
+            error: authResult.error,
+          });
+        }
         if (authResult.requireMfa) {
           return res.status(200).json({
             success: false,
@@ -554,6 +577,83 @@ Respond with JSON:
     return res.json({ success: true, message: 'Server session revoked successfully.' });
   });
 
+  // Public/Unrestricted Signup Retirement Boundary (Specification Section 1 & 3)
+  app.post('/api/auth/register', (_req: Request, res: Response) => {
+    return res.status(403).json({
+      success: false,
+      code: 'PUBLIC_SIGNUP_RETIRED',
+      error:
+        'PUBLIC_SIGNUP_RETIRED: Public and unrestricted self-registration has been retired. Registration is strictly invitation-only. Please redeem a valid, unexpired corporate invitation token via /api/auth/register-invite.',
+      registration_method: 'INVITATION_ONLY',
+    });
+  });
+
+  // Public Token Pre-Validation (Validates token against email for candidate registration UI)
+  app.post('/api/auth/invitations/validate', (req: Request, res: Response) => {
+    const { token, email } = req.body;
+    if (!token) {
+      return res.status(400).json({ valid: false, error: 'Invitation token is required.' });
+    }
+    const result = validateInvitationToken(token, email);
+    if (!result.valid) {
+      return res.status(400).json(result);
+    }
+    return res.json({
+      valid: true,
+      invitation: {
+        email: result.invitation!.email,
+        company: result.invitation!.company,
+        assignedPosition: result.invitation!.assignedPosition,
+        assignedRole: result.invitation!.assignedRole,
+        assignedSites: result.invitation!.assignedSites,
+        expiresAt: result.invitation!.expiresAt,
+      },
+    });
+  });
+
+  // Invitation-Only Registration (Creates account in PENDING_APPROVAL status)
+  app.post('/api/auth/register-invite', (req: Request, res: Response) => {
+    try {
+      const { token, email, password, full_name, phone } = req.body;
+      if (!token || !email || !password) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invitation token, email address, and secure password are required.',
+        });
+      }
+
+      if (password.length < 8) {
+        return res.status(400).json({
+          success: false,
+          error: 'Password must be at least 8 characters with enterprise complexity.',
+        });
+      }
+
+      const regResult = acceptInvitationAndRegister({
+        token,
+        email,
+        password,
+        fullName: full_name || '',
+        phone,
+      });
+
+      if (!regResult.success) {
+        return res.status(400).json({ success: false, error: regResult.error });
+      }
+
+      return res.status(201).json({
+        success: true,
+        status: 'pending_approval',
+        message: regResult.message,
+        user_id: regResult.user?.id,
+        email: regResult.user?.email,
+        position: regResult.user?.position,
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Failed to process invitation registration.' });
+    }
+  });
+
   // Authoritative Server-Side Middleware: Enforces Valid Sessions, Hub Access & Site Isolation
   const requireServerAuth = (
     allowedRoles: string[],
@@ -570,9 +670,28 @@ Respond with JSON:
         });
       }
 
+      // Check Pending Approval Enforcement: ZERO protected access until approved!
+      if (session.user.status === 'pending_approval') {
+        return res.status(403).json({
+          success: false,
+          code: 'ACCOUNT_PENDING_APPROVAL',
+          error:
+            'Forbidden (403): Your account registration is in PENDING APPROVAL status. Signup or invitation acceptance alone grants zero protected access. An authorized HR Officer or Executive CEO must explicitly approve your account before access is granted.',
+        });
+      }
+
+      if (session.user.status !== 'active') {
+        return res.status(403).json({
+          success: false,
+          code: 'ACCOUNT_INACTIVE',
+          error: `Forbidden (403): Account status is '${session.user.status}'. Protected access is denied.`,
+        });
+      }
+
       const userRole = session.user.role;
       const assignedSites = session.user.assignedSites || ['ALL'];
       const userEmail = session.user.email;
+      const userPosition = session.user.position;
 
       // Role check
       if (!allowedRoles.includes(userRole!)) {
@@ -581,6 +700,7 @@ Respond with JSON:
           error: `Forbidden (403): Role '${userRole?.toUpperCase()}' is denied access. Allowed roles: ${allowedRoles.join(', ').toUpperCase()}.`,
           required_roles: allowedRoles,
           provided_role: userRole,
+          position: userPosition,
         });
       }
 
@@ -616,7 +736,7 @@ Respond with JSON:
 
       // Site Isolation Check for Admin 2 and Site Head (Section 3 & 10)
       if (userRole === 'admin 2' || userRole === 'site head') {
-        const targetSite = (req.body?.site_id || req.query?.site_id || '').toString().trim().toUpperCase();
+        const targetSite = (req.body?.site_id || req.query?.site_id || req.params?.site_id || '').toString().trim().toUpperCase();
         if (targetSite && !assignedSites.includes('ALL') && !assignedSites.includes(targetSite)) {
           return res.status(403).json({
             success: false,
@@ -627,12 +747,331 @@ Respond with JSON:
         }
       }
 
-      (req as any).authenticatedUser = session?.user || { role: userRole, assignedSites, email: userEmail };
+      (req as any).authenticatedUser = session.user;
       next();
     };
   };
 
   const requireRoleAndHub = requireServerAuth;
+
+  // -------------------------------------------------------------------------
+  // Invitation Management Endpoints (Restricted to CEO & HR Officer / Admin 1)
+  // -------------------------------------------------------------------------
+
+  app.get('/api/auth/invitations', requireServerAuth(['ceo', 'admin 1']), (_req: Request, res: Response) => {
+    res.json({
+      success: true,
+      count: SERVER_INVITATIONS.length,
+      invitations: SERVER_INVITATIONS,
+    });
+  });
+
+  app.post('/api/auth/invitations/create', requireServerAuth(['ceo', 'admin 1']), (req: Request, res: Response) => {
+    const actor = (req as any).authenticatedUser;
+    const { email, assigned_role, assigned_position, assigned_sites, company, expires_in_hours, notes } = req.body;
+
+    const result = createInvitation({
+      email: email || '',
+      assignedRole: assigned_role || 'admin 2',
+      assignedPosition: assigned_position || 'Site Worker',
+      assignedSites: Array.isArray(assigned_sites) && assigned_sites.length > 0 ? assigned_sites : ['SITE-001'],
+      company: company || 'De Rueda Construction Inc.',
+      expiresInHours: expires_in_hours ? parseInt(expires_in_hours, 10) : 48,
+      notes,
+      actorEmail: actor?.email || 'admin1@deruedaconstruction.com',
+      actorRole: actor?.role || 'admin 1',
+    });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    return res.status(201).json(result);
+  });
+
+  app.post('/api/auth/invitations/revoke', requireServerAuth(['ceo', 'admin 1']), (req: Request, res: Response) => {
+    const actor = (req as any).authenticatedUser;
+    const { invitation_id, reason } = req.body;
+    if (!invitation_id) {
+      return res.status(400).json({ success: false, error: 'invitation_id is required to revoke.' });
+    }
+
+    const result = revokeInvitation(
+      invitation_id,
+      reason || 'Revoked by authorized enterprise administrator',
+      actor?.email || 'admin1@deruedaconstruction.com',
+      actor?.role || 'admin 1'
+    );
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    return res.json(result);
+  });
+
+  // -------------------------------------------------------------------------
+  // Account Approval & Verification Endpoints (Restricted to CEO & HR / Admin 1)
+  // -------------------------------------------------------------------------
+
+  app.get('/api/auth/accounts/pending', requireServerAuth(['ceo', 'admin 1']), (_req: Request, res: Response) => {
+    const pending = SERVER_USERS.filter((u) => u.status === 'pending_approval');
+    const sanitized = pending.map((u) => {
+      const copy = { ...u } as any;
+      delete copy.passwordHash;
+      delete copy.passwordSalt;
+      delete copy.mfaSecret;
+      delete copy.backupCodesHashed;
+      return copy;
+    });
+    return res.json({
+      success: true,
+      count: sanitized.length,
+      pending_accounts: sanitized,
+    });
+  });
+
+  app.post('/api/auth/accounts/approve', requireServerAuth(['ceo', 'admin 1']), (req: Request, res: Response) => {
+    const actor = (req as any).authenticatedUser;
+    const { user_id, action, notes } = req.body;
+
+    if (!user_id || !action || !['APPROVE', 'REJECT'].includes(action)) {
+      return res.status(400).json({ success: false, error: 'user_id and valid action (APPROVE or REJECT) are required.' });
+    }
+
+    const result = reviewPendingAccount(
+      user_id,
+      action as 'APPROVE' | 'REJECT',
+      notes || '',
+      actor?.email || 'admin1@deruedaconstruction.com',
+      actor?.role || 'admin 1'
+    );
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    const sanitizedUser = { ...result.user } as any;
+    delete sanitizedUser.passwordHash;
+    delete sanitizedUser.passwordSalt;
+    delete sanitizedUser.mfaSecret;
+    delete sanitizedUser.backupCodesHashed;
+
+    return res.json({
+      success: true,
+      message: action === 'APPROVE' ? 'Account approved and activated.' : 'Account rejected.',
+      user: sanitizedUser,
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Immutable Security Audit Trail & Session Invalidation Endpoints
+  // -------------------------------------------------------------------------
+
+  app.get('/api/auth/audit-logs', requireServerAuth(['ceo', 'admin 1']), (req: Request, res: Response) => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 100;
+    res.json({
+      success: true,
+      count: SECURITY_AUDIT_LOGS.length,
+      logs: getSecurityAuditLogs(limit),
+    });
+  });
+
+  app.post('/api/auth/sessions/invalidate-all', requireServerAuth(['ceo']), (req: Request, res: Response) => {
+    const actor = (req as any).authenticatedUser;
+    const result = invalidateAllSessions(actor?.email || 'operations@deruedaconstruction.com', actor?.role || 'ceo');
+    res.json({
+      success: true,
+      message: `Enterprise cutover complete: ${result.count} active legacy sessions invalidated. Re-authentication under verified identity required.`,
+      invalidated_count: result.count,
+    });
+  });
+
+  // =========================================================================
+  // CEO VAULT MASTER TRANSACTION CUT-OFF (Upgrades Specification Section 1)
+  // Authoritative Server-Side Global Execution Lock for All GCash & PayMongo Paths
+  // =========================================================================
+
+  interface MasterCutoffChangeRecord {
+    id: string;
+    timestamp: string;
+    actor: string;
+    actor_email: string;
+    prior_state: 'ON' | 'OFF';
+    new_state: 'ON' | 'OFF';
+    reason: string;
+    result: 'SUCCESS' | 'REJECTED';
+  }
+
+  interface MasterCutoffBlockedAttempt {
+    id: string;
+    timestamp: string;
+    actor?: string;
+    endpoint: string;
+    provider: 'GCASH' | 'PAYMONGO' | 'XENDIT';
+    recipient?: string;
+    amount?: number;
+    reason: string;
+  }
+
+  // Initialized to OFF (fail-safe and default closed per specification)
+  const masterCutoffState = {
+    masterSwitchOn: false, // OFF blocks all new transactions
+    isCutoffEngaged: true, // Cut-Off is actively engaged
+    lastChangedBy: 'Emerita De Rueda (CEO)',
+    lastChangedEmail: 'marjoncompany@gmail.com',
+    lastChangedAt: '2026-10-26T00:00:00.000Z',
+    reason: 'Initial fail-safe security lock engaged. Requires authenticated CEO confirmation to permit transaction execution.',
+    changeHistory: [
+      {
+        id: 'CUTOFF-INIT-001',
+        timestamp: '2026-10-26T00:00:00.000Z',
+        actor: 'System Security (Fail-Safe)',
+        actor_email: 'security@deruedaconstruction.com',
+        prior_state: 'OFF' as const,
+        new_state: 'OFF' as const,
+        reason: 'Initial system boot in secure fail-closed state.',
+        result: 'SUCCESS' as const,
+      },
+    ] as MasterCutoffChangeRecord[],
+    blockedAttempts: [] as MasterCutoffBlockedAttempt[],
+  };
+
+  // Authoritative Server Middleware for Payout/Transaction Dispatch Gates
+  const checkMasterCutoffGate = (req: Request, res: Response, next: () => void) => {
+    try {
+      if (!masterCutoffState.masterSwitchOn) {
+        const attempt: MasterCutoffBlockedAttempt = {
+          id: `BLK-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+          timestamp: new Date().toISOString(),
+          actor: (req as any).authenticatedUser?.email || (req.headers['authorization'] ? 'Authenticated User' : 'Anonymous Request'),
+          endpoint: req.originalUrl || req.path,
+          provider: req.originalUrl.includes('paymongo') ? 'PAYMONGO' : req.originalUrl.includes('xendit') ? 'XENDIT' : 'GCASH',
+          recipient: req.body?.recipient_name || req.body?.employee_name || req.body?.customer_name,
+          amount: Number(req.body?.amount) || undefined,
+          reason: 'Blocked by CEO Vault Master Transaction Cut-Off (OFF)',
+        };
+        masterCutoffState.blockedAttempts.unshift(attempt);
+        if (masterCutoffState.blockedAttempts.length > 100) masterCutoffState.blockedAttempts.pop();
+
+        return res.status(423).json({
+          success: false,
+          error: 'EXECUTION_CUTOFF_LOCKED: The CEO Vault Master Transaction Cut-Off is currently OFF (Engaged). All GCash and PayMongo transaction executions are globally halted across all sites.',
+          code: 'MASTER_CUTOFF_ENGAGED',
+          cutoff_state: {
+            masterSwitchOn: false,
+            isCutoffEngaged: true,
+            lastChangedBy: masterCutoffState.lastChangedBy,
+            lastChangedAt: masterCutoffState.lastChangedAt,
+            reason: masterCutoffState.reason,
+          },
+          blocked_attempt_id: attempt.id,
+        });
+      }
+      next();
+    } catch {
+      // Fail-closed resilience: if state cannot be safely read, block execution
+      return res.status(500).json({
+        success: false,
+        error: 'CRITICAL_FAIL_CLOSED: Master transaction control state could not be verified. New transaction execution blocked for security.',
+        code: 'FAIL_CLOSED_ERROR',
+      });
+    }
+  };
+
+  // Endpoints for Master Cut-Off
+  app.get('/api/system/master-cutoff', (_req: Request, res: Response) => {
+    try {
+      const inFlightPayMongo = inMemoryPayMongoTransactions.filter((t) => (t.status as string) === 'PENDING').length;
+      const inFlightGCash = SERVER_GCASH_TRANSACTIONS.filter((t) => (t.status as string) === 'PENDING').length;
+
+      return res.json({
+        success: true,
+        masterSwitchOn: masterCutoffState.masterSwitchOn,
+        isCutoffEngaged: !masterCutoffState.masterSwitchOn,
+        lastChangedBy: masterCutoffState.lastChangedBy,
+        lastChangedEmail: masterCutoffState.lastChangedEmail,
+        lastChangedAt: masterCutoffState.lastChangedAt,
+        reason: masterCutoffState.reason,
+        inFlightCount: inFlightPayMongo + inFlightGCash,
+        inFlightBreakdown: {
+          paymongo: inFlightPayMongo,
+          gcash: inFlightGCash,
+        },
+        changeHistory: masterCutoffState.changeHistory.slice(0, 50),
+        recentBlockedAttempts: masterCutoffState.blockedAttempts.slice(0, 30),
+      });
+    } catch {
+      // Fail closed
+      return res.json({
+        success: false,
+        masterSwitchOn: false,
+        isCutoffEngaged: true,
+        error: 'Fail-closed fallback active.',
+      });
+    }
+  });
+
+  app.post(
+    '/api/system/master-cutoff/toggle',
+    requireServerAuth(['ceo']),
+    (req: Request, res: Response) => {
+      try {
+        const { masterSwitchOn, reason } = req.body;
+        const actor = (req as any).authenticatedUser?.name || 'Emerita De Rueda (CEO)';
+        const actorEmail = (req as any).authenticatedUser?.email || 'marjoncompany@gmail.com';
+
+        if (typeof masterSwitchOn !== 'boolean') {
+          return res.status(400).json({ success: false, error: 'masterSwitchOn boolean is required.' });
+        }
+
+        if (!reason || reason.trim().length < 5) {
+          return res.status(400).json({
+            success: false,
+            error: 'A specific reason (minimum 5 characters) is required for audit recording every master switch toggle.',
+          });
+        }
+
+        const priorState: 'ON' | 'OFF' = masterCutoffState.masterSwitchOn ? 'ON' : 'OFF';
+        const newState: 'ON' | 'OFF' = masterSwitchOn ? 'ON' : 'OFF';
+
+        masterCutoffState.masterSwitchOn = masterSwitchOn;
+        masterCutoffState.isCutoffEngaged = !masterSwitchOn;
+        masterCutoffState.lastChangedBy = actor;
+        masterCutoffState.lastChangedEmail = actorEmail;
+        masterCutoffState.lastChangedAt = new Date().toISOString();
+        masterCutoffState.reason = reason.trim();
+
+        const auditEntry: MasterCutoffChangeRecord = {
+          id: `CUTOFF-CHG-${Date.now()}`,
+          timestamp: masterCutoffState.lastChangedAt,
+          actor,
+          actor_email: actorEmail,
+          prior_state: priorState,
+          new_state: newState,
+          reason: reason.trim(),
+          result: 'SUCCESS',
+        };
+
+        masterCutoffState.changeHistory.unshift(auditEntry);
+
+        return res.json({
+          success: true,
+          message: masterSwitchOn
+            ? 'CEO Vault Master Transaction Cut-Off is now DISENGAGED (ON). Transaction dispatches are permitted subject to role permissions and provider credentials.'
+            : 'CEO Vault Master Transaction Cut-Off is now ENGAGED (OFF). All GCash and PayMongo transactions are immediately locked and blocked globally.',
+          cutoff_state: {
+            masterSwitchOn: masterCutoffState.masterSwitchOn,
+            isCutoffEngaged: masterCutoffState.isCutoffEngaged,
+            lastChangedBy: masterCutoffState.lastChangedBy,
+            lastChangedAt: masterCutoffState.lastChangedAt,
+            reason: masterCutoffState.reason,
+          },
+          audit_record: auditEntry,
+        });
+      } catch (err: any) {
+        return res.status(500).json({ success: false, error: err?.message || 'Failed to toggle master cut-off state.' });
+      }
+    }
+  );
 
   // =========================================================================
   // 2. Real GCash Business Disbursement Gateway (Specification Phase 2 & Section 3)
@@ -697,9 +1136,10 @@ Respond with JSON:
     }
   );
 
-  // 5. Automated Payout Boundary (Explicitly Disabled per Executive Decision Page 1 & Section 1)
+  // 5. Automated Payout Boundary (Protected by CEO Master Cut-Off Gate & Role Permissions)
   app.post(
     '/api/gcash/disburse',
+    checkMasterCutoffGate,
     requireServerAuth(['ceo', 'admin 1', 'admin 2']),
     async (req: Request, res: Response) => {
       const { payroll_id, employee_name, gcash_number, amount } = req.body;
@@ -723,6 +1163,7 @@ Respond with JSON:
 
   app.post(
     '/api/gcash/batch-disburse',
+    checkMasterCutoffGate,
     requireServerAuth(['ceo', 'admin 1', 'admin 2']),
     async (_req: Request, res: Response) => {
       return res.status(403).json({
@@ -1782,8 +2223,8 @@ Respond strictly with valid JSON with this exact structure:
     }
   };
 
-  app.post('/api/paymongo/payouts/create', handlePayMongoCreatePayout);
-  app.post('/api/xendit/payouts/create', handlePayMongoCreatePayout);
+  app.post('/api/paymongo/payouts/create', checkMasterCutoffGate, handlePayMongoCreatePayout);
+  app.post('/api/xendit/payouts/create', checkMasterCutoffGate, handlePayMongoCreatePayout);
 
   // 5. Create Customer Payment Link / Checkout (PayMongo Links API)
   const handlePayMongoCreateLink = (req: Request, res: Response) => {

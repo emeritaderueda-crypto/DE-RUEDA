@@ -11,14 +11,16 @@ import {
   Info,
   Eye,
   EyeOff,
-  Fingerprint,
   RefreshCw,
+  Ticket,
+  Clock,
+  Building,
+  CheckCircle2,
+  AlertTriangle,
+  UserPlus,
 } from 'lucide-react';
 import { DeRuedaLogo } from '../brand/DeRuedaLogo';
-import {
-  DEFAULT_CREDENTIALS,
-  getAdminAccounts,
-} from '../../utils/credentials';
+import { DEFAULT_CREDENTIALS } from '../../utils/credentials';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -32,6 +34,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onSuccessLogin,
 }) => {
   const { login } = useApp();
+  const [authTab, setAuthTab] = useState<'signin' | 'redeem_invitation'>('signin');
+
+  // Sign In States
   const [accessPoint, setAccessPoint] = useState<AccessPointRole>('ceo');
   const [email, setEmail] = useState('operations@deruedaconstruction.com');
   const [password, setPassword] = useState('');
@@ -40,6 +45,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPendingApprovalNotice, setIsPendingApprovalNotice] = useState(false);
+
+  // Invitation Registration States
+  const [inviteToken, setInviteToken] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteFullName, setInviteFullName] = useState('');
+  const [invitePassword, setInvitePassword] = useState('');
+  const [invitePhone, setInvitePhone] = useState('');
+  const [isValidatingToken, setIsValidatingToken] = useState(false);
+  const [tokenValidationInfo, setTokenValidationInfo] = useState<{
+    valid: boolean;
+    assignedPosition?: string;
+    assignedRole?: string;
+    assignedSites?: string[];
+    company?: string;
+    expiresAt?: string;
+  } | null>(null);
+  const [registrationSuccess, setRegistrationSuccess] = useState<{
+    email: string;
+    position: string;
+    message: string;
+  } | null>(null);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -49,25 +76,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setError('');
       setShowPassword(false);
       setIsSubmitting(false);
+      setIsPendingApprovalNotice(false);
+      setRegistrationSuccess(null);
+      setTokenValidationInfo(null);
     }
   }, [isOpen]);
 
-  // Sync role and clear password
   const handleRoleSelect = (role: AccessPointRole) => {
     setAccessPoint(role);
     setError('');
     setPassword('');
     setMfaCode('');
     setRequiresMfa(false);
+    setIsPendingApprovalNotice(false);
     const defaultInfo = DEFAULT_CREDENTIALS[role];
     if (defaultInfo) {
       setEmail(defaultInfo.email);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSignInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsPendingApprovalNotice(false);
 
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
@@ -96,12 +127,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       const data = await response.json();
       if (!response.ok || !data.success) {
+        if (data.pending_approval) {
+          setIsPendingApprovalNotice(true);
+          setError(data.error || 'Account registration is pending formal approval by HR or CEO.');
+          setIsSubmitting(false);
+          return;
+        }
+
         if (data.require_mfa) {
           setRequiresMfa(true);
           setError('Two-Factor Authentication required: enter 6-digit TOTP from your authenticator app (or recovery code).');
           setIsSubmitting(false);
           return;
         }
+
         setError(data.error || 'Authentication failed. Please verify your credentials.');
         setIsSubmitting(false);
         return;
@@ -131,6 +170,103 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const handleValidateToken = async () => {
+    const trimmed = inviteToken.trim();
+    if (!trimmed) {
+      setError('Please enter a corporate invitation token to validate.');
+      return;
+    }
+
+    setIsValidatingToken(true);
+    setError('');
+    try {
+      const response = await fetch('/api/auth/invitations/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: trimmed,
+          email: inviteEmail.trim() || undefined,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.valid) {
+        setError(data.error || 'Invalid, expired, revoked, or already-used invitation token.');
+        setTokenValidationInfo(null);
+      } else {
+        setTokenValidationInfo({
+          valid: true,
+          assignedPosition: data.invitation?.assignedPosition,
+          assignedRole: data.invitation?.assignedRole,
+          assignedSites: data.invitation?.assignedSites,
+          company: data.invitation?.company,
+          expiresAt: data.invitation?.expiresAt,
+        });
+        if (data.invitation?.email && !inviteEmail) {
+          setInviteEmail(data.invitation.email);
+        }
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Could not validate invitation token with corporate server.');
+    } finally {
+      setIsValidatingToken(false);
+    }
+  };
+
+  const handleRegisterInviteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (!inviteToken.trim()) {
+      setError('A valid corporate invitation token is required.');
+      return;
+    }
+    if (!inviteEmail.trim() || !inviteEmail.includes('@')) {
+      setError('A valid corporate email address is required.');
+      return;
+    }
+    if (invitePassword.length < 8) {
+      setError('Password must contain at least 8 characters.');
+      return;
+    }
+    if (!inviteFullName.trim()) {
+      setError('Full legal name is required for verified corporate registration.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch('/api/auth/register-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: inviteToken.trim(),
+          email: inviteEmail.trim(),
+          password: invitePassword,
+          full_name: inviteFullName.trim(),
+          phone: invitePhone.trim() || undefined,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        setError(data.error || 'Failed to complete invitation registration.');
+      } else {
+        setRegistrationSuccess({
+          email: data.email || inviteEmail,
+          position: data.position || tokenValidationInfo?.assignedPosition || 'Team Member',
+          message:
+            data.message ||
+            'Registration successful! Your account is in PENDING APPROVAL status. An authorized HR Officer or Executive CEO must review and activate your account before you can log in.',
+        });
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Network error occurred while submitting registration.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const currentRoleDefault = DEFAULT_CREDENTIALS[accessPoint];
@@ -150,264 +286,447 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
         </div>
 
-        <div className="px-5 pt-4 text-center">
-          <h2 className="text-lg font-black text-white">Welcome Back</h2>
-          <p className="text-xs text-slate-300 mt-0.5">Sign in to your De Rueda Construction account</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {/* Pre-Authorized Corporate Identity Notice */}
-          <div className="p-3 bg-linear-to-r from-blue-950/40 to-emerald-950/40 border border-[#1e3a8a]/60 rounded-xl text-xs space-y-1">
-            <div className="flex items-center gap-1.5 font-bold text-sky-300">
-              <ShieldCheck className="w-4 h-4 text-[#38bdf8] shrink-0" />
-              <span>Corporate SSO &amp; Server-Verified Multi-Factor Auth</span>
-            </div>
-            <p className="text-slate-300 text-[11px] leading-relaxed">
-              Enterprise access is bound strictly to verified corporate identities with server-enforced role-based access control and audited session lineage.
-            </p>
-          </div>
-
-          {/* Role selector */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-              Select Role / Access Level
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {(['ceo', 'admin 1', 'admin 2', 'site head'] as AccessPointRole[]).map((r) => {
-                const isSelected = accessPoint === r;
-                return (
-                  <button
-                    type="button"
-                    key={r}
-                    onClick={() => handleRoleSelect(r)}
-                    className={`py-2 px-1 text-xs font-bold rounded-xl uppercase transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
-                      isSelected
-                        ? 'bg-[#a3e635] text-[#080f0d] shadow-md shadow-[#a3e635]/20 ring-1 ring-[#a3e635]'
-                        : 'bg-[#13241f] text-slate-300 border border-[#234338] hover:border-slate-500 hover:text-white'
-                    }`}
-                  >
-                    <span className="truncate">{r}</span>
-                    <span
-                      className={`text-[9px] font-normal truncate ${
-                        isSelected ? 'text-[#080f0d]/80 font-semibold' : 'text-slate-400'
-                      }`}
-                    >
-                      {r === 'ceo'
-                        ? 'Executive'
-                        : r === 'admin 1'
-                        ? 'HR Lead'
-                        : r === 'admin 2'
-                        ? 'Site Ops'
-                        : 'Field Head'}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
-              <Info className="w-3 h-3 text-[#a3e635] shrink-0" />
-              <span>{currentRoleDefault.description}</span>
-            </div>
-          </div>
-
-          {/* Email input */}
-          <div>
-            <label htmlFor="auth-email" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-              Pre-Authorized Corporate Email
-            </label>
-            <div className="relative">
-              <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                id="auth-email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-[#13241f] border border-[#234338] rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#10b981]"
-                placeholder="operations@deruedaconstruction.com"
-              />
-            </div>
-            {/* Quick pre-set authorized corporate identities */}
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400">
-              <span className="font-semibold text-slate-300">Quick Login:</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setAccessPoint('ceo');
-                  setEmail('marjoncompany@gmail.com');
-                  setPassword('MaDeRuSe=26');
-                }}
-                className="px-2 py-0.5 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 font-bold rounded border border-emerald-500/50 cursor-pointer shadow-xs flex items-center gap-1"
-              >
-                <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                <span>CEO: marjoncompany@gmail.com</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAccessPoint('ceo');
-                  setEmail('operations@deruedaconstruction.com');
-                  setPassword('Emerita0279');
-                }}
-                className="px-1.5 py-0.5 bg-[#13241f] hover:bg-[#234338] text-slate-300 rounded border border-[#234338] cursor-pointer"
-              >
-                CEO (operations)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAccessPoint('admin 1');
-                  setEmail('admin1@deruedaconstruction.com');
-                  setPassword('DRC02');
-                }}
-                className="px-1.5 py-0.5 bg-[#13241f] hover:bg-[#234338] text-slate-300 rounded border border-[#234338] cursor-pointer"
-              >
-                HR Lead
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAccessPoint('admin 2');
-                  setEmail('admin2.mariveles@deruedaconstruction.com');
-                  setPassword('DRC03');
-                }}
-                className="px-1.5 py-0.5 bg-[#13241f] hover:bg-[#234338] text-slate-300 rounded border border-[#234338] cursor-pointer"
-              >
-                Admin 2
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAccessPoint('site head');
-                  setEmail('sitehead.mariveles@deruedaconstruction.com');
-                  setPassword('DRC04');
-                }}
-                className="px-1.5 py-0.5 bg-[#13241f] hover:bg-[#234338] text-slate-300 rounded border border-[#234338] cursor-pointer"
-              >
-                Site Head
-              </button>
-            </div>
-          </div>
-
-          {/* Password input */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label htmlFor="auth-password" className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                Authorization Key / Password
-              </label>
-              <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                <Lock className="w-3 h-3 text-[#a3e635]" />
-                Server Salted PBKDF2
-              </span>
-            </div>
-            <div className="relative">
-              <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                id="auth-password"
-                type={showPassword ? 'text' : 'password'}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-[#13241f] border border-[#234338] rounded-xl pl-9 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#10b981] font-mono tracking-wider"
-                placeholder="••••••••••••"
-                autoComplete="current-password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer"
-                title={showPassword ? 'Hide password' : 'Show password'}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-
-          {/* Two-Factor MFA prompt if required */}
-          {requiresMfa && (
-            <div className="p-3 bg-[#0e1a16] border border-[#a3e635]/60 rounded-xl space-y-2 animate-in fade-in">
-              <label htmlFor="auth-mfa" className="block text-xs font-bold text-[#a3e635] flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-[#a3e635]" />
-                <span>Enter 6-Digit Authenticator Code (MFA)</span>
-              </label>
-              <input
-                id="auth-mfa"
-                type="text"
-                value={mfaCode}
-                onChange={(e) => setMfaCode(e.target.value)}
-                placeholder="e.g. 027902 or RC-XXXX-XXXX"
-                className="w-full bg-[#13241f] border border-[#234338] rounded-xl px-3 py-2 text-sm text-center font-mono font-bold tracking-widest text-[#a3e635] focus:outline-none focus:border-[#a3e635]"
-                maxLength={14}
-                autoFocus
-              />
-              <p className="text-[10px] text-slate-400">
-                Open Google Authenticator or Authy to retrieve your current TOTP code.
-              </p>
-            </div>
-          )}
-
-          {error && (
-            <div className="p-2.5 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-medium">
-              {error}
-            </div>
-          )}
-
-          {/* Submit button */}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full py-2.5 bg-[#0284c7] hover:bg-[#0369a1] text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
-          >
-            {isSubmitting ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Verifying Authentication...</span>
-              </>
-            ) : (
-              <>
-                <UserCheck className="w-4 h-4" />
-                <span>{requiresMfa ? 'Verify MFA & Login' : 'Login to System'}</span>
-              </>
-            )}
-          </button>
-
-          {/* Biometrics Alternative */}
-          <div className="relative flex py-1 items-center">
-            <div className="grow border-t border-[#1e3a8a]/40"></div>
-            <span className="shrink mx-2 text-[10px] text-slate-400 uppercase font-mono">or</span>
-            <div className="grow border-t border-[#1e3a8a]/40"></div>
-          </div>
-
+        {/* Navigation Tabs: Sign In vs. Redeem Corporate Invitation */}
+        <div className="grid grid-cols-2 bg-[#050914] border-b border-[#1e3a8a]/40 p-1.5 gap-1.5 text-xs font-bold">
           <button
             type="button"
-            onClick={async () => {
-              const accounts = getAdminAccounts();
-              const account = accounts.find((a) => a.role === accessPoint) || accounts[0];
-              // Perform standard server login for demo passkey test code
-              setPassword('Emerita0279');
-              login(account.role, account.email);
-              if (onSuccessLogin) onSuccessLogin();
-              onClose();
+            onClick={() => {
+              setAuthTab('signin');
+              setError('');
             }}
-            className="w-full py-2.5 bg-[#0f1c3d] hover:bg-[#142550] border border-[#1e3a8a] text-[#38bdf8] rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+            className={`py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              authTab === 'signin'
+                ? 'bg-[#1e3a8a] text-white shadow-xs'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
           >
-            <Fingerprint className="w-4 h-4 text-[#38bdf8]" />
-            <span>Login with Passkey / Biometrics</span>
+            <ShieldCheck className="w-4 h-4 text-sky-400" />
+            <span>Verified Sign In</span>
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAuthTab('redeem_invitation');
+              setError('');
+            }}
+            className={`py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              authTab === 'redeem_invitation'
+                ? 'bg-emerald-900/90 text-emerald-200 shadow-xs border border-emerald-500/30'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Ticket className="w-4 h-4 text-emerald-400" />
+            <span>Redeem Invitation</span>
+          </button>
+        </div>
 
-          {/* Footer actions */}
-          <div className="pt-2 flex items-center justify-between border-t border-[#1e3a8a]/40 text-xs">
-            <span className="text-slate-400">Pre-authorized company account</span>
+        {authTab === 'signin' ? (
+          <form onSubmit={handleSignInSubmit} className="p-5 space-y-4">
+            <div className="text-center">
+              <h2 className="text-base font-black text-white">Enterprise Authentication</h2>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Sign in with verified corporate credentials and multi-factor authentication
+              </p>
+            </div>
+
+            {/* Pending Approval Alert Banner */}
+            {isPendingApprovalNotice && (
+              <div className="p-3 bg-amber-500/15 border border-amber-500/40 rounded-xl space-y-1.5">
+                <div className="flex items-center gap-2 text-amber-300 font-bold text-xs">
+                  <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Account Pending Approval (0 Protected Access)</span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  In accordance with the enterprise security specification, invitation signup alone grants
+                  zero access to ERP systems. Your account must be explicitly approved and activated by an HR
+                  Officer or the Executive CEO.
+                </p>
+              </div>
+            )}
+
+            {/* Role / Access Point Selector */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                Authorized Role / Access Tier
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(['ceo', 'admin 1', 'admin 2', 'site head'] as AccessPointRole[]).map((r) => {
+                  const isSelected = accessPoint === r;
+                  return (
+                    <button
+                      type="button"
+                      key={r}
+                      onClick={() => handleRoleSelect(r)}
+                      className={`py-2 px-1 text-xs font-bold rounded-xl uppercase transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
+                        isSelected
+                          ? 'bg-[#a3e635] text-[#080f0d] shadow-md shadow-[#a3e635]/20 ring-1 ring-[#a3e635]'
+                          : 'bg-[#13241f] text-slate-300 border border-[#234338] hover:border-slate-500 hover:text-white'
+                      }`}
+                    >
+                      <span className="truncate">{r}</span>
+                      <span
+                        className={`text-[9px] font-normal truncate ${
+                          isSelected ? 'text-[#080f0d]/80 font-semibold' : 'text-slate-400'
+                        }`}
+                      >
+                        {r === 'ceo'
+                          ? 'Executive'
+                          : r === 'admin 1'
+                          ? 'HR Officer'
+                          : r === 'admin 2'
+                          ? 'Site Ops'
+                          : 'Field Head'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
+                <Info className="w-3 h-3 text-[#a3e635] shrink-0" />
+                <span>{currentRoleDefault.description}</span>
+              </div>
+            </div>
+
+            {/* Email input */}
+            <div>
+              <label
+                htmlFor="auth-email"
+                className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5"
+              >
+                Verified Corporate Email
+              </label>
+              <div className="relative">
+                <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  id="auth-email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-[#13241f] border border-[#234338] rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#10b981]"
+                  placeholder="operations@deruedaconstruction.com"
+                />
+              </div>
+            </div>
+
+            {/* Password input */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label
+                  htmlFor="auth-password"
+                  className="text-xs font-semibold text-slate-300 uppercase tracking-wider"
+                >
+                  Authorization Password
+                </label>
+                <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-[#a3e635]" />
+                  PBKDF2 Salted Verification
+                </span>
+              </div>
+              <div className="relative">
+                <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  id="auth-password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-[#13241f] border border-[#234338] rounded-xl pl-9 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#10b981] font-mono tracking-wider"
+                  placeholder="••••••••••••"
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Mandatory MFA Step if challenged */}
+            {requiresMfa && (
+              <div className="p-3 bg-[#0e1a16] border border-[#a3e635]/60 rounded-xl space-y-2 animate-in fade-in">
+                <label
+                  htmlFor="auth-mfa"
+                  className="text-xs font-bold text-[#a3e635] flex items-center gap-1.5"
+                >
+                  <ShieldCheck className="w-4 h-4 text-[#a3e635]" />
+                  <span>Enter 6-Digit Authenticator TOTP Code (or Recovery Code)</span>
+                </label>
+                <input
+                  id="auth-mfa"
+                  type="text"
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value)}
+                  placeholder="e.g. 027902 or RC-XXXX-XXXX"
+                  className="w-full bg-[#13241f] border border-[#234338] rounded-xl px-3 py-2 text-sm text-center font-mono font-bold tracking-widest text-[#a3e635] focus:outline-none focus:border-[#a3e635]"
+                  maxLength={14}
+                  autoFocus
+                />
+                <p className="text-[10px] text-slate-400">
+                  Enter live code from Google Authenticator, Authy, or one-time backup recovery code.
+                </p>
+              </div>
+            )}
+
+            {error && (
+              <div className="p-2.5 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-medium">
+                {error}
+              </div>
+            )}
+
+            {/* Submit button */}
             <button
-              type="button"
-              onClick={onClose}
-              className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full py-2.5 bg-[#0284c7] hover:bg-[#0369a1] text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
             >
-              Cancel
+              {isSubmitting ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Verifying Identity...</span>
+                </>
+              ) : (
+                <>
+                  <UserCheck className="w-4 h-4" />
+                  <span>{requiresMfa ? 'Verify MFA & Sign In' : 'Sign In with Credentials'}</span>
+                </>
+              )}
             </button>
+
+            <div className="pt-2 flex items-center justify-between border-t border-[#1e3a8a]/40 text-xs">
+              <span className="text-slate-400 text-[11px]">
+                Registration is by corporate invitation only
+              </span>
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          /* REDEEM INVITATION / REGISTER WORKFLOW */
+          <div className="p-5 space-y-4">
+            {registrationSuccess ? (
+              <div className="p-4 bg-emerald-950/40 border border-emerald-500/40 rounded-xl space-y-3 text-center animate-in fade-in">
+                <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
+                <h3 className="text-sm font-bold text-white">Registration Application Submitted</h3>
+                <div className="text-xs text-slate-300 space-y-1">
+                  <p>
+                    <strong className="text-emerald-300">Email:</strong> {registrationSuccess.email}
+                  </p>
+                  <p>
+                    <strong className="text-emerald-300">Assigned Position:</strong>{' '}
+                    {registrationSuccess.position}
+                  </p>
+                  <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-200 text-[11px] mt-2">
+                    <AlertTriangle className="w-4 h-4 inline-block mr-1 text-amber-400 align-middle" />
+                    <strong>STATUS: PENDING APPROVAL</strong> — Per formal security policy, signup
+                    grants zero access. An authorized HR Officer or Executive CEO must review and
+                    approve your account before system access is granted.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRegistrationSuccess(null);
+                    setAuthTab('signin');
+                  }}
+                  className="w-full py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer"
+                >
+                  Return to Sign In
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleRegisterInviteSubmit} className="space-y-3.5">
+                <div className="text-center">
+                  <h2 className="text-base font-black text-white">Redeem Enterprise Invitation</h2>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    Self-registration is retired. Only valid, expiring invitations can begin signup.
+                  </p>
+                </div>
+
+                {/* Invitation Token Input with Pre-Validation */}
+                <div>
+                  <label
+                    htmlFor="reg-token"
+                    className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1"
+                  >
+                    Single-Use Invitation Token
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="relative grow">
+                      <Ticket className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        id="reg-token"
+                        type="text"
+                        required
+                        value={inviteToken}
+                        onChange={(e) => {
+                          setInviteToken(e.target.value);
+                          setTokenValidationInfo(null);
+                        }}
+                        className="w-full bg-[#13241f] border border-[#234338] rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 font-mono tracking-wider focus:outline-none focus:border-[#10b981]"
+                        placeholder="e.g. INV-DRC-2026-MASON-8812"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleValidateToken}
+                      disabled={isValidatingToken || !inviteToken.trim()}
+                      className="px-3 py-2 bg-[#1e3a8a] hover:bg-[#2563eb] text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50 shrink-0"
+                    >
+                      {isValidatingToken ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : 'Check Token'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Token details badge if validated */}
+                {tokenValidationInfo && (
+                  <div className="p-2.5 bg-emerald-950/40 border border-emerald-500/40 rounded-xl text-xs space-y-1 animate-in fade-in">
+                    <div className="flex items-center gap-1.5 text-emerald-300 font-bold">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>Valid Corporate Invitation Confirmed</span>
+                    </div>
+                    <div className="text-[11px] text-slate-300 grid grid-cols-2 gap-1 mt-1">
+                      <div>
+                        <span className="text-slate-400">Position:</span>{' '}
+                        <strong>{tokenValidationInfo.assignedPosition}</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">Site Scope:</span>{' '}
+                        <strong>{tokenValidationInfo.assignedSites?.join(', ')}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Email Input */}
+                <div>
+                  <label
+                    htmlFor="reg-email"
+                    className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1"
+                  >
+                    Bound Corporate Email
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      id="reg-email"
+                      type="email"
+                      required
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      className="w-full bg-[#13241f] border border-[#234338] rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#10b981]"
+                      placeholder="e.g. candidate@deruedaconstruction.com"
+                    />
+                  </div>
+                </div>
+
+                {/* Full Name & Phone */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label
+                      htmlFor="reg-name"
+                      className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1"
+                    >
+                      Full Legal Name
+                    </label>
+                    <input
+                      id="reg-name"
+                      type="text"
+                      required
+                      value={inviteFullName}
+                      onChange={(e) => setInviteFullName(e.target.value)}
+                      className="w-full bg-[#13241f] border border-[#234338] rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#10b981]"
+                      placeholder="e.g. Juan De La Cruz"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="reg-phone"
+                      className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1"
+                    >
+                      Mobile Phone (Optional)
+                    </label>
+                    <input
+                      id="reg-phone"
+                      type="tel"
+                      value={invitePhone}
+                      onChange={(e) => setInvitePhone(e.target.value)}
+                      className="w-full bg-[#13241f] border border-[#234338] rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#10b981]"
+                      placeholder="+63 9XX XXX XXXX"
+                    />
+                  </div>
+                </div>
+
+                {/* Password input */}
+                <div>
+                  <label
+                    htmlFor="reg-password"
+                    className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1"
+                  >
+                    Set Account Password (Min. 8 characters)
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      id="reg-password"
+                      type="password"
+                      required
+                      value={invitePassword}
+                      onChange={(e) => setInvitePassword(e.target.value)}
+                      className="w-full bg-[#13241f] border border-[#234338] rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 font-mono tracking-wider focus:outline-none focus:border-[#10b981]"
+                      placeholder="••••••••••••"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                </div>
+
+                {/* Disclosure notice */}
+                <div className="p-2.5 bg-blue-950/40 border border-blue-500/30 rounded-xl text-[11px] text-slate-300 flex items-start gap-2">
+                  <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+                  <div>
+                    <strong>Mandatory Approval Workflow:</strong> Completing registration creates an
+                    account in <span className="text-amber-300 font-semibold">Pending Approval</span> status.
+                    Signup grants zero protected access until approved by HR Lead or Executive CEO.
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="p-2.5 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-medium">
+                    {error}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Registering Account...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-4 h-4" />
+                      <span>Submit Invitation Registration</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
           </div>
-        </form>
+        )}
       </div>
     </div>
   );

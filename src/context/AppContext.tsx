@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   Employee,
+  EmployeeTransferRecord,
   Site,
   AttendanceRecord,
   DtrWeek,
@@ -218,16 +219,58 @@ interface AppContextType {
     notes?: string
   ) => Promise<{ success: boolean; message: string }>;
 
+  // CEO Vault Master Transaction Cut-Off (Upgrades Specification Section 1)
+  masterCutoff: {
+    masterSwitchOn: boolean;
+    isCutoffEngaged: boolean;
+    lastChangedBy: string;
+    lastChangedAt: string;
+    reason: string;
+    inFlightCount: number;
+    changeHistory: Array<{
+      id: string;
+      timestamp: string;
+      actor: string;
+      actor_email: string;
+      prior_state: 'ON' | 'OFF';
+      new_state: 'ON' | 'OFF';
+      reason: string;
+      result: 'SUCCESS' | 'REJECTED';
+    }>;
+  };
+  refreshMasterCutoff: () => Promise<void>;
+  toggleMasterCutoff: (masterSwitchOn: boolean, reason: string) => Promise<{ success: boolean; message: string }>;
+
   // Restricted CEO Vault (Password: Emerita Zero Two)
   isCeoUnlocked: boolean;
   unlockCeoVault: (password: string) => boolean;
   lockCeoVault: () => void;
 
-  // Operational Actions
-  addEmployee: (emp: Omit<Employee, 'employee_id' | 'created_at' | 'updated_at' | 'qr_version'>) => Employee;
+  // Operational Actions & Employee Lifecycle (HR Layout Specification)
+  addEmployee: (emp: Omit<Employee, 'created_at' | 'updated_at' | 'qr_version'> & { employee_id?: string }) => Employee;
   updateEmployee: (id: string, data: Partial<Employee>) => void;
   archiveEmployee: (id: string) => void;
   rehireEmployee: (id: string) => Employee;
+  transferEmployee: (
+    employeeId: string,
+    toSiteId: string,
+    transferDate: string,
+    effectiveDate: string,
+    reason: string,
+    remarks?: string
+  ) => { success: boolean; message: string };
+  terminateEmployee: (
+    employeeId: string,
+    terminationDate: string,
+    reason: string,
+    remarks?: string
+  ) => { success: boolean; message: string };
+  reactivateEmployee: (
+    employeeId: string,
+    reactivationDate: string,
+    reason: string,
+    remarks?: string
+  ) => { success: boolean; message: string };
 
   addSite: (site: Omit<Site, 'site_id' | 'created_at'>) => Site;
   updateSite: (id: string, data: Partial<Site>) => void;
@@ -980,6 +1023,108 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
+  // CEO Vault Master Transaction Cut-Off State (Fail-safe OFF / closed by default)
+  const [masterCutoff, setMasterCutoff] = useState<{
+    masterSwitchOn: boolean;
+    isCutoffEngaged: boolean;
+    lastChangedBy: string;
+    lastChangedAt: string;
+    reason: string;
+    inFlightCount: number;
+    changeHistory: Array<{
+      id: string;
+      timestamp: string;
+      actor: string;
+      actor_email: string;
+      prior_state: 'ON' | 'OFF';
+      new_state: 'ON' | 'OFF';
+      reason: string;
+      result: 'SUCCESS' | 'REJECTED';
+    }>;
+  }>({
+    masterSwitchOn: false,
+    isCutoffEngaged: true,
+    lastChangedBy: 'Emerita De Rueda (CEO)',
+    lastChangedAt: '2026-10-26T00:00:00.000Z',
+    reason: 'Initial fail-safe security lock initialized on system boot.',
+    inFlightCount: 0,
+    changeHistory: [],
+  });
+
+  const refreshMasterCutoff = async () => {
+    try {
+      const res = await fetch('/api/system/master-cutoff');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.success !== false) {
+          setMasterCutoff({
+            masterSwitchOn: Boolean(data.masterSwitchOn),
+            isCutoffEngaged: Boolean(data.isCutoffEngaged ?? !data.masterSwitchOn),
+            lastChangedBy: data.lastChangedBy || 'CEO Authorized',
+            lastChangedAt: data.lastChangedAt || new Date().toISOString(),
+            reason: data.reason || 'Master execution lock active',
+            inFlightCount: data.inFlightCount || 0,
+            changeHistory: data.changeHistory || [],
+          });
+        }
+      }
+    } catch {
+      // Fail-closed fallback: remain OFF
+      setMasterCutoff((prev) => ({ ...prev, masterSwitchOn: false, isCutoffEngaged: true }));
+    }
+  };
+
+  const toggleMasterCutoff = async (
+    targetSwitchOn: boolean,
+    reason: string
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      const token = localStorage.getItem('DERUEDA_ERP_SESSION_TOKEN') || sessionStorage.getItem('DERUEDA_ERP_SESSION_TOKEN') || '';
+      const res = await fetch('/api/system/master-cutoff/toggle', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify({
+          masterSwitchOn: targetSwitchOn,
+          reason,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return {
+          success: false,
+          message: data.error || 'Failed to toggle master transaction cut-off.',
+        };
+      }
+
+      await refreshMasterCutoff();
+      addAuditLog(
+        targetSwitchOn ? 'MASTER_CUTOFF_DISENGAGED' : 'MASTER_CUTOFF_ENGAGED',
+        'CEO_VAULT',
+        'SYSTEM_CUTOFF',
+        `CEO Master Transaction Cut-Off switched to ${targetSwitchOn ? 'ON (Transactions Permitted)' : 'OFF (Global Lock Active)'}. Reason: ${reason}`
+      );
+
+      return {
+        success: true,
+        message: data.message,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err?.message || 'Network error toggling master cut-off.',
+      };
+    }
+  };
+
+  // Synchronize master cut-off status on initial load
+  useEffect(() => {
+    refreshMasterCutoff();
+  }, []);
+
   // Offline network state & diagnostic statistics
   const [isOnline, setIsOnline] = useState<boolean>(() => isNetworkOnline());
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -1480,27 +1625,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  // Employee Management (Specification Section 5: HQ Staff Integration)
-  const addEmployee = (empData: Omit<Employee, 'employee_id' | 'created_at' | 'updated_at' | 'qr_version'>): Employee => {
-    const year = new Date().getFullYear();
-    const isHQ = empData.category === 'Office Based Staff (HQ)' || empData.site_id === 'OFFICE-HQ';
-    const prefix = isHQ ? 'DRC-HQ' : 'DRC-EMP';
-    const nextSeq = employees.length + 1;
-    const seqStr = String(nextSeq).padStart(6, '0');
-    const newId = `${prefix}-${year}-${seqStr}`;
+  // Employee Management (Specification Section 5 & HR Layout Architecture)
+  const addEmployee = (empData: Omit<Employee, 'created_at' | 'updated_at' | 'qr_version'> & { employee_id?: string }): Employee => {
+    let finalId = empData.employee_id ? empData.employee_id.trim().toUpperCase() : '';
+    if (finalId) {
+      const exists = employees.some((e) => e.employee_id === finalId);
+      if (exists) {
+        throw new Error(`Duplicate Employee ID '${finalId}' rejected. Employee IDs must be globally unique.`);
+      }
+    } else {
+      const year = new Date().getFullYear();
+      const isHQ = empData.category === 'Office Based Staff (HQ)' || empData.site_id === 'OFFICE-HQ';
+      const prefix = isHQ ? 'DRC-HQ' : 'DRC-EMP';
+      const nextSeq = employees.length + 1;
+      const seqStr = String(nextSeq).padStart(6, '0');
+      finalId = `${prefix}-${year}-${seqStr}`;
+    }
 
+    const isHQ = empData.category === 'Office Based Staff (HQ)' || empData.site_id === 'OFFICE-HQ';
     const newEmp: Employee = {
       ...empData,
       site_id: isHQ ? 'OFFICE-HQ' : empData.site_id,
       category: isHQ ? 'Office Based Staff (HQ)' : empData.category || 'Site-Based',
-      employee_id: newId,
+      employee_id: finalId,
+      status: empData.status || 'active',
       qr_version: 1,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
 
     setEmployees((prev) => [newEmp, ...prev]);
-    addAuditLog('CREATE', 'EMPLOYEE', newId, `Created ${newEmp.name} (${newEmp.position}) [Category: ${newEmp.category}, Site: ${newEmp.site_id}]`);
+    addAuditLog('CREATE', 'EMPLOYEE', finalId, `Onboarded employee ${newEmp.name} (${newEmp.position}) [Site: ${newEmp.site_id}]`);
     return newEmp;
   };
 
@@ -1522,6 +1677,140 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return emp;
       })
     );
+  };
+
+  const transferEmployee = (
+    employeeId: string,
+    toSiteId: string,
+    transferDate: string,
+    effectiveDate: string,
+    reason: string,
+    remarks?: string
+  ): { success: boolean; message: string } => {
+    const emp = employees.find((e) => e.employee_id === employeeId);
+    if (!emp) return { success: false, message: 'Employee record not found.' };
+
+    const fromSite = sites.find((s) => s.site_id === emp.site_id);
+    const toSite = sites.find((s) => s.site_id === toSiteId);
+    if (!toSite) return { success: false, message: 'Destination project site does not exist.' };
+
+    const transferEntry: EmployeeTransferRecord = {
+      transfer_id: `TRF-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      from_site_id: emp.site_id,
+      from_site_name: fromSite?.name || emp.site_id,
+      to_site_id: toSiteId,
+      to_site_name: toSite.name,
+      transfer_date: transferDate || new Date().toISOString().slice(0, 10),
+      effective_date: effectiveDate || new Date().toISOString().slice(0, 10),
+      reason,
+      remarks,
+      approved_by: currentUser?.name || 'Authorized HR / CEO',
+      timestamp: new Date().toISOString(),
+    };
+
+    setEmployees((prev) =>
+      prev.map((e) => {
+        if (e.employee_id === employeeId) {
+          return {
+            ...e,
+            site_id: toSiteId,
+            status: 'active',
+            qr_version: e.qr_version + 1,
+            transfer_history: [transferEntry, ...(e.transfer_history || [])],
+            updated_at: new Date().toISOString(),
+          };
+        }
+        return e;
+      })
+    );
+
+    addAuditLog(
+      'TRANSFER',
+      'EMPLOYEE',
+      employeeId,
+      `Transferred ${emp.name} from ${fromSite?.name || emp.site_id} to ${toSite.name}. Effective: ${effectiveDate}. Reason: ${reason}`
+    );
+
+    return {
+      success: true,
+      message: `Employee ${emp.name} transferred to ${toSite.name} successfully. Transfer history updated.`,
+    };
+  };
+
+  const terminateEmployee = (
+    employeeId: string,
+    terminationDate: string,
+    reason: string,
+    remarks?: string
+  ): { success: boolean; message: string } => {
+    const emp = employees.find((e) => e.employee_id === employeeId);
+    if (!emp) return { success: false, message: 'Employee not found.' };
+
+    setEmployees((prev) =>
+      prev.map((e) => {
+        if (e.employee_id === employeeId) {
+          return {
+            ...e,
+            status: 'inactive',
+            termination_date: terminationDate || new Date().toISOString().slice(0, 10),
+            termination_reason: reason,
+            termination_remarks: remarks,
+            updated_at: new Date().toISOString(),
+          };
+        }
+        return e;
+      })
+    );
+
+    addAuditLog(
+      'TERMINATE',
+      'EMPLOYEE',
+      employeeId,
+      `Deactivated ${emp.name}. Status: Inactive. Date: ${terminationDate}. Reason: ${reason}`
+    );
+
+    return {
+      success: true,
+      message: `Employee ${emp.name} set to Inactive/Archived. Historical records preserved.`,
+    };
+  };
+
+  const reactivateEmployee = (
+    employeeId: string,
+    reactivationDate: string,
+    reason: string,
+    remarks?: string
+  ): { success: boolean; message: string } => {
+    const emp = employees.find((e) => e.employee_id === employeeId);
+    if (!emp) return { success: false, message: 'Employee not found.' };
+
+    setEmployees((prev) =>
+      prev.map((e) => {
+        if (e.employee_id === employeeId) {
+          return {
+            ...e,
+            status: 'active',
+            termination_date: undefined,
+            termination_reason: undefined,
+            termination_remarks: undefined,
+            updated_at: new Date().toISOString(),
+          };
+        }
+        return e;
+      })
+    );
+
+    addAuditLog(
+      'REACTIVATE',
+      'EMPLOYEE',
+      employeeId,
+      `Reactivated employee ${emp.name}. Status restored to Active. Date: ${reactivationDate}. Reason: ${reason}`
+    );
+
+    return {
+      success: true,
+      message: `Employee ${emp.name} successfully reactivated and restored to active directory.`,
+    };
   };
 
   const archiveEmployee = (id: string) => {
@@ -4721,6 +5010,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateEmployee,
         archiveEmployee,
         rehireEmployee,
+        transferEmployee,
+        terminateEmployee,
+        reactivateEmployee,
         addSite,
         updateSite,
         scanAttendanceQr,
@@ -4859,6 +5151,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         getSiteBatchSummary,
         checkDuplicateReference,
         gcashOnboardingStatus,
+        // CEO Vault Master Transaction Cut-Off
+        masterCutoff,
+        refreshMasterCutoff,
+        toggleMasterCutoff,
       }}
     >
       {children}

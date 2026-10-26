@@ -38,100 +38,117 @@ export const DEFAULT_CREDENTIALS: Record<AccessPointRole, RoleCredential> = {
 // Registered Identity Profiles (MFA secrets, salt and PBKDF2 hashes are stored securely server-side)
 export const INITIAL_ADMIN_ACCOUNTS: AdminUserAccount[] = [
   {
-    id: 'USR-CEO-MARJON',
-    email: 'marjoncompany@gmail.com',
-    name: 'Emerita De Rueda (Executive Owner & CEO)',
-    role: 'ceo',
-    assignedSites: ['ALL'],
-    mfaEnabled: false,
-    status: 'active',
-    createdAt: '2026-01-01T08:00:00Z',
-    updatedAt: '2026-10-23T08:00:00Z',
-    lastLoginAt: '2026-10-23T08:30:00Z',
-  },
-  {
     id: 'USR-CEO-01',
     email: 'operations@deruedaconstruction.com',
-    name: 'Emerita De Rueda (CEO)',
+    name: 'Emerita De Rueda',
     role: 'ceo',
+    position: 'Executive CEO',
     assignedSites: ['ALL'],
+    company: 'De Rueda Construction Inc.',
     mfaEnabled: true,
     status: 'active',
     createdAt: '2026-01-01T08:00:00Z',
-    updatedAt: '2026-10-15T08:00:00Z',
-    lastLoginAt: '2026-10-15T08:30:00Z',
+    updatedAt: '2026-10-26T00:00:00Z',
+    lastLoginAt: '2026-10-26T08:00:00Z',
+  },
+  {
+    id: 'USR-CEO-MARJON',
+    email: 'marjoncompany@gmail.com',
+    name: 'Emerita De Rueda (Executive Owner)',
+    role: 'ceo',
+    position: 'Executive CEO',
+    assignedSites: ['ALL'],
+    company: 'De Rueda Construction Inc.',
+    mfaEnabled: true,
+    status: 'active',
+    createdAt: '2026-01-01T08:00:00Z',
+    updatedAt: '2026-10-26T00:00:00Z',
+    lastLoginAt: '2026-10-26T08:30:00Z',
   },
   {
     id: 'USR-HR-01',
     email: 'admin1@deruedaconstruction.com',
-    name: 'Grace Villanueva (HR Lead / Admin 1)',
+    name: 'Grace Villanueva',
     role: 'admin 1',
+    position: 'HR Officer',
     assignedSites: ['ALL'],
+    company: 'De Rueda Construction Inc.',
     mfaEnabled: true,
     status: 'active',
     createdAt: '2026-01-15T08:00:00Z',
-    updatedAt: '2026-10-15T08:00:00Z',
-    lastLoginAt: '2026-10-14T17:00:00Z',
+    updatedAt: '2026-10-26T00:00:00Z',
+    lastLoginAt: '2026-10-26T07:45:00Z',
   },
   {
     id: 'USR-ADM2-SITE1',
     email: 'admin2.mariveles@deruedaconstruction.com',
-    name: 'Engr. Marco De Rueda (Admin 2 - Mariveles)',
+    name: 'Engr. Marco De Rueda',
     role: 'admin 2',
+    position: 'Site Engineer',
     assignedSites: ['SITE-001'],
+    company: 'De Rueda Construction Inc.',
     mfaEnabled: true,
     status: 'active',
     createdAt: '2026-02-01T08:00:00Z',
-    updatedAt: '2026-10-15T08:00:00Z',
-    lastLoginAt: '2026-10-15T06:15:00Z',
+    updatedAt: '2026-10-26T00:00:00Z',
+    lastLoginAt: '2026-10-26T06:15:00Z',
   },
   {
     id: 'USR-ADM2-SITE2',
     email: 'admin2.subic@deruedaconstruction.com',
-    name: 'Foreman Aris Valdez (Admin 2 - Subic)',
+    name: 'Foreman Aris Valdez',
     role: 'admin 2',
+    position: 'Foreman',
     assignedSites: ['SITE-002'],
+    company: 'De Rueda Construction Inc.',
     mfaEnabled: true,
     status: 'active',
     createdAt: '2026-03-15T08:00:00Z',
-    updatedAt: '2026-10-15T08:00:00Z',
-    lastLoginAt: '2026-10-14T15:20:00Z',
+    updatedAt: '2026-10-26T00:00:00Z',
+    lastLoginAt: '2026-10-25T15:20:00Z',
   },
   {
     id: 'USR-ADM2-SITE3',
     email: 'admin2.balanga@deruedaconstruction.com',
-    name: 'Foreman Danilo Santos (Admin 2 - Balanga)',
+    name: 'Foreman Danilo Santos',
     role: 'admin 2',
+    position: 'Foreman',
     assignedSites: ['SITE-003'],
+    company: 'De Rueda Construction Inc.',
     mfaEnabled: true,
     status: 'active',
     createdAt: '2026-05-10T08:00:00Z',
-    updatedAt: '2026-10-15T08:00:00Z',
-    lastLoginAt: '2026-10-13T12:00:00Z',
-  },
-  {
-    id: 'USR-ADM2-DEFAULT',
-    email: 'admin2@deruedaconstruction.com',
-    name: 'Central Site Field Supervisor (Admin 2)',
-    role: 'admin 2',
-    assignedSites: ['ALL'],
-    mfaEnabled: true,
-    status: 'active',
-    createdAt: '2026-01-01T08:00:00Z',
-    updatedAt: '2026-10-15T08:00:00Z',
-    lastLoginAt: '2026-10-15T07:45:00Z',
+    updatedAt: '2026-10-26T00:00:00Z',
+    lastLoginAt: '2026-10-25T12:00:00Z',
   },
   {
     id: 'USR-SITEHEAD-01',
     email: 'sitehead.mariveles@deruedaconstruction.com',
-    name: 'Engr. Jun Reyes (Site Head - Mariveles)',
+    name: 'Engr. Jun Reyes',
     role: 'site head',
+    position: 'Site Supervisor',
     assignedSites: ['SITE-001'],
+    company: 'De Rueda Construction Inc.',
     mfaEnabled: true,
     status: 'active',
     createdAt: '2026-01-01T08:00:00Z',
-    updatedAt: '2026-10-16T08:00:00Z',
-    lastLoginAt: '2026-10-16T08:00:00Z',
+    updatedAt: '2026-10-26T00:00:00Z',
+    lastLoginAt: '2026-10-26T08:00:00Z',
+  },
+  // Named, separately secured developer/secops identity
+  {
+    id: 'USR-DEV-SECOPS',
+    email: 'devops.audit@deruedaconstruction.com',
+    name: 'Alvin Rivera (SecOps & Systems Engineer)',
+    role: 'admin 1',
+    position: 'Developer / SecOps',
+    assignedSites: ['ALL'],
+    company: 'De Rueda Construction Inc.',
+    mfaEnabled: true,
+    status: 'active',
+    createdAt: '2026-01-01T08:00:00Z',
+    updatedAt: '2026-10-26T00:00:00Z',
+    lastLoginAt: '2026-10-26T09:00:00Z',
   },
 ];
 
@@ -171,16 +188,14 @@ export function findAccountByEmail(email: string): AdminUserAccount | undefined 
   return accounts.find((a) => a.email.toLowerCase() === normalized);
 }
 
-export function getStoredPassword(role: AccessPointRole): string {
-  if (role === 'ceo') return 'MaDeRuSe=26';
+// Passwords are strictly verified server-side with PBKDF2; no plaintext hardcoding
+export function getStoredPassword(_role: AccessPointRole): string {
   return '';
 }
 
 export function saveStoredPassword(_role: AccessPointRole, _newPassword: string): void {}
 
-export function getUserSpecificPassword(email: string, defaultRole: AccessPointRole): string {
-  const norm = email.trim().toLowerCase();
-  if (norm === 'marjoncompany@gmail.com' || defaultRole === 'ceo') return 'MaDeRuSe=26';
+export function getUserSpecificPassword(_email: string, _defaultRole: AccessPointRole): string {
   return '';
 }
 

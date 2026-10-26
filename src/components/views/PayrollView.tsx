@@ -21,6 +21,12 @@ import {
   Download,
   FileSpreadsheet,
   MessageSquare,
+  Lock,
+  ShieldAlert,
+  ShieldCheck,
+  Clock,
+  AlertTriangle,
+  RotateCcw,
 } from 'lucide-react';
 import { GCashPaymentModal } from '../modals/GCashPaymentModal';
 import { SmsPayslipLogsModal } from '../modals/SmsPayslipLogsModal';
@@ -29,6 +35,15 @@ import { downloadReportPDF, downloadCSV } from '../../utils/exporters';
 interface PayrollViewProps {
   onOpenSinglePayslip: (payrollId: string) => void;
 }
+
+export type WalletPayrollFilter =
+  | 'TOTAL'
+  | 'READY_FOR_RELEASE'
+  | 'AWAITING_CONFIRMATION'
+  | 'PROCESSING'
+  | 'CONFIRMED'
+  | 'FAILED'
+  | 'NEEDS_REVIEW';
 
 export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip }) => {
   const {
@@ -42,11 +57,13 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
     triggerBatchGcashPayment,
     isOnline,
     smsPayslipLogs,
+    masterCutoff,
   } = useApp();
 
   const [selectedWeek, setSelectedWeek] = useState(dtrWeeks[0]?.week_key || '2026-W40');
   const [siteFilter, setSiteFilter] = useState(currentSite);
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'Pending' | 'Verified'>('ALL');
+  const [walletFilter, setWalletFilter] = useState<WalletPayrollFilter>('TOTAL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'Pending' | 'Verified' | 'Paid' | 'Failed'>('ALL');
 
   // SMS Payslip Delivery Logs Modal
   const [isSmsLogsOpen, setIsSmsLogsOpen] = useState(false);
@@ -67,13 +84,81 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
     status: 'Verified' as 'Verified' | 'Paid',
     proof_url: '',
     notes: '',
+    employee_acknowledged: false,
+    cash_receiver_witness: '',
   });
 
-  const filtered = payroll.filter((p) => {
+  // Base cycle items matching week and site
+  const cycleRecords = payroll.filter((p) => {
     const matchW = selectedWeek === 'ALL' || p.week_key === selectedWeek;
     const matchS = siteFilter === 'ALL' || p.site_id === siteFilter;
+    return matchW && matchS;
+  });
+
+  // Calculate the 7 wallet-style weekly payroll metrics per Upgrades Section 2
+  const countTotal = cycleRecords.length;
+  const totalAmount = cycleRecords.reduce((s, p) => s + p.net_pay, 0);
+
+  const readyForReleaseItems = cycleRecords.filter(
+    (p) => p.payment_status === 'Pending' && p.daily_rate > 0 && p.gross_pay > 0
+  );
+  const readyForReleaseCount = readyForReleaseItems.length;
+  const readyForReleaseAmount = readyForReleaseItems.reduce((s, p) => s + p.net_pay, 0);
+
+  const awaitingConfirmationItems = cycleRecords.filter(
+    (p) => p.payment_status === 'Paid'
+  );
+  const awaitingConfirmationCount = awaitingConfirmationItems.length;
+  const awaitingConfirmationAmount = awaitingConfirmationItems.reduce((s, p) => s + p.net_pay, 0);
+
+  const processingItems = cycleRecords.filter(
+    (p) => isBatchProcessing && p.payment_status === 'Pending' && p.payment_method === 'GCash'
+  );
+  const processingCount = processingItems.length;
+  const processingAmount = processingItems.reduce((s, p) => s + p.net_pay, 0);
+
+  const confirmedItems = cycleRecords.filter((p) => p.payment_status === 'Verified');
+  const confirmedCount = confirmedItems.length;
+  const confirmedAmount = confirmedItems.reduce((s, p) => s + p.net_pay, 0);
+
+  const failedItems = cycleRecords.filter((p) => p.payment_status === 'Failed');
+  const failedCount = failedItems.length;
+  const failedAmount = failedItems.reduce((s, p) => s + p.net_pay, 0);
+
+  const needsReviewItems = cycleRecords.filter(
+    (p) =>
+      p.total_deductions > p.gross_pay ||
+      (p.verified_days === 0 && p.gross_pay > 0) ||
+      (p.payment_status === 'Paid' && !p.proof_url)
+  );
+  const needsReviewCount = needsReviewItems.length;
+  const needsReviewAmount = needsReviewItems.reduce((s, p) => s + p.net_pay, 0);
+
+  // Filter records based on selected wallet pill and status dropdown
+  const filtered = cycleRecords.filter((p) => {
+    // 1. Wallet Filter
+    let matchWallet = true;
+    if (walletFilter === 'READY_FOR_RELEASE') {
+      matchWallet = p.payment_status === 'Pending' && p.daily_rate > 0 && p.gross_pay > 0;
+    } else if (walletFilter === 'AWAITING_CONFIRMATION') {
+      matchWallet = p.payment_status === 'Paid';
+    } else if (walletFilter === 'PROCESSING') {
+      matchWallet = isBatchProcessing && p.payment_status === 'Pending' && p.payment_method === 'GCash';
+    } else if (walletFilter === 'CONFIRMED') {
+      matchWallet = p.payment_status === 'Verified';
+    } else if (walletFilter === 'FAILED') {
+      matchWallet = p.payment_status === 'Failed';
+    } else if (walletFilter === 'NEEDS_REVIEW') {
+      matchWallet =
+        p.total_deductions > p.gross_pay ||
+        (p.verified_days === 0 && p.gross_pay > 0) ||
+        (p.payment_status === 'Paid' && !p.proof_url);
+    }
+
+    // 2. Secondary Dropdown Filter
     const matchSt = statusFilter === 'ALL' || p.payment_status === statusFilter;
-    return matchW && matchS && matchSt;
+
+    return matchWallet && matchSt;
   });
 
   const handleOpenProof = (p: PayrollRecord) => {
@@ -84,19 +169,27 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
       status: 'Verified',
       proof_url: p.proof_url || '',
       notes: p.notes || '',
+      employee_acknowledged: Boolean(p.proof_url && p.payment_status === 'Verified'),
+      cash_receiver_witness: 'Site Cashier & Timekeeper',
     });
   };
 
   const handleProofSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!proofingRecord) return;
+
+    if (proofForm.payment_method === 'Cash' && !proofForm.employee_acknowledged) {
+      alert('Per compliance rules, cash disbursement requires explicit employee voucher sign-off acknowledgement.');
+      return;
+    }
+
     verifyPayrollProof(
       proofingRecord.payroll_id,
       proofForm.payment_method,
-      proofForm.reference_no.trim(),
+      proofForm.reference_no.trim() || `VCH-${Date.now().toString().substring(6)}`,
       proofForm.status,
       proofForm.proof_url,
-      proofForm.notes.trim()
+      `${proofForm.notes.trim()}${proofForm.employee_acknowledged ? ' [Employee Personally Acknowledged & Signed]' : ''}`
     );
     setProofingRecord(null);
   };
@@ -130,7 +223,8 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
     setProofForm((prev) => ({
       ...prev,
       proof_url: dataUrl,
-      reference_no: prev.reference_no || `GC-${Date.now().toString().substring(5)}`,
+      employee_acknowledged: true,
+      reference_no: prev.reference_no || (prev.payment_method === 'GCash' ? `GC-${Date.now().toString().substring(5)}` : `CSH-VCH-${Date.now().toString().substring(6)}`),
     }));
   };
 
@@ -148,6 +242,10 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
   const pendingGcashTotal = pendingGcashItems.reduce((sum, p) => sum + p.net_pay, 0);
 
   const handleBatchDisburse = async () => {
+    if (!masterCutoff.masterSwitchOn) {
+      setBatchNotice('BLOCKED: Master Transaction Cut-Off is engaged (OFF). All outbound disbursements are locked by the CEO.');
+      return;
+    }
     if (pendingGcashItems.length === 0) return;
     setIsBatchProcessing(true);
     setBatchNotice(null);
@@ -398,16 +496,33 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
           {pendingGcashItems.length > 0 && (
             <button
               onClick={handleBatchDisburse}
-              disabled={isBatchProcessing}
-              className="px-3.5 py-2 bg-[#005ce6] hover:bg-[#0047b3] text-white font-extrabold text-xs rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              title="Disburse all pending GCash weekly salaries at once"
+              disabled={isBatchProcessing || !masterCutoff.masterSwitchOn}
+              className={`px-3.5 py-2 font-extrabold text-xs rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed ${
+                !masterCutoff.masterSwitchOn
+                  ? 'bg-slate-800 text-slate-400 border border-slate-700 opacity-70'
+                  : 'bg-[#005ce6] hover:bg-[#0047b3] text-white'
+              }`}
+              title={
+                !masterCutoff.masterSwitchOn
+                  ? 'Locked: CEO Master Transaction Cut-Off is Engaged (OFF)'
+                  : `Disburse ${pendingGcashItems.length} weekly salaries via GCash batch`
+              }
             >
-              <Zap className="w-4 h-4 text-sky-200" />
-              <span>
-                {isBatchProcessing
-                  ? 'Executing GCash Batch...'
-                  : `Batch Disburse ${pendingGcashItems.length} via GCash (₱${pendingGcashTotal.toLocaleString()})`}
-              </span>
+              {!masterCutoff.masterSwitchOn ? (
+                <>
+                  <Lock className="w-4 h-4 text-amber-400" />
+                  <span>Batch Locked (Cut-Off OFF)</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="w-4 h-4 text-sky-200" />
+                  <span>
+                    {isBatchProcessing
+                      ? 'Executing GCash Batch...'
+                      : `Batch Disburse ${pendingGcashItems.length} via GCash (₱${pendingGcashTotal.toLocaleString()})`}
+                  </span>
+                </>
+              )}
             </button>
           )}
 
@@ -421,12 +536,173 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
         </div>
       </div>
 
+      {/* CEO Master Cut-Off Fail-Safe Warning Banner */}
+      {!masterCutoff.masterSwitchOn && (
+        <div className="p-4 bg-amber-950/40 border-2 border-amber-500/80 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-amber-200 shadow-xl">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 bg-amber-500/20 border border-amber-500/50 rounded-xl text-amber-400 shrink-0">
+              <Lock className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="text-sm font-black text-amber-300 uppercase tracking-wide flex items-center gap-2 flex-wrap">
+                <span>CEO Master Transaction Cut-Off Engaged (Lock: OFF)</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/25 border border-amber-500/50 text-amber-300">
+                  GLOBAL DISBURSEMENT LOCK
+                </span>
+              </div>
+              <p className="text-xs text-amber-200/90 mt-1 leading-relaxed">
+                All outbound disbursements via GCash & PayMongo electronic rails are blocked at the server layer. Queued or scheduled items are stopped. In-flight transactions ({masterCutoff.inFlightCount}) remain subject to provider status reconciliation. This global lock can only be re-enabled inside the secured <strong>CEO Command Vault</strong> with authorized passkey authentication.
+              </p>
+            </div>
+          </div>
+          <div className="text-right shrink-0 bg-black/40 px-3 py-2 rounded-xl border border-amber-500/30">
+            <span className="text-[11px] font-mono text-amber-300/90 block">Toggled by: {masterCutoff.lastChangedBy}</span>
+            <span className="text-[10px] text-amber-400 font-mono">{new Date(masterCutoff.lastChangedAt).toLocaleString()}</span>
+          </div>
+        </div>
+      )}
+
       {batchNotice && (
         <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 flex items-center gap-2 animate-in fade-in">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{batchNotice}</span>
         </div>
       )}
+
+      {/* Wallet-Style Weekly Payroll Dashboard (7 Status Counter Pillars) - Upgrades Specification Section 2 */}
+      <div>
+        <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
+          <span>Wallet-Style Weekly Payroll Status Dashboard (Cycle: {selectedWeek})</span>
+          <span className="text-[11px] font-mono text-emerald-400 font-semibold">
+            Active Filter: <strong className="text-white uppercase">{walletFilter.replace(/_/g, ' ')}</strong>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+          {/* 1. Total Payroll */}
+          <button
+            type="button"
+            onClick={() => setWalletFilter('TOTAL')}
+            className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+              walletFilter === 'TOTAL'
+                ? 'bg-[#10b981]/20 border-[#10b981] shadow-lg ring-1 ring-[#10b981]/50'
+                : 'bg-[#0e1a16] border-[#234338] hover:border-slate-500'
+            }`}
+          >
+            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Total Payroll</div>
+            <div className="text-base font-black font-mono text-white mt-1">{countTotal} records</div>
+            <div className="text-[11px] font-mono font-bold text-emerald-400 mt-0.5">₱{totalAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+          </button>
+
+          {/* 2. Ready for Release */}
+          <button
+            type="button"
+            onClick={() => setWalletFilter('READY_FOR_RELEASE')}
+            className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+              walletFilter === 'READY_FOR_RELEASE'
+                ? 'bg-sky-500/20 border-sky-400 shadow-lg ring-1 ring-sky-400/50'
+                : 'bg-[#0e1a16] border-[#234338] hover:border-sky-500/50'
+            }`}
+          >
+            <div className="text-[10px] uppercase font-bold text-sky-300 tracking-wider flex items-center justify-between">
+              <span>Ready Release</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+            </div>
+            <div className="text-base font-black font-mono text-white mt-1">{readyForReleaseCount} workers</div>
+            <div className="text-[11px] font-mono font-bold text-sky-400 mt-0.5">₱{readyForReleaseAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+          </button>
+
+          {/* 3. Awaiting Confirmation */}
+          <button
+            type="button"
+            onClick={() => setWalletFilter('AWAITING_CONFIRMATION')}
+            className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+              walletFilter === 'AWAITING_CONFIRMATION'
+                ? 'bg-amber-500/20 border-amber-400 shadow-lg ring-1 ring-amber-400/50'
+                : 'bg-[#0e1a16] border-[#234338] hover:border-amber-500/50'
+            }`}
+          >
+            <div className="text-[10px] uppercase font-bold text-amber-300 tracking-wider flex items-center justify-between">
+              <span>Awaiting Conf.</span>
+              <Clock className="w-3 h-3 text-amber-400" />
+            </div>
+            <div className="text-base font-black font-mono text-white mt-1">{awaitingConfirmationCount} records</div>
+            <div className="text-[11px] font-mono font-bold text-amber-400 mt-0.5">₱{awaitingConfirmationAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+          </button>
+
+          {/* 4. Processing */}
+          <button
+            type="button"
+            onClick={() => setWalletFilter('PROCESSING')}
+            className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+              walletFilter === 'PROCESSING'
+                ? 'bg-indigo-500/20 border-indigo-400 shadow-lg ring-1 ring-indigo-400/50'
+                : 'bg-[#0e1a16] border-[#234338] hover:border-indigo-500/50'
+            }`}
+          >
+            <div className="text-[10px] uppercase font-bold text-indigo-300 tracking-wider flex items-center justify-between">
+              <span>Processing</span>
+              {isBatchProcessing && <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>}
+            </div>
+            <div className="text-base font-black font-mono text-white mt-1">{processingCount} in-flight</div>
+            <div className="text-[11px] font-mono font-bold text-indigo-300 mt-0.5">₱{processingAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+          </button>
+
+          {/* 5. Confirmed */}
+          <button
+            type="button"
+            onClick={() => setWalletFilter('CONFIRMED')}
+            className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+              walletFilter === 'CONFIRMED'
+                ? 'bg-emerald-500/20 border-emerald-400 shadow-lg ring-1 ring-emerald-400/50'
+                : 'bg-[#0e1a16] border-[#234338] hover:border-emerald-500/50'
+            }`}
+          >
+            <div className="text-[10px] uppercase font-bold text-emerald-300 tracking-wider flex items-center justify-between">
+              <span>Confirmed</span>
+              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+            </div>
+            <div className="text-base font-black font-mono text-white mt-1">{confirmedCount} settled</div>
+            <div className="text-[11px] font-mono font-bold text-[#a3e635] mt-0.5">₱{confirmedAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+          </button>
+
+          {/* 6. Failed */}
+          <button
+            type="button"
+            onClick={() => setWalletFilter('FAILED')}
+            className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+              walletFilter === 'FAILED'
+                ? 'bg-rose-500/20 border-rose-400 shadow-lg ring-1 ring-rose-400/50'
+                : 'bg-[#0e1a16] border-[#234338] hover:border-rose-500/50'
+            }`}
+          >
+            <div className="text-[10px] uppercase font-bold text-rose-300 tracking-wider flex items-center justify-between">
+              <span>Failed</span>
+              <AlertCircle className="w-3 h-3 text-rose-400" />
+            </div>
+            <div className="text-base font-black font-mono text-white mt-1">{failedCount} blocked</div>
+            <div className="text-[11px] font-mono font-bold text-rose-400 mt-0.5">₱{failedAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+          </button>
+
+          {/* 7. Needs Review */}
+          <button
+            type="button"
+            onClick={() => setWalletFilter('NEEDS_REVIEW')}
+            className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+              walletFilter === 'NEEDS_REVIEW'
+                ? 'bg-amber-600/20 border-amber-500 shadow-lg ring-1 ring-amber-500/50'
+                : 'bg-[#0e1a16] border-[#234338] hover:border-amber-600/50'
+            }`}
+          >
+            <div className="text-[10px] uppercase font-bold text-amber-400 tracking-wider flex items-center justify-between">
+              <span>Needs Review</span>
+              <AlertTriangle className="w-3 h-3 text-amber-400" />
+            </div>
+            <div className="text-base font-black font-mono text-white mt-1">{needsReviewCount} flagged</div>
+            <div className="text-[11px] font-mono font-bold text-amber-400 mt-0.5">₱{needsReviewAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+          </button>
+        </div>
+      </div>
 
       {/* Summary KPI Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -461,8 +737,12 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
               <Wallet className="w-3.5 h-3.5 text-[#005ce6]" />
               GCash Corp Wallet
             </span>
-            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-[#005ce6]/20 text-sky-300 border border-[#005ce6]/40">
-              ACTIVE 24/7
+            <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border ${
+              masterCutoff.masterSwitchOn
+                ? 'bg-[#005ce6]/20 text-sky-300 border-[#005ce6]/40'
+                : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+            }`}>
+              {masterCutoff.masterSwitchOn ? 'ACTIVE 24/7' : 'CUT-OFF OFF'}
             </span>
           </div>
           <div className="mt-2">
@@ -520,11 +800,23 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
             <option value="ALL">All Payment Statuses</option>
             <option value="Pending">Pending Payout</option>
             <option value="Verified">Verified & Paid</option>
+            <option value="Paid">Paid (Pending Final Voucher Proof)</option>
+            <option value="Failed">Failed / Dispute</option>
           </select>
         </div>
 
+        {walletFilter !== 'TOTAL' && (
+          <button
+            onClick={() => setWalletFilter('TOTAL')}
+            className="px-2.5 py-1 text-[11px] font-bold text-slate-400 hover:text-white bg-[#13241f] border border-[#234338] rounded-lg flex items-center gap-1 cursor-pointer"
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span>Reset Wallet Tab</span>
+          </button>
+        )}
+
         <div className="text-[11px] text-slate-400 ml-auto font-mono">
-          Showing {filtered.length} workers
+          Showing {filtered.length} of {countTotal} records
         </div>
       </div>
 
@@ -610,12 +902,36 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
                           {p.payment_status === 'Pending' ? (
                             <>
                               <button
-                                onClick={() => setGcashModalRecord(p)}
-                                className="px-2.5 py-1 bg-[#005ce6] hover:bg-[#0047b3] text-white rounded-md text-[11px] font-bold flex items-center gap-1 transition-all shadow-sm cursor-pointer"
-                                title={`Disburse ₱${p.net_pay.toLocaleString()} to ${p.employee_id} via GCash`}
+                                onClick={() => {
+                                  if (!masterCutoff.masterSwitchOn) {
+                                    alert('DISBURSEMENT BLOCKED: The CEO Master Transaction Cut-Off is engaged (OFF). Re-enable in CEO Command Vault.');
+                                    return;
+                                  }
+                                  setGcashModalRecord(p);
+                                }}
+                                disabled={!masterCutoff.masterSwitchOn}
+                                className={`px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 transition-all shadow-sm ${
+                                  !masterCutoff.masterSwitchOn
+                                    ? 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed opacity-60'
+                                    : 'bg-[#005ce6] hover:bg-[#0047b3] text-white cursor-pointer'
+                                }`}
+                                title={
+                                  !masterCutoff.masterSwitchOn
+                                    ? 'Locked: CEO Master Cut-Off is OFF'
+                                    : `Disburse ₱${p.net_pay.toLocaleString()} to ${p.employee_id} via GCash`
+                                }
                               >
-                                <Smartphone className="w-3 h-3 text-sky-200" />
-                                <span>Pay GCash</span>
+                                {!masterCutoff.masterSwitchOn ? (
+                                  <>
+                                    <Lock className="w-3 h-3 text-amber-400" />
+                                    <span>Locked</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Smartphone className="w-3 h-3 text-sky-200" />
+                                    <span>Pay GCash</span>
+                                  </>
+                                )}
                               </button>
                               <button
                                 onClick={() => handleOpenProof(p)}
@@ -722,9 +1038,54 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
                 </select>
               </div>
 
+              {/* Cash Disbursement Strict Acknowledgement & Witness Check (Section 5) */}
+              {proofForm.payment_method === 'Cash' && (
+                <div className="p-3 bg-emerald-950/40 border border-emerald-500/40 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>Cash Payroll Compliance Protocol (Section 5)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Under DOLE & De Rueda ERP rules, cash wage release requires a clear photo of the worker receiving the cash envelope plus verified acknowledgement.
+                  </p>
+
+                  <div className="pt-1 space-y-2">
+                    <label className="flex items-start gap-2 cursor-pointer bg-[#0e1a16] p-2.5 rounded-lg border border-[#234338]">
+                      <input
+                        type="checkbox"
+                        checked={proofForm.employee_acknowledged}
+                        onChange={(e) => setProofForm({ ...proofForm, employee_acknowledged: e.target.checked })}
+                        className="mt-0.5 rounded text-[#a3e635] focus:ring-0 cursor-pointer"
+                        required
+                      />
+                      <span className="text-white text-[11px] font-semibold">
+                        Employee personally counted &amp; received full net cash of <strong className="text-[#a3e635]">₱{proofingRecord.net_pay.toLocaleString()}</strong> and signed the official paper payroll voucher.
+                      </span>
+                    </label>
+
+                    <div>
+                      <label className="block text-slate-400 text-[10px] uppercase font-bold mb-1">
+                        Disbursing Officer / Site Cashier Witness *
+                      </label>
+                      <input
+                        type="text"
+                        value={proofForm.cash_receiver_witness}
+                        onChange={(e) => setProofForm({ ...proofForm, cash_receiver_witness: e.target.value })}
+                        className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-2.5 py-1 text-white text-xs font-semibold"
+                        placeholder="e.g. Maria Santos (Site Cashier / Timekeeper)"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Photo Attachment / Camera Capture Area */}
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Attach Receipt / Voucher Snapshot</label>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  {proofForm.payment_method === 'Cash'
+                    ? 'Attach Handover Photo / Signed Paper Voucher (Mandatory) *'
+                    : 'Attach GCash Electronic Screenshot / Confirmation *'}
+                </label>
                 <div className="border border-dashed border-[#234338] rounded-xl p-4 text-center bg-[#13241f]/50">
                   {proofForm.proof_url ? (
                     <div className="space-y-2 mb-3">
@@ -733,11 +1094,13 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
                         alt="Proof of Payment"
                         className="max-h-36 mx-auto rounded-lg border border-[#234338] shadow-sm"
                       />
-                      <span className="text-[10px] text-emerald-400 font-semibold block">✓ Image Attachment Active</span>
+                      <span className="text-[10px] text-emerald-400 font-semibold block">✓ Evidence Attachment Active</span>
                     </div>
                   ) : (
                     <div className="text-slate-400 text-xs mb-3">
-                      Attach GCash transaction screenshot or photo of signed paper cash voucher.
+                      {proofForm.payment_method === 'Cash'
+                        ? 'Take a photo of worker receiving cash envelope or upload scanned paper voucher.'
+                        : 'Attach GCash transaction screenshot or official disbursement reference.'}
                     </div>
                   )}
 
@@ -745,7 +1108,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
                     <button
                       type="button"
                       onClick={handleSimulateCamera}
-                      className="px-3 py-1.5 bg-[#a3e635] text-[#080f0d] font-bold rounded-lg hover:bg-[#84cc16] flex items-center gap-1.5 text-xs"
+                      className="px-3 py-1.5 bg-[#a3e635] text-[#080f0d] font-bold rounded-lg hover:bg-[#84cc16] flex items-center gap-1.5 text-xs cursor-pointer"
                     >
                       <Camera className="w-3.5 h-3.5" />
                       Take Camera Snapshot
@@ -765,6 +1128,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
                               setProofForm((prev) => ({
                                 ...prev,
                                 proof_url: event.target?.result as string,
+                                employee_acknowledged: true,
                               }));
                             };
                             reader.readAsDataURL(file);
@@ -782,8 +1146,16 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
                   value={proofForm.notes}
                   onChange={(e) => setProofForm({ ...proofForm, notes: e.target.value })}
                   className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white h-16"
-                  placeholder="e.g. Verified by Admin 1 via GCash business transfer..."
+                  placeholder="e.g. Verified by Site Admin & Timekeeper; cash envelope witnessed..."
                 />
+              </div>
+
+              {/* Automated SMS Payslip Notice (Section 5) */}
+              <div className="p-2.5 bg-[#13241f] border border-[#234338] rounded-lg flex items-center gap-2 text-[11px] text-slate-300">
+                <MessageSquare className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>
+                  <strong>Automated SMS Payslip:</strong> Upon confirming verification as successful, an itemized SMS payslip will be dispatched to the employee's registered mobile number.
+                </span>
               </div>
 
               <div className="pt-3 border-t border-[#234338] flex items-center justify-end gap-2">

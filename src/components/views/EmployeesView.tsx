@@ -33,11 +33,25 @@ import {
   AlertTriangle,
   ArrowRight,
   Wallet,
+  AlertCircle,
 } from 'lucide-react';
 import { EmployeeQrBadgeExportModal } from '../modals/EmployeeQrBadgeExportModal';
 import { BulkQrExportModal } from '../modals/BulkQrExportModal';
 import { HrEmployeePhotoCaptureModal } from '../modals/HrEmployeePhotoCaptureModal';
 import { EmployeesPayoutSummaryDashboard } from '../employees/EmployeesPayoutSummaryDashboard';
+import { SecurityInvitationsModal } from '../modals/SecurityInvitationsModal';
+import {
+  ArrowRightLeft,
+  UserX,
+  FileBadge,
+  History,
+  MoreVertical,
+  Briefcase,
+  Layers,
+  Award,
+  ChevronDown,
+  Ticket,
+} from 'lucide-react';
 
 export const EmployeesView: React.FC = () => {
   const {
@@ -48,6 +62,9 @@ export const EmployeesView: React.FC = () => {
     updateEmployee,
     archiveEmployee,
     rehireEmployee,
+    transferEmployee,
+    terminateEmployee,
+    reactivateEmployee,
     paymentRecords,
     payroll,
     verifyPayrollProof,
@@ -55,15 +72,25 @@ export const EmployeesView: React.FC = () => {
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [siteFilter, setSiteFilter] = useState(currentSite);
-  const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'Site-Based' | 'Office-Based'>('ALL');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'active' | 'archived'>('active');
+  const [siteFilter, setSiteFilter] = useState('ALL');
+  const [positionFilter, setPositionFilter] = useState('ALL');
+  const [departmentFilter, setDepartmentFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'active' | 'archived' | 'inactive' | 'terminated' | 'transferred'>('ALL');
+  const [hrSubTab, setHrSubTab] = useState<'ALL' | 'ACTIVE' | 'TRANSFERRED' | 'INACTIVE'>('ALL');
 
   // Modals
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingEmp, setEditingEmp] = useState<Employee | null>(null);
   const [badgeEmp, setBadgeEmp] = useState<Employee | null>(null);
   const [selectedProfileEmp, setSelectedProfileEmp] = useState<Employee | null>(null);
+  const [transferModalEmp, setTransferModalEmp] = useState<Employee | null>(null);
+  const [terminateModalEmp, setTerminateModalEmp] = useState<Employee | null>(null);
+  const [reactivateModalEmp, setReactivateModalEmp] = useState<Employee | null>(null);
+  const [coeModalEmp, setCoeModalEmp] = useState<Employee | null>(null);
+  const [historyModalEmp, setHistoryModalEmp] = useState<Employee | null>(null);
+  const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
+  const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const [isBulkExportModalOpen, setIsBulkExportModalOpen] = useState(false);
   const [isQrExportModalOpen, setIsQrExportModalOpen] = useState(false);
@@ -71,17 +98,74 @@ export const EmployeesView: React.FC = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isPhotoCaptureOpen, setIsPhotoCaptureOpen] = useState(false);
   const [photoCaptureTarget, setPhotoCaptureTarget] = useState<'NEW' | 'EDIT'>('NEW');
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
 
-  // Add form state
+  const fetchPendingApprovalsCount = React.useCallback(async () => {
+    try {
+      const token = localStorage.getItem('DERUEDA_AUTH_TOKEN') || sessionStorage.getItem('DERUEDA_AUTH_TOKEN');
+      const response = await fetch('/api/auth/accounts/pending', {
+        headers: { Authorization: token ? `Bearer ${token}` : '' },
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setPendingApprovalsCount(data.count || 0);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchPendingApprovalsCount();
+  }, [fetchPendingApprovalsCount]);
+
+  // Transfer Form State (HR Layout Reference Page 3 & 5)
+  const [transferForm, setTransferForm] = useState({
+    to_site_id: sites[0]?.site_id || '',
+    transfer_date: new Date().toISOString().split('T')[0],
+    effective_date: new Date().toISOString().split('T')[0],
+    reason: 'Project Requirement',
+    remarks: '',
+  });
+
+  // Terminate Form State (HR Layout Reference Page 3)
+  const [terminateForm, setTerminateForm] = useState({
+    termination_date: new Date().toISOString().split('T')[0],
+    reason: 'End of Contract',
+    remarks: '',
+  });
+
+  // Reactivate Form State (HR Layout Reference Page 3)
+  const [reactivateForm, setReactivateForm] = useState({
+    reactivation_date: new Date().toISOString().split('T')[0],
+    reason: 'Rehire / New Project',
+    remarks: '',
+  });
+
+  // Add form state with permanent unique ID validation
+  const nextEmployeeSeq = String(employees.length + 1).padStart(4, '0');
+  const [customIdInput, setCustomIdInput] = useState(`EMP-2026-${nextEmployeeSeq}`);
+  const [idValidationError, setIdValidationError] = useState<string | null>(null);
+
   const [formData, setFormData] = useState({
     name: '',
     position: 'Lead Mason / Foreman',
+    department: 'Construction Operations',
+    employment_type: 'Project-Based' as 'Regular' | 'Project-Based' | 'Contractual' | 'Probationary',
     daily_rate: 750,
     site_id: sites[0]?.site_id || '',
     category: 'Site-Based' as 'Site-Based' | 'Office-Based',
     photo_url: '',
     email: '',
     contact_number: '',
+    date_hired: new Date().toISOString().split('T')[0],
+    birth_date: '1992-05-15',
+    tin_number: '',
+    blood_type: 'O+',
+    civil_status: 'Single',
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
     sss_number: '',
     philhealth_number: '',
     gcash_number: '',
@@ -94,18 +178,51 @@ export const EmployeesView: React.FC = () => {
   const [isQuickPayoutProcessing, setIsQuickPayoutProcessing] = useState<boolean>(false);
   const [quickPayoutToast, setQuickPayoutToast] = useState<string | null>(null);
 
+  // Compute unique positions and departments for multi-dropdowns
+  const availablePositions = Array.from(new Set(employees.map((e) => e.position).filter(Boolean)));
+  const availableDepartments = [
+    'Construction Operations',
+    'Engineering & Surveying',
+    'Administration & HR',
+    'Finance & Accounting',
+    'Safety & Compliance',
+    'Logistics & Fleet',
+  ];
+
+  // Top Statistics per HR Employee Reference Layout
+  const totalEmployeesCount = employees.length;
+  const activeEmployeesCount = employees.filter((e) => e.status === 'active').length;
+  const transferredEmployeesCount = employees.filter(
+    (e) => (e.transfer_history && e.transfer_history.length > 0) || e.status === 'transferred'
+  ).length;
+  const inactiveEmployeesCount = employees.filter(
+    (e) => e.status === 'archived' || e.status === 'inactive' || e.status === 'terminated'
+  ).length;
+
   const filtered = employees.filter((emp) => {
-    const q = searchQuery.toLowerCase();
+    // 1. Text search
+    const q = searchQuery.toLowerCase().trim();
     const matchesQ =
+      !q ||
       emp.name.toLowerCase().includes(q) ||
       emp.employee_id.toLowerCase().includes(q) ||
-      emp.position.toLowerCase().includes(q);
+      emp.position.toLowerCase().includes(q) ||
+      (emp.site_id && emp.site_id.toLowerCase().includes(q));
 
+    // 2. HR Sub Tab Filter (All, Active, Transferred, Inactive / Terminated)
+    let matchesTab = true;
+    if (hrSubTab === 'ACTIVE') {
+      matchesTab = emp.status === 'active';
+    } else if (hrSubTab === 'TRANSFERRED') {
+      matchesTab = (emp.transfer_history && emp.transfer_history.length > 0) || emp.status === 'transferred';
+    } else if (hrSubTab === 'INACTIVE') {
+      matchesTab = emp.status === 'archived' || emp.status === 'inactive' || emp.status === 'terminated';
+    }
+
+    // 3. Multi-dropdowns
     const matchesSite = siteFilter === 'ALL' || emp.site_id === siteFilter;
-    const isEmpOffice = (emp.category || '').toLowerCase().includes('office');
-    const matchesCategory =
-      categoryFilter === 'ALL' ||
-      (categoryFilter === 'Office-Based' ? isEmpOffice : !isEmpOffice);
+    const matchesPosition = positionFilter === 'ALL' || emp.position === positionFilter;
+    const matchesDept = departmentFilter === 'ALL' || emp.department === departmentFilter;
     const matchesStatus = statusFilter === 'ALL' || emp.status === statusFilter;
 
     let matchesPayout = true;
@@ -134,28 +251,55 @@ export const EmployeesView: React.FC = () => {
       }
     }
 
-    return matchesQ && matchesSite && matchesCategory && matchesStatus && matchesPayout;
+    return matchesQ && matchesTab && matchesSite && matchesPosition && matchesDept && matchesStatus && matchesPayout;
   });
 
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const created = addEmployee({
-      name: formData.name.trim(),
-      position: formData.position.trim(),
-      daily_rate: Number(formData.daily_rate),
-      site_id: formData.site_id,
-      category: formData.category,
-      photo_url: formData.photo_url.trim() || undefined,
-      email: formData.email.trim(),
-      contact_number: formData.contact_number.trim(),
-      sss_number: formData.sss_number.trim(),
-      philhealth_number: formData.philhealth_number.trim(),
-      gcash_number: formData.gcash_number.trim(),
-      drive_link: formData.drive_link.trim(),
-      status: 'active',
-    });
-    setIsAddOpen(false);
-    setBadgeEmp(created);
+    const finalId = customIdInput.trim();
+    if (!finalId) {
+      setIdValidationError('Employee ID is required.');
+      return;
+    }
+    const exists = employees.some((emp) => emp.employee_id.toLowerCase() === finalId.toLowerCase());
+    if (exists) {
+      setIdValidationError(`Permanent Employee ID "${finalId}" already exists. Duplicate IDs are strictly rejected.`);
+      return;
+    }
+
+    try {
+      const created = addEmployee({
+        employee_id: finalId,
+        name: formData.name.trim(),
+        position: formData.position.trim(),
+        department: formData.department,
+        employment_type: formData.employment_type,
+        daily_rate: Number(formData.daily_rate),
+        site_id: formData.site_id,
+        category: formData.category,
+        photo_url: formData.photo_url.trim() || undefined,
+        email: formData.email.trim(),
+        contact_number: formData.contact_number.trim(),
+        date_hired: formData.date_hired,
+        birth_date: formData.birth_date,
+        tin_number: formData.tin_number.trim(),
+        blood_type: formData.blood_type,
+        civil_status: formData.civil_status,
+        emergency_contact_name: formData.emergency_contact_name.trim(),
+        emergency_contact_phone: formData.emergency_contact_phone.trim(),
+        sss_number: formData.sss_number.trim(),
+        philhealth_number: formData.philhealth_number.trim(),
+        gcash_number: formData.gcash_number.trim(),
+        drive_link: formData.drive_link.trim(),
+        status: 'active',
+      });
+      setIsAddOpen(false);
+      setBadgeEmp(created);
+      setFeedbackToast(`Successfully onboarded ${created.name} (${created.employee_id})`);
+      setTimeout(() => setFeedbackToast(null), 4000);
+    } catch (err: any) {
+      setIdValidationError(err?.message || 'Failed to onboard employee.');
+    }
   };
 
   const handleEditSubmit = (e: React.FormEvent) => {
@@ -351,16 +495,16 @@ export const EmployeesView: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* Page Header */}
+      {/* Page Header (HR Layout Specification Page 2 & 3) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-            Employee Masterlist & HR Management
+            Employee Management
           </h1>
           <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
-            <span>Automated ID Sequence: <strong className="text-white font-mono">DRC-EMP-YYYY-000001</strong></span>
+            <span>Manage your workforce, records, and site assignments.</span>
             <span>·</span>
-            <span>Government IDs & Automatic QR Life-Cycle</span>
+            <span className="text-emerald-400 font-semibold font-mono">DOLE 5-Star Accredited</span>
           </div>
         </div>
 
@@ -393,16 +537,104 @@ export const EmployeesView: React.FC = () => {
             Print Batch Badges
           </button>
           <button
-            onClick={() => setIsAddOpen(true)}
-            className="px-3.5 py-2 bg-[#a3e635] text-[#080f0d] hover:bg-[#84cc16] font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
+            onClick={() => setIsSecurityModalOpen(true)}
+            className="px-3.5 py-2 bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 hover:text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+            title="Manage Enterprise Invitations, Access Control, and Approve Pending Accounts"
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span>Access &amp; Invitations</span>
+            {pendingApprovalsCount > 0 && (
+              <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-1.5 py-0.2 rounded-full font-mono animate-pulse">
+                {pendingApprovalsCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => {
+              setCustomIdInput(`EMP-2026-${String(employees.length + 1).padStart(4, '0')}`);
+              setIdValidationError(null);
+              setIsAddOpen(true);
+            }}
+            className="px-4 py-2 bg-[#005ce6] hover:bg-[#0047b3] text-white font-black text-xs rounded-lg shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
-            + Add New Employee
+            <span>+ Add New Employee</span>
           </button>
         </div>
       </div>
 
-      {/* Visual Summary Dashboard: Payout Pending versus Payout Released Statuses (15 employees per site) */}
+      {feedbackToast && (
+        <div className="p-3 bg-emerald-500/10 border border-emerald-500/40 rounded-xl text-xs text-emerald-300 flex items-center gap-2 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{feedbackToast}</span>
+        </div>
+      )}
+
+      {/* 4 Summary Stat Cards per HR Employee Reference Layout (Page 2 & 3) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-3.5 relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase text-slate-400">Total Employees</span>
+            <div className="w-7 h-7 rounded-lg bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400">
+              <UserCheck className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-black font-mono text-white mt-1.5">
+            {totalEmployeesCount}
+          </div>
+          <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1 mt-0.5">
+            <span>&uarr; +12%</span>
+            <span className="text-slate-500 font-normal">vs last month</span>
+          </span>
+        </div>
+
+        <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-3.5 relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase text-slate-400">Active Workers</span>
+            <div className="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <HardHat className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-black font-mono text-emerald-400 mt-1.5">
+            {activeEmployeesCount}
+          </div>
+          <span className="text-[10px] text-slate-400 mt-0.5 block">
+            On site / active workforce
+          </span>
+        </div>
+
+        <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-3.5 relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase text-slate-400">Transferred</span>
+            <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <ArrowRightLeft className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-black font-mono text-amber-400 mt-1.5">
+            {transferredEmployeesCount}
+          </div>
+          <span className="text-[10px] text-slate-400 mt-0.5 block">
+            Reassigned to new sites
+          </span>
+        </div>
+
+        <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-3.5 relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase text-slate-400">Inactive / Terminated</span>
+            <div className="w-7 h-7 rounded-lg bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
+              <UserX className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-black font-mono text-rose-400 mt-1.5">
+            {inactiveEmployeesCount}
+          </div>
+          <span className="text-[10px] text-slate-400 mt-0.5 block">
+            Resigned / ended contracts
+          </span>
+        </div>
+      </div>
+
+      {/* Visual Summary Dashboard: Payout Pending versus Payout Released Statuses */}
       <EmployeesPayoutSummaryDashboard
         selectedSiteFilter={siteFilter}
         onSelectSiteFilter={(s) => setSiteFilter(s)}
@@ -410,7 +642,66 @@ export const EmployeesView: React.FC = () => {
         onSelectPayoutStatusFilter={(st) => setPayoutStatusFilter(st)}
       />
 
-      {/* Filter and Search Bar */}
+      {/* 4 HR Sub-View Filter Tabs (Reference Layout Page 3) */}
+      <div className="flex items-center gap-1 border-b border-[#234338] pb-1">
+        <button
+          onClick={() => setHrSubTab('ALL')}
+          className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+            hrSubTab === 'ALL'
+              ? 'bg-[#10b981] text-[#080f0d] shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-[#13241f]'
+          }`}
+        >
+          <span>All Employees</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-black/20">
+            {totalEmployeesCount}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setHrSubTab('ACTIVE')}
+          className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+            hrSubTab === 'ACTIVE'
+              ? 'bg-[#10b981] text-[#080f0d] shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-[#13241f]'
+          }`}
+        >
+          <span>Active</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-black/20">
+            {activeEmployeesCount}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setHrSubTab('TRANSFERRED')}
+          className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+            hrSubTab === 'TRANSFERRED'
+              ? 'bg-[#10b981] text-[#080f0d] shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-[#13241f]'
+          }`}
+        >
+          <span>Transferred</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-black/20">
+            {transferredEmployeesCount}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setHrSubTab('INACTIVE')}
+          className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+            hrSubTab === 'INACTIVE'
+              ? 'bg-[#10b981] text-[#080f0d] shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-[#13241f]'
+          }`}
+        >
+          <span>Inactive / Terminated</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-black/20">
+            {inactiveEmployeesCount}
+          </span>
+        </button>
+      </div>
+
+      {/* Filter and Multi-Dropdown Search Bar (Reference Layout Page 2 & 3) */}
       <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-3 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px]">
           <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -418,19 +709,20 @@ export const EmployeesView: React.FC = () => {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by name, ID number, trade..."
+            placeholder="Search by name, ID, position, or site..."
             className="w-full bg-[#13241f] border border-[#234338] rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#10b981]"
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          <Filter className="w-3.5 h-3.5 text-slate-500" />
+        {/* Dropdown 1: All Sites */}
+        <div className="flex items-center gap-1.5">
+          <Building className="w-3.5 h-3.5 text-slate-500" />
           <select
             value={siteFilter}
             onChange={(e) => setSiteFilter(e.target.value)}
             className="bg-[#13241f] border border-[#234338] rounded-lg px-2.5 py-1.5 text-xs text-white outline-none cursor-pointer"
           >
-            <option value="ALL">All Project Sites</option>
+            <option value="ALL">All Sites</option>
             {sites.map((s) => (
               <option key={s.site_id} value={s.site_id}>
                 {s.code} - {s.name}
@@ -439,18 +731,41 @@ export const EmployeesView: React.FC = () => {
           </select>
         </div>
 
-        <div>
+        {/* Dropdown 2: All Positions */}
+        <div className="flex items-center gap-1.5">
+          <Briefcase className="w-3.5 h-3.5 text-slate-500" />
           <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value as any)}
-            className="bg-[#13241f] border border-[#234338] rounded-lg px-2.5 py-1.5 text-xs text-white outline-none cursor-pointer"
+            value={positionFilter}
+            onChange={(e) => setPositionFilter(e.target.value)}
+            className="bg-[#13241f] border border-[#234338] rounded-lg px-2.5 py-1.5 text-xs text-white outline-none cursor-pointer max-w-[150px]"
           >
-            <option value="ALL">All Categories</option>
-            <option value="Site-Based">Site-Based Personnel</option>
-            <option value="Office-Based">Office-Based Staff</option>
+            <option value="ALL">All Positions</option>
+            {availablePositions.map((pos) => (
+              <option key={pos} value={pos}>
+                {pos}
+              </option>
+            ))}
           </select>
         </div>
 
+        {/* Dropdown 3: All Departments */}
+        <div className="flex items-center gap-1.5">
+          <Layers className="w-3.5 h-3.5 text-slate-500" />
+          <select
+            value={departmentFilter}
+            onChange={(e) => setDepartmentFilter(e.target.value)}
+            className="bg-[#13241f] border border-[#234338] rounded-lg px-2.5 py-1.5 text-xs text-white outline-none cursor-pointer max-w-[150px]"
+          >
+            <option value="ALL">All Departments</option>
+            {availableDepartments.map((dept) => (
+              <option key={dept} value={dept}>
+                {dept}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Dropdown 4: All Statuses */}
         <div>
           <select
             value={statusFilter}
@@ -458,13 +773,15 @@ export const EmployeesView: React.FC = () => {
             className="bg-[#13241f] border border-[#234338] rounded-lg px-2.5 py-1.5 text-xs text-white outline-none cursor-pointer"
           >
             <option value="ALL">All Statuses</option>
-            <option value="active">Active Only</option>
-            <option value="archived">Archived Workers</option>
+            <option value="active">Active</option>
+            <option value="transferred">Transferred</option>
+            <option value="archived">Archived / Terminated</option>
+            <option value="inactive">Inactive</option>
           </select>
         </div>
 
         <div className="text-[11px] text-slate-400 ml-auto font-mono">
-          Showing {filtered.length} workers
+          Showing {filtered.length} of {totalEmployeesCount}
         </div>
       </div>
 
@@ -631,52 +948,164 @@ export const EmployeesView: React.FC = () => {
                         </td>
                       );
                     })()}
-                    <td className="p-3 text-right whitespace-nowrap">
+                    <td className="p-3 text-right whitespace-nowrap relative">
                       <div className="inline-flex items-center gap-1.5">
                         <button
                           onClick={() => setSelectedProfileEmp(emp)}
                           className="px-2 py-1 bg-[#10b981]/15 hover:bg-[#10b981]/25 border border-[#10b981]/40 text-emerald-300 hover:text-white rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                          title="View Employee Profile & Export QR Code"
+                          title="View Employee Profile Dossier & 7 Tabs"
                         >
                           <Eye className="w-3 h-3 text-[#10b981]" />
-                          Profile
+                          <span>Profile</span>
                         </button>
+
                         <button
                           onClick={() => setBadgeEmp(emp)}
                           className="px-2 py-1 bg-[#13241f] border border-[#234338] text-slate-200 hover:text-[#a3e635] rounded-md text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
-                          title="View & Print ID Badge"
+                          title="View & Print Turnstile ID Badge"
                         >
                           <CreditCard className="w-3 h-3 text-[#a3e635]" />
-                          ID Badge
+                          <span>ID</span>
                         </button>
-                        <button
-                          onClick={() => setEditingEmp(emp)}
-                          className="p-1.5 hover:bg-[#13241f] rounded-md text-slate-400 hover:text-white cursor-pointer"
-                          title="Edit Employee"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        {emp.status === 'active' ? (
+
+                        {/* More Actions Dropdown Menu Trigger (Reference Layout Page 2 & 3) */}
+                        <div className="relative">
                           <button
-                            onClick={() => archiveEmployee(emp.employee_id)}
-                            className="p-1.5 hover:bg-red-500/10 rounded-md text-slate-400 hover:text-red-400 cursor-pointer transition-colors"
-                            title="Archive Worker"
+                            onClick={() => setActiveActionMenuId(activeActionMenuId === emp.employee_id ? null : emp.employee_id)}
+                            className="p-1.5 hover:bg-[#13241f] border border-transparent hover:border-[#234338] rounded-md text-slate-300 hover:text-white cursor-pointer transition-colors"
+                            title="Open Employee Actions Menu"
                           >
-                            <Archive className="w-3.5 h-3.5" />
+                            <MoreVertical className="w-3.5 h-3.5" />
                           </button>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              const newOne = rehireEmployee(emp.employee_id);
-                              setBadgeEmp(newOne);
-                            }}
-                            className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-md text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-                            title="Rehire Worker"
-                          >
-                            <RefreshCw className="w-3 h-3" />
-                            Rehire
-                          </button>
-                        )}
+
+                          {activeActionMenuId === emp.employee_id && (
+                            <div className="absolute right-0 top-8 z-40 w-56 bg-[#0e1a16] border border-[#234338] rounded-xl shadow-2xl py-1 text-left animate-in fade-in zoom-in-95">
+                              <div className="px-3 py-1.5 border-b border-[#234338] text-[10px] text-slate-400 font-mono font-bold">
+                                {emp.employee_id} &bull; {emp.name}
+                              </div>
+
+                              <button
+                                onClick={() => {
+                                  setSelectedProfileEmp(emp);
+                                  setActiveActionMenuId(null);
+                                }}
+                                className="w-full px-3 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-[#13241f] flex items-center gap-2 cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-sky-400" />
+                                <span>View Full Profile</span>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setEditingEmp(emp);
+                                  setActiveActionMenuId(null);
+                                }}
+                                className="w-full px-3 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-[#13241f] flex items-center gap-2 cursor-pointer"
+                              >
+                                <Edit className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Edit Information</span>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setTransferForm({
+                                    to_site_id: sites.find((s) => s.site_id !== emp.site_id)?.site_id || sites[0]?.site_id || '',
+                                    transfer_date: new Date().toISOString().split('T')[0],
+                                    effective_date: new Date().toISOString().split('T')[0],
+                                    reason: 'Project Requirement',
+                                    remarks: '',
+                                  });
+                                  setTransferModalEmp(emp);
+                                  setActiveActionMenuId(null);
+                                }}
+                                className="w-full px-3 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-[#13241f] flex items-center gap-2 cursor-pointer"
+                              >
+                                <ArrowRightLeft className="w-3.5 h-3.5 text-emerald-400" />
+                                <span>Transfer to Another Site</span>
+                              </button>
+
+                              {emp.status === 'active' ? (
+                                <button
+                                  onClick={() => {
+                                    setTerminateForm({
+                                      termination_date: new Date().toISOString().split('T')[0],
+                                      reason: 'End of Contract',
+                                      remarks: 'Contract completed as scheduled.',
+                                    });
+                                    setTerminateModalEmp(emp);
+                                    setActiveActionMenuId(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-xs text-rose-300 hover:text-rose-200 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer"
+                                >
+                                  <UserX className="w-3.5 h-3.5 text-rose-400" />
+                                  <span>Terminate / Set to Inactive</span>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setReactivateForm({
+                                      reactivation_date: new Date().toISOString().split('T')[0],
+                                      reason: 'Rehire / New Project',
+                                      remarks: 'Restored for active project mobilization.',
+                                    });
+                                    setReactivateModalEmp(emp);
+                                    setActiveActionMenuId(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-xs text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/10 flex items-center gap-2 cursor-pointer"
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+                                  <span>Reactivate (Set to Active)</span>
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() => {
+                                  setBadgeEmp(emp);
+                                  setActiveActionMenuId(null);
+                                }}
+                                className="w-full px-3 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-[#13241f] flex items-center gap-2 cursor-pointer"
+                              >
+                                <CreditCard className="w-3.5 h-3.5 text-[#a3e635]" />
+                                <span>Print ID Card</span>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setCoeModalEmp(emp);
+                                  setActiveActionMenuId(null);
+                                }}
+                                className="w-full px-3 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-[#13241f] flex items-center gap-2 cursor-pointer"
+                              >
+                                <Award className="w-3.5 h-3.5 text-indigo-400" />
+                                <span>Certificate of Employment (COE)</span>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setHistoryModalEmp(emp);
+                                  setActiveActionMenuId(null);
+                                }}
+                                className="w-full px-3 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-[#13241f] flex items-center gap-2 cursor-pointer"
+                              >
+                                <History className="w-3.5 h-3.5 text-purple-400" />
+                                <span>Site &amp; Transfer History</span>
+                              </button>
+
+                              {emp.drive_link && (
+                                <a
+                                  href={emp.drive_link}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="w-full px-3 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-[#13241f] flex items-center gap-2"
+                                  onClick={() => setActiveActionMenuId(null)}
+                                >
+                                  <FileText className="w-3.5 h-3.5 text-sky-400" />
+                                  <span>View Documents Folder</span>
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -702,6 +1131,60 @@ export const EmployeesView: React.FC = () => {
             </div>
 
             <form onSubmit={handleCreateSubmit} className="p-5 overflow-y-auto space-y-3.5 text-xs">
+              {/* Guidance & Duplicate Prevention Banner (HR Layout Reference Page 3) */}
+              <div className="bg-[#10b981]/10 border border-[#10b981]/30 p-3 rounded-lg text-emerald-300 text-[11px] leading-relaxed">
+                <strong>Onboarding Protocol:</strong> Assign a permanent unique Employee ID. <em>Employee names may repeat; Employee IDs may not.</em> All fields are validated before activation.
+              </div>
+
+              {idValidationError && (
+                <div className="p-2.5 bg-rose-500/20 border border-rose-500/40 rounded-lg text-rose-300 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{idValidationError}</span>
+                </div>
+              )}
+
+              {/* Permanent Unique Employee ID */}
+              <div className="bg-[#13241f] border border-[#234338] p-3 rounded-xl space-y-1">
+                <label className="block text-[#a3e635] font-mono font-bold text-xs uppercase tracking-wider">
+                  Permanent Employee ID *
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={customIdInput}
+                    onChange={(e) => {
+                      const val = e.target.value.trim().toUpperCase();
+                      setCustomIdInput(val);
+                      if (employees.some((emp) => emp.employee_id.toLowerCase() === val.toLowerCase())) {
+                        setIdValidationError(`Duplicate ID alert: "${val}" is already assigned to another employee.`);
+                      } else {
+                        setIdValidationError(null);
+                      }
+                    }}
+                    className={`w-full bg-[#080f0d] border rounded-lg px-3 py-1.5 text-white font-mono font-bold text-sm ${
+                      idValidationError ? 'border-rose-500' : 'border-[#a3e635]/60'
+                    }`}
+                    placeholder="e.g. EMP-2026-0042 or DRC-EMP-2026-000042"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const gen = `EMP-2026-${String(employees.length + Math.floor(Math.random() * 900 + 100)).padStart(4, '0')}`;
+                      setCustomIdInput(gen);
+                      setIdValidationError(null);
+                    }}
+                    className="px-2.5 py-1.5 bg-[#0e1a16] border border-[#234338] hover:border-slate-400 text-slate-300 text-[11px] font-mono rounded-lg shrink-0 cursor-pointer"
+                    title="Generate unique sequential ID"
+                  >
+                    Auto-Gen
+                  </button>
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  Permanent identifier. Cannot be altered or reused after employee separation.
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Full Legal Name *</label>
@@ -711,7 +1194,7 @@ export const EmployeesView: React.FC = () => {
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white"
-                    placeholder="e.g. Manuel R. Gomez"
+                    placeholder="e.g. Ramon Bautista"
                   />
                 </div>
                 <div>
@@ -722,8 +1205,38 @@ export const EmployeesView: React.FC = () => {
                     value={formData.position}
                     onChange={(e) => setFormData({ ...formData, position: e.target.value })}
                     className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white"
-                    placeholder="e.g. Lead Mason / Welder"
+                    placeholder="e.g. Skilled Worker / Mason"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Department</label>
+                  <select
+                    value={formData.department}
+                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white"
+                  >
+                    {availableDepartments.map((dept) => (
+                      <option key={dept} value={dept}>
+                        {dept}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Employment Type</label>
+                  <select
+                    value={formData.employment_type}
+                    onChange={(e) => setFormData({ ...formData, employment_type: e.target.value as any })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white font-semibold"
+                  >
+                    <option value="Project-Based">Project-Based</option>
+                    <option value="Regular">Regular</option>
+                    <option value="Contractual">Contractual</option>
+                    <option value="Probationary">Probationary</option>
+                  </select>
                 </div>
               </div>
 
@@ -852,6 +1365,38 @@ export const EmployeesView: React.FC = () => {
                   />
                 </div>
                 <div>
+                  <label className="block text-slate-300 font-semibold mb-1">TIN (Tax ID Number)</label>
+                  <input
+                    type="text"
+                    value={formData.tin_number}
+                    onChange={(e) => setFormData({ ...formData, tin_number: e.target.value })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white font-mono"
+                    placeholder="123-456-789-000"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Date Hired *</label>
+                  <input
+                    type="date"
+                    required
+                    value={formData.date_hired}
+                    onChange={(e) => setFormData({ ...formData, date_hired: e.target.value })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Date of Birth</label>
+                  <input
+                    type="date"
+                    value={formData.birth_date}
+                    onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white font-mono"
+                  />
+                </div>
+                <div>
                   <label className="block text-slate-300 font-semibold mb-1">GCash Registered No.</label>
                   <input
                     type="tel"
@@ -859,6 +1404,29 @@ export const EmployeesView: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, gcash_number: e.target.value })}
                     className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white font-mono"
                     placeholder="0917XXXXXXX"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Emergency Contact Person</label>
+                  <input
+                    type="text"
+                    value={formData.emergency_contact_name}
+                    onChange={(e) => setFormData({ ...formData, emergency_contact_name: e.target.value })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white"
+                    placeholder="e.g. Maria Bautista (Spouse)"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Emergency Contact Phone</label>
+                  <input
+                    type="tel"
+                    value={formData.emergency_contact_phone}
+                    onChange={(e) => setFormData({ ...formData, emergency_contact_phone: e.target.value })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white font-mono"
+                    placeholder="0918 761 4321"
                   />
                 </div>
               </div>
@@ -1554,6 +2122,552 @@ export const EmployeesView: React.FC = () => {
           } else if (editingEmp) {
             setEditingEmp((prev) => (prev ? { ...prev, photo_url: photoDataUrl } : null));
           }
+        }}
+      />
+
+      {/* 1. Transfer Employee to Another Site Modal (HR Layout Specification Page 3 & 5) */}
+      {transferModalEmp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-lg bg-[#0e1a16] border border-[#234338] rounded-xl shadow-2xl p-5 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-[#234338] mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400">
+                  <ArrowRightLeft className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-white">Transfer Employee to Another Site/Project</h2>
+                  <div className="text-[11px] text-slate-400">Assign this employee to a different site or project</div>
+                </div>
+              </div>
+              <button onClick={() => setTransferModalEmp(null)} className="text-slate-400 hover:text-white cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Current Employee Badge Card */}
+            <div className="p-3 bg-[#13241f] border border-[#234338] rounded-xl flex items-center gap-3 mb-4">
+              {transferModalEmp.photo_url ? (
+                <img src={transferModalEmp.photo_url} alt={transferModalEmp.name} className="w-10 h-10 rounded-full object-cover border border-[#a3e635]" />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-[#080f0d] border border-[#a3e635] flex items-center justify-center font-bold text-[#a3e635] text-xs">
+                  {transferModalEmp.name.slice(0, 2).toUpperCase()}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold text-white truncate">{transferModalEmp.name}</div>
+                  <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    {transferModalEmp.status}
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-300 font-mono">{transferModalEmp.employee_id} &bull; {transferModalEmp.position}</div>
+                <div className="text-[10px] text-[#a3e635]">Current Site: {transferModalEmp.site_id}</div>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const res = transferEmployee(
+                  transferModalEmp.employee_id,
+                  transferForm.to_site_id,
+                  transferForm.transfer_date,
+                  transferForm.effective_date,
+                  transferForm.reason,
+                  transferForm.remarks
+                );
+                setTransferModalEmp(null);
+                setFeedbackToast(res.message);
+                setTimeout(() => setFeedbackToast(null), 4000);
+              }}
+              className="space-y-3.5 text-xs overflow-y-auto flex-1"
+            >
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">New Site / Project *</label>
+                <select
+                  required
+                  value={transferForm.to_site_id}
+                  onChange={(e) => setTransferForm({ ...transferForm, to_site_id: e.target.value })}
+                  className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white"
+                >
+                  {sites.map((s) => (
+                    <option key={s.site_id} value={s.site_id} disabled={s.site_id === transferModalEmp.site_id}>
+                      {s.code} - {s.name} {s.site_id === transferModalEmp.site_id ? '(Current Site)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Transfer Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={transferForm.transfer_date}
+                    onChange={(e) => setTransferForm({ ...transferForm, transfer_date: e.target.value })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Effective Start Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={transferForm.effective_date}
+                    onChange={(e) => setTransferForm({ ...transferForm, effective_date: e.target.value })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Reason for Transfer *</label>
+                <select
+                  required
+                  value={transferForm.reason}
+                  onChange={(e) => setTransferForm({ ...transferForm, reason: e.target.value })}
+                  className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white font-semibold"
+                >
+                  <option value="Project Requirement">Project Requirement</option>
+                  <option value="Manpower Balancing">Manpower Balancing</option>
+                  <option value="Skills Request">Specialized Skills Request</option>
+                  <option value="Site Reassignment">Site Reassignment / Demobilization</option>
+                  <option value="Client Request">Client Request</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Remarks (Optional)</label>
+                <input
+                  type="text"
+                  value={transferForm.remarks}
+                  onChange={(e) => setTransferForm({ ...transferForm, remarks: e.target.value })}
+                  className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white"
+                  placeholder="e.g. Reassigned to Site B for next phase of structural steel works."
+                />
+              </div>
+
+              <div className="p-2.5 bg-sky-950/40 border border-sky-500/30 rounded-lg text-[11px] text-sky-200 leading-relaxed">
+                ℹ️ <strong>Transfer Integrity Rule:</strong> This updates the employee's current site assignment, turnstile tablet routing, and payroll group without modifying historical attendance records or past payroll site references.
+              </div>
+
+              <div className="pt-3 border-t border-[#234338] flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTransferModalEmp(null)}
+                  className="px-3.5 py-1.5 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-[#005ce6] hover:bg-[#0047b3] text-white font-bold rounded-lg cursor-pointer flex items-center gap-1.5"
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                  <span>Transfer Employee</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Terminate / Set to Inactive Modal (HR Layout Specification Page 3) */}
+      {terminateModalEmp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-lg bg-[#0e1a16] border border-[#234338] rounded-xl shadow-2xl p-5 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-[#234338] mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400">
+                  <UserX className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-white">Terminate / Set to Inactive</h2>
+                  <div className="text-[11px] text-slate-400">Mark this employee as inactive or separated</div>
+                </div>
+              </div>
+              <button onClick={() => setTerminateModalEmp(null)} className="text-slate-400 hover:text-white cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-[#13241f] border border-[#234338] rounded-xl flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-[#080f0d] border border-rose-500 flex items-center justify-center font-bold text-rose-400 text-xs">
+                {terminateModalEmp.name.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-bold text-white truncate">{terminateModalEmp.name}</div>
+                <div className="text-[10px] text-slate-300 font-mono">{terminateModalEmp.employee_id} &bull; {terminateModalEmp.position}</div>
+                <div className="text-[10px] text-slate-400">Site: {terminateModalEmp.site_id}</div>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const res = terminateEmployee(
+                  terminateModalEmp.employee_id,
+                  terminateForm.termination_date,
+                  terminateForm.reason,
+                  terminateForm.remarks
+                );
+                setTerminateModalEmp(null);
+                setFeedbackToast(res.message);
+                setTimeout(() => setFeedbackToast(null), 4000);
+              }}
+              className="space-y-3.5 text-xs overflow-y-auto flex-1"
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Termination / Inactive Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={terminateForm.termination_date}
+                    onChange={(e) => setTerminateForm({ ...terminateForm, termination_date: e.target.value })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Reason *</label>
+                  <select
+                    required
+                    value={terminateForm.reason}
+                    onChange={(e) => setTerminateForm({ ...terminateForm, reason: e.target.value })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white font-semibold"
+                  >
+                    <option value="End of Contract">End of Contract</option>
+                    <option value="Resigned">Resigned</option>
+                    <option value="Project Completion">Project Completion</option>
+                    <option value="Disciplinary">Disciplinary Separation</option>
+                    <option value="Medical">Medical Grounds</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Remarks (Optional)</label>
+                <input
+                  type="text"
+                  value={terminateForm.remarks}
+                  onChange={(e) => setTerminateForm({ ...terminateForm, remarks: e.target.value })}
+                  className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white"
+                  placeholder="e.g. Contract ended as scheduled. Final wages and deductions fully settled."
+                />
+              </div>
+
+              <div className="p-2.5 bg-rose-950/40 border border-rose-500/30 rounded-lg text-[11px] text-rose-200 leading-relaxed">
+                ⚠️ <strong>Non-Destructive Archiving:</strong> This sets the employee's status to Inactive. Historical attendance, payroll, and deductions records are preserved in full compliance with DOLE guidelines and can be reactivated anytime.
+              </div>
+
+              <div className="pt-3 border-t border-[#234338] flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTerminateModalEmp(null)}
+                  className="px-3.5 py-1.5 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg cursor-pointer flex items-center gap-1.5"
+                >
+                  <UserX className="w-4 h-4" />
+                  <span>Set to Inactive</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Reactivate Employee Modal (HR Layout Specification Page 3) */}
+      {reactivateModalEmp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-lg bg-[#0e1a16] border border-[#234338] rounded-xl shadow-2xl p-5 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-[#234338] mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400">
+                  <RefreshCw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-white">Reactivate Employee</h2>
+                  <div className="text-[11px] text-slate-400">Set this employee back to active workforce</div>
+                </div>
+              </div>
+              <button onClick={() => setReactivateModalEmp(null)} className="text-slate-400 hover:text-white cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-[#13241f] border border-[#234338] rounded-xl flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-[#080f0d] border border-emerald-400 flex items-center justify-center font-bold text-emerald-400 text-xs">
+                {reactivateModalEmp.name.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-bold text-white truncate">{reactivateModalEmp.name}</div>
+                <div className="text-[10px] text-slate-300 font-mono">{reactivateModalEmp.employee_id} &bull; {reactivateModalEmp.position}</div>
+                <div className="text-[10px] text-slate-400">Previous Site: {reactivateModalEmp.site_id}</div>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const res = reactivateEmployee(
+                  reactivateModalEmp.employee_id,
+                  reactivateForm.reactivation_date,
+                  reactivateForm.reason,
+                  reactivateForm.remarks
+                );
+                setReactivateModalEmp(null);
+                setFeedbackToast(res.message);
+                setTimeout(() => setFeedbackToast(null), 4000);
+              }}
+              className="space-y-3.5 text-xs overflow-y-auto flex-1"
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Reactivate Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={reactivateForm.reactivation_date}
+                    onChange={(e) => setReactivateForm({ ...reactivateForm, reactivation_date: e.target.value })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Reason *</label>
+                  <select
+                    required
+                    value={reactivateForm.reason}
+                    onChange={(e) => setReactivateForm({ ...reactivateForm, reason: e.target.value })}
+                    className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white font-semibold"
+                  >
+                    <option value="Rehire / New Project">Rehire / New Project Mobilization</option>
+                    <option value="Contract Extension">Contract Extension</option>
+                    <option value="Appeal Approved">Administrative Appeal Approved</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Remarks (Optional)</label>
+                <input
+                  type="text"
+                  value={reactivateForm.remarks}
+                  onChange={(e) => setReactivateForm({ ...reactivateForm, remarks: e.target.value })}
+                  className="w-full bg-[#13241f] border border-[#234338] rounded-lg px-3 py-1.5 text-white"
+                  placeholder="e.g. Rehired for new construction phase."
+                />
+              </div>
+
+              <div className="pt-3 border-t border-[#234338] flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReactivateModalEmp(null)}
+                  className="px-3.5 py-1.5 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg cursor-pointer flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Reactivate Employee</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Certificate of Employment (COE) Modal (HR Layout Specification Page 2) */}
+      {coeModalEmp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-2xl bg-white text-slate-900 rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="px-6 py-4 bg-[#0f291e] text-white flex items-center justify-between no-print">
+              <div className="flex items-center gap-2">
+                <Award className="w-5 h-5 text-[#a3e635]" />
+                <span className="font-bold text-sm">Official Certificate of Employment (COE)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-3 py-1.5 bg-[#a3e635] text-[#080f0d] font-bold text-xs rounded-lg hover:bg-[#84cc16] flex items-center gap-1 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print COE</span>
+                </button>
+                <button
+                  onClick={() => setCoeModalEmp(null)}
+                  className="text-slate-300 hover:text-white p-1 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-8 overflow-y-auto space-y-6 text-slate-800 leading-relaxed font-serif">
+              {/* Company Header */}
+              <div className="text-center border-b-2 border-[#1b4332] pb-4">
+                <h1 className="text-xl font-black text-[#1b4332] tracking-wider font-sans">
+                  DE RUEDA CONSTRUCTION
+                </h1>
+                <p className="text-[11px] text-slate-600 font-sans mt-0.5">
+                  General Engineering &amp; Building Contractor &bull; DOLE &amp; PCAB Registered
+                </p>
+                <p className="text-[10px] text-slate-500 font-sans">
+                  Subic-Clark Expressway Extension &bull; Mariveles &bull; Orion Project HQ
+                </p>
+              </div>
+
+              {/* Document Title */}
+              <div className="text-center pt-2">
+                <h2 className="text-lg font-black tracking-widest uppercase font-sans text-slate-900 underline decoration-[#1b4332] decoration-2 underline-offset-4">
+                  CERTIFICATE OF EMPLOYMENT
+                </h2>
+              </div>
+
+              <div className="space-y-4 text-xs font-sans text-justify pt-2">
+                <p className="font-bold text-slate-900">TO WHOM IT MAY CONCERN:</p>
+                <p>
+                  This is to certify that <strong>{coeModalEmp.name}</strong>, holding permanent employee identification number <strong>{coeModalEmp.employee_id}</strong>, has been employed with <strong>DE RUEDA CONSTRUCTION</strong> as <strong>{coeModalEmp.position}</strong> assigned under the <strong>{coeModalEmp.department || 'Construction Operations'}</strong> division.
+                </p>
+                <p>
+                  Their service with the company commenced on <strong>{coeModalEmp.date_hired ? new Date(coeModalEmp.date_hired).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'June 1, 2024'}</strong> and concluded / remains current as of <strong>{coeModalEmp.termination_date ? new Date(coeModalEmp.termination_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</strong>.
+                </p>
+                <p>
+                  During their employment tenure, they performed their assigned duties with diligence, technical competence, and strict observance of occupational health, safety, and operational standards.
+                </p>
+                <p>
+                  This certification is issued upon the request of the above-named employee for whatever legal purpose it may serve.
+                </p>
+              </div>
+
+              {/* Seal & Signatures */}
+              <div className="pt-8 flex items-end justify-between">
+                <div className="text-center space-y-1">
+                  <div className="w-20 h-20 rounded-full border-2 border-[#1b4332] p-1 mx-auto flex items-center justify-center text-[9px] font-sans font-bold text-[#1b4332] uppercase tracking-tighter">
+                    OFFICIAL SEAL<br />DE RUEDA<br />CONST.
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-sans">Document Verified</div>
+                </div>
+
+                <div className="text-center space-y-1 min-w-[200px]">
+                  <div className="font-serif italic text-base text-[#1b4332] font-black pb-1">
+                    Emma Emy Villar De Rueda
+                  </div>
+                  <div className="border-t border-slate-900 pt-1 font-sans font-bold text-xs text-slate-900">
+                    EMMA EMY VILLAR DE RUEDA
+                  </div>
+                  <div className="text-[10px] text-slate-600 font-sans">
+                    Authorized Signatory &bull; Chief Executive
+                  </div>
+                  <div className="text-[9px] text-slate-500 font-mono">
+                    REF: DRC-COE-{coeModalEmp.employee_id}-{new Date().getFullYear()}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between no-print">
+              <span className="text-[11px] text-slate-500 font-sans">
+                Official Company Records &bull; DOLE Labor Code Compliant
+              </span>
+              <button
+                onClick={() => setCoeModalEmp(null)}
+                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-lg cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Site & Transfer History Timeline Modal */}
+      {historyModalEmp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in">
+          <div className="w-full max-w-2xl bg-[#0e1a16] border border-[#234338] rounded-xl shadow-2xl p-5 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-[#234338] mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-purple-500/10 border border-purple-500/30 rounded-lg text-purple-400">
+                  <History className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-white">Site Assignment &amp; Transfer History</h2>
+                  <div className="text-[11px] text-slate-400">
+                    {historyModalEmp.name} ({historyModalEmp.employee_id}) &bull; Current Site: <strong>{historyModalEmp.site_id}</strong>
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setHistoryModalEmp(null)} className="text-slate-400 hover:text-white cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3">
+              {(!historyModalEmp.transfer_history || historyModalEmp.transfer_history.length === 0) ? (
+                <div className="p-8 text-center text-slate-500 border border-dashed border-[#234338] rounded-xl text-xs">
+                  No site transfers recorded yet. Employee has remained continuously assigned to original site ({historyModalEmp.site_id}).
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {historyModalEmp.transfer_history.map((record, index) => (
+                    <div key={record.transfer_id || index} className="p-3.5 bg-[#13241f] border border-[#234338] rounded-xl space-y-2">
+                      <div className="flex items-center justify-between text-xs font-bold text-white">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400">{record.from_site_id}</span>
+                          <span className="text-[#a3e635]">&rarr;</span>
+                          <span className="text-emerald-400">{record.to_site_id}</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                          {record.reason}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400 font-mono">
+                        <div>Effective Date: <strong className="text-slate-200">{record.effective_date}</strong></div>
+                        <div>Transfer Date: <strong className="text-slate-200">{record.transfer_date}</strong></div>
+                      </div>
+                      {record.remarks && (
+                        <div className="text-xs text-slate-300 bg-[#0e1a16] p-2 rounded-lg border border-[#234338]">
+                          {record.remarks}
+                        </div>
+                      )}
+                      <div className="text-[10px] text-slate-500 flex items-center justify-between pt-1 border-t border-[#234338]/40">
+                        <span>Authorized By: {record.approved_by}</span>
+                        <span>{new Date(record.timestamp).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-[#234338] flex items-center justify-end">
+              <button
+                onClick={() => setHistoryModalEmp(null)}
+                className="px-4 py-1.5 bg-[#13241f] border border-[#234338] text-slate-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                Close History
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enterprise Security & Access Control Modal */}
+      <SecurityInvitationsModal
+        isOpen={isSecurityModalOpen}
+        onClose={() => {
+          setIsSecurityModalOpen(false);
+          fetchPendingApprovalsCount();
         }}
       />
     </div>

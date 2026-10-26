@@ -6,30 +6,30 @@ import { GlobalSearchModal } from './components/modals/GlobalSearchModal';
 import { AuthModal } from './components/modals/AuthModal';
 import { LogoutModal } from './components/modals/LogoutModal';
 
-// Views
-import { DashboardView } from './components/views/DashboardView';
-import { EmployeesView } from './components/views/EmployeesView';
-import { SitesView } from './components/views/SitesView';
-import { AttendanceView } from './components/views/AttendanceView';
-import { DeductionsView } from './components/views/DeductionsView';
-import { PayrollView } from './components/views/PayrollView';
-import { CashFlowView } from './components/views/CashFlowView';
-import { PayslipsView } from './components/views/PayslipsView';
-import { MaterialsView } from './components/views/MaterialsView';
-import { ExpensesView } from './components/views/ExpensesView';
-import { ReportsView } from './components/views/ReportsView';
-import { MessagesView } from './components/views/MessagesView';
-import { DocumentsView } from './components/views/DocumentsView';
-import { IntakeView } from './components/views/IntakeView';
-import { SettingsView } from './components/views/SettingsView';
-import { AuditView } from './components/views/AuditView';
-import { PublicWebsiteView } from './components/views/PublicWebsiteView';
-import { LandingPagePreviewView } from './components/views/LandingPagePreviewView';
-import { CeoMonitoringView } from './components/views/CeoMonitoringView';
-import { PaymentRecordsHubView } from './components/views/PaymentRecordsHubView';
-import { CanteenView } from './components/views/CanteenView';
-import { ClientsView } from './components/views/ClientsView';
-import { AdjustmentsView } from './components/views/AdjustmentsView';
+// Lazy-loaded Views for optimized code-splitting and zero bundle warnings
+const DashboardView = React.lazy(() => import('./components/views/DashboardView').then(m => ({ default: m.DashboardView })));
+const EmployeesView = React.lazy(() => import('./components/views/EmployeesView').then(m => ({ default: m.EmployeesView })));
+const SitesView = React.lazy(() => import('./components/views/SitesView').then(m => ({ default: m.SitesView })));
+const AttendanceView = React.lazy(() => import('./components/views/AttendanceView').then(m => ({ default: m.AttendanceView })));
+const DeductionsView = React.lazy(() => import('./components/views/DeductionsView').then(m => ({ default: m.DeductionsView })));
+const PayrollView = React.lazy(() => import('./components/views/PayrollView').then(m => ({ default: m.PayrollView })));
+const CashFlowView = React.lazy(() => import('./components/views/CashFlowView').then(m => ({ default: m.CashFlowView })));
+const PayslipsView = React.lazy(() => import('./components/views/PayslipsView').then(m => ({ default: m.PayslipsView })));
+const MaterialsView = React.lazy(() => import('./components/views/MaterialsView').then(m => ({ default: m.MaterialsView })));
+const ExpensesView = React.lazy(() => import('./components/views/ExpensesView').then(m => ({ default: m.ExpensesView })));
+const ReportsView = React.lazy(() => import('./components/views/ReportsView').then(m => ({ default: m.ReportsView })));
+const MessagesView = React.lazy(() => import('./components/views/MessagesView').then(m => ({ default: m.MessagesView })));
+const DocumentsView = React.lazy(() => import('./components/views/DocumentsView').then(m => ({ default: m.DocumentsView })));
+const IntakeView = React.lazy(() => import('./components/views/IntakeView').then(m => ({ default: m.IntakeView })));
+const SettingsView = React.lazy(() => import('./components/views/SettingsView').then(m => ({ default: m.SettingsView })));
+const AuditView = React.lazy(() => import('./components/views/AuditView').then(m => ({ default: m.AuditView })));
+const PublicWebsiteView = React.lazy(() => import('./components/views/PublicWebsiteView').then(m => ({ default: m.PublicWebsiteView })));
+const LandingPagePreviewView = React.lazy(() => import('./components/views/LandingPagePreviewView').then(m => ({ default: m.LandingPagePreviewView })));
+const CeoMonitoringView = React.lazy(() => import('./components/views/CeoMonitoringView').then(m => ({ default: m.CeoMonitoringView })));
+const PaymentRecordsHubView = React.lazy(() => import('./components/views/PaymentRecordsHubView').then(m => ({ default: m.PaymentRecordsHubView })));
+const CanteenView = React.lazy(() => import('./components/views/CanteenView').then(m => ({ default: m.CanteenView })));
+const ClientsView = React.lazy(() => import('./components/views/ClientsView').then(m => ({ default: m.ClientsView })));
+const AdjustmentsView = React.lazy(() => import('./components/views/AdjustmentsView').then(m => ({ default: m.AdjustmentsView })));
 import { NetworkSyncToast } from './components/common/NetworkSyncToast';
 
 const MainAppContent: React.FC = () => {
@@ -97,7 +97,7 @@ const MainAppContent: React.FC = () => {
   // If user is unauthenticated OR is viewing the public portal
   if (!currentUser || isPublicView) {
     return (
-      <>
+      <React.Suspense fallback={<div className="min-h-screen bg-[#060b18] flex items-center justify-center text-slate-400 text-xs font-mono">Loading portal...</div>}>
         <NetworkSyncToast />
         <PublicWebsiteView
           onOpenLogin={() => {
@@ -128,7 +128,7 @@ const MainAppContent: React.FC = () => {
           onClose={() => setIsLogoutOpen(false)}
           onConfirmLogout={handleLogout}
         />
-      </>
+      </React.Suspense>
     );
   }
 
@@ -236,7 +236,13 @@ const MainAppContent: React.FC = () => {
         />
 
         <main className="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
-          {renderActiveView()}
+          <React.Suspense fallback={
+            <div className="p-8 text-center bg-[#070d1f] border border-[#1e3a8a]/30 rounded-2xl animate-pulse text-xs text-slate-400 font-mono">
+              Loading module...
+            </div>
+          }>
+            {renderActiveView()}
+          </React.Suspense>
         </main>
       </div>
 
