@@ -995,6 +995,7 @@ export interface WeeklyDtrEmailPayload {
 
 export interface EmailDeliveryRecord {
   id: string;
+  payroll_id?: string;
   week_key: string;
   site_id: string;
   recipient_email: string;
@@ -1007,6 +1008,10 @@ export interface EmailDeliveryRecord {
   delivered_at?: string;
   html_preview?: string;
   failure_reason?: string;
+  attempts?: number;
+  payout_reference?: string;
+  payment_method?: string;
+  can_retry?: boolean;
 }
 
 export interface WeeklyDtrEmailSchedule {

@@ -1,156 +1,37 @@
 import { AccessPointRole, AdminUserAccount } from '../types';
 
 export interface RoleCredential {
-  email: string;
   label: string;
   description: string;
   role: AccessPointRole;
 }
 
-// Pre-authorized Directory Access Points (Passwords & MFA secrets enforced server-side only per Section 6)
+// Access point descriptions without privileged email addresses
 export const DEFAULT_CREDENTIALS: Record<AccessPointRole, RoleCredential> = {
   'ceo': {
-    email: 'operations@deruedaconstruction.com',
-    label: "CEO's Account",
+    label: "CEO / Executive Account",
     description: 'Executive Operations & Financial Oversight',
     role: 'ceo',
   },
   'admin 1': {
-    email: 'admin1@deruedaconstruction.com',
     label: 'Admin 1 (HR)',
     description: 'HR Lead, DTR Verification & Executive Operations GCash Distribution',
     role: 'admin 1',
   },
   'admin 2': {
-    email: 'admin2@deruedaconstruction.com',
     label: 'Admin 2 (Site Ops)',
     description: 'Site-Scoped Operations & Time/Payroll Engine Gatekeeper',
     role: 'admin 2',
   },
   'site head': {
-    email: 'sitehead.mariveles@deruedaconstruction.com',
     label: 'Site Head (Field Ops)',
     description: 'Site-Assigned Field Operations & Local Workforce Payment Authorizer',
     role: 'site head',
   },
 };
 
-// Registered Identity Profiles (MFA secrets, salt and PBKDF2 hashes are stored securely server-side)
-export const INITIAL_ADMIN_ACCOUNTS: AdminUserAccount[] = [
-  {
-    id: 'USR-CEO-01',
-    email: 'operations@deruedaconstruction.com',
-    name: 'Emerita De Rueda',
-    role: 'ceo',
-    position: 'Executive CEO',
-    assignedSites: ['ALL'],
-    company: 'De Rueda Construction Inc.',
-    mfaEnabled: true,
-    status: 'active',
-    createdAt: '2026-01-01T08:00:00Z',
-    updatedAt: '2026-10-26T00:00:00Z',
-    lastLoginAt: '2026-10-26T08:00:00Z',
-  },
-  {
-    id: 'USR-CEO-MARJON',
-    email: 'marjoncompany@gmail.com',
-    name: 'Emerita De Rueda (Executive Owner)',
-    role: 'ceo',
-    position: 'Executive CEO',
-    assignedSites: ['ALL'],
-    company: 'De Rueda Construction Inc.',
-    mfaEnabled: true,
-    status: 'active',
-    createdAt: '2026-01-01T08:00:00Z',
-    updatedAt: '2026-10-26T00:00:00Z',
-    lastLoginAt: '2026-10-26T08:30:00Z',
-  },
-  {
-    id: 'USR-HR-01',
-    email: 'admin1@deruedaconstruction.com',
-    name: 'Grace Villanueva',
-    role: 'admin 1',
-    position: 'HR Officer',
-    assignedSites: ['ALL'],
-    company: 'De Rueda Construction Inc.',
-    mfaEnabled: true,
-    status: 'active',
-    createdAt: '2026-01-15T08:00:00Z',
-    updatedAt: '2026-10-26T00:00:00Z',
-    lastLoginAt: '2026-10-26T07:45:00Z',
-  },
-  {
-    id: 'USR-ADM2-SITE1',
-    email: 'admin2.mariveles@deruedaconstruction.com',
-    name: 'Engr. Marco De Rueda',
-    role: 'admin 2',
-    position: 'Site Engineer',
-    assignedSites: ['SITE-001'],
-    company: 'De Rueda Construction Inc.',
-    mfaEnabled: true,
-    status: 'active',
-    createdAt: '2026-02-01T08:00:00Z',
-    updatedAt: '2026-10-26T00:00:00Z',
-    lastLoginAt: '2026-10-26T06:15:00Z',
-  },
-  {
-    id: 'USR-ADM2-SITE2',
-    email: 'admin2.subic@deruedaconstruction.com',
-    name: 'Foreman Aris Valdez',
-    role: 'admin 2',
-    position: 'Foreman',
-    assignedSites: ['SITE-002'],
-    company: 'De Rueda Construction Inc.',
-    mfaEnabled: true,
-    status: 'active',
-    createdAt: '2026-03-15T08:00:00Z',
-    updatedAt: '2026-10-26T00:00:00Z',
-    lastLoginAt: '2026-10-25T15:20:00Z',
-  },
-  {
-    id: 'USR-ADM2-SITE3',
-    email: 'admin2.balanga@deruedaconstruction.com',
-    name: 'Foreman Danilo Santos',
-    role: 'admin 2',
-    position: 'Foreman',
-    assignedSites: ['SITE-003'],
-    company: 'De Rueda Construction Inc.',
-    mfaEnabled: true,
-    status: 'active',
-    createdAt: '2026-05-10T08:00:00Z',
-    updatedAt: '2026-10-26T00:00:00Z',
-    lastLoginAt: '2026-10-25T12:00:00Z',
-  },
-  {
-    id: 'USR-SITEHEAD-01',
-    email: 'sitehead.mariveles@deruedaconstruction.com',
-    name: 'Engr. Jun Reyes',
-    role: 'site head',
-    position: 'Site Supervisor',
-    assignedSites: ['SITE-001'],
-    company: 'De Rueda Construction Inc.',
-    mfaEnabled: true,
-    status: 'active',
-    createdAt: '2026-01-01T08:00:00Z',
-    updatedAt: '2026-10-26T00:00:00Z',
-    lastLoginAt: '2026-10-26T08:00:00Z',
-  },
-  // Named, separately secured developer/secops identity
-  {
-    id: 'USR-DEV-SECOPS',
-    email: 'devops.audit@deruedaconstruction.com',
-    name: 'Alvin Rivera (SecOps & Systems Engineer)',
-    role: 'admin 1',
-    position: 'Developer / SecOps',
-    assignedSites: ['ALL'],
-    company: 'De Rueda Construction Inc.',
-    mfaEnabled: true,
-    status: 'active',
-    createdAt: '2026-01-01T08:00:00Z',
-    updatedAt: '2026-10-26T00:00:00Z',
-    lastLoginAt: '2026-10-26T09:00:00Z',
-  },
-];
+// No pre-bundled accounts in client assets; identities are authenticated server-side
+export const INITIAL_ADMIN_ACCOUNTS: AdminUserAccount[] = [];
 
 const ACCOUNTS_STORAGE_KEY = 'DERUEDA_ADMIN_ACCOUNTS_V2';
 

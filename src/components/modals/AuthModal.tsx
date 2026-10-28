@@ -20,7 +20,6 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { DeRuedaLogo } from '../brand/DeRuedaLogo';
-import { DEFAULT_CREDENTIALS } from '../../utils/credentials';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -37,8 +36,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [authTab, setAuthTab] = useState<'signin' | 'redeem_invitation'>('signin');
 
   // Sign In States
-  const [accessPoint, setAccessPoint] = useState<AccessPointRole>('ceo');
-  const [email, setEmail] = useState('operations@deruedaconstruction.com');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [mfaCode, setMfaCode] = useState('');
   const [requiresMfa, setRequiresMfa] = useState(false);
@@ -70,6 +68,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   React.useEffect(() => {
     if (isOpen) {
+      setEmail('');
       setPassword('');
       setMfaCode('');
       setRequiresMfa(false);
@@ -81,19 +80,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setTokenValidationInfo(null);
     }
   }, [isOpen]);
-
-  const handleRoleSelect = (role: AccessPointRole) => {
-    setAccessPoint(role);
-    setError('');
-    setPassword('');
-    setMfaCode('');
-    setRequiresMfa(false);
-    setIsPendingApprovalNotice(false);
-    const defaultInfo = DEFAULT_CREDENTIALS[role];
-    if (defaultInfo) {
-      setEmail(defaultInfo.email);
-    }
-  };
 
   const handleSignInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,7 +106,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         body: JSON.stringify({
           email: trimmedEmail,
           password: entered,
-          access_point: accessPoint,
           mfa_code: mfaCode.trim() || undefined,
         }),
       });
@@ -156,8 +141,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }
       }
 
-      // Complete login in app state
-      login(accessPoint, trimmedEmail);
+      // Complete login in app state using authoritative server session role
+      const targetRole = (data.user?.role as AccessPointRole) || 'ceo';
+      login(targetRole, data.user?.email || trimmedEmail);
 
       if (onSuccessLogin) {
         onSuccessLogin();
@@ -269,8 +255,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  const currentRoleDefault = DEFAULT_CREDENTIALS[accessPoint];
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
       <div className="w-full max-w-lg bg-[#0a1128] border border-[#1e3a8a] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
@@ -325,7 +309,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <div className="text-center">
               <h2 className="text-base font-black text-white">Enterprise Authentication</h2>
               <p className="text-xs text-slate-300 mt-0.5">
-                Sign in with verified corporate credentials and multi-factor authentication
+                Sign in with verified corporate credentials
+              </p>
+            </div>
+
+            {/* Neutral Access Restriction Notice */}
+            <div className="p-3 bg-slate-900/80 border border-slate-700/60 rounded-xl text-slate-300 text-xs flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+              <p className="text-[11px] leading-relaxed text-slate-300">
+                Access is restricted to authorized De Rueda Construction personnel. All sign-in attempts and session activities are logged and monitored.
               </p>
             </div>
 
@@ -344,49 +336,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
             )}
 
-            {/* Role / Access Point Selector */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                Authorized Role / Access Tier
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {(['ceo', 'admin 1', 'admin 2', 'site head'] as AccessPointRole[]).map((r) => {
-                  const isSelected = accessPoint === r;
-                  return (
-                    <button
-                      type="button"
-                      key={r}
-                      onClick={() => handleRoleSelect(r)}
-                      className={`py-2 px-1 text-xs font-bold rounded-xl uppercase transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
-                        isSelected
-                          ? 'bg-[#a3e635] text-[#080f0d] shadow-md shadow-[#a3e635]/20 ring-1 ring-[#a3e635]'
-                          : 'bg-[#13241f] text-slate-300 border border-[#234338] hover:border-slate-500 hover:text-white'
-                      }`}
-                    >
-                      <span className="truncate">{r}</span>
-                      <span
-                        className={`text-[9px] font-normal truncate ${
-                          isSelected ? 'text-[#080f0d]/80 font-semibold' : 'text-slate-400'
-                        }`}
-                      >
-                        {r === 'ceo'
-                          ? 'Executive'
-                          : r === 'admin 1'
-                          ? 'HR Officer'
-                          : r === 'admin 2'
-                          ? 'Site Ops'
-                          : 'Field Head'}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
-                <Info className="w-3 h-3 text-[#a3e635] shrink-0" />
-                <span>{currentRoleDefault.description}</span>
-              </div>
-            </div>
-
             {/* Email input */}
             <div>
               <label
@@ -404,7 +353,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full bg-[#13241f] border border-[#234338] rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#10b981]"
-                  placeholder="operations@deruedaconstruction.com"
+                  placeholder="name@deruedaconstruction.com"
+                  autoComplete="email"
                 />
               </div>
             </div>

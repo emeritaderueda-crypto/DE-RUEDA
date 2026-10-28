@@ -18,6 +18,7 @@ import {
   LogOut,
   LayoutDashboard,
   QrCode,
+  Lock,
 } from 'lucide-react';
 import { PublicQrCodeGenerator } from '../common/PublicQrCodeGenerator';
 import { DeRuedaLogo } from '../brand/DeRuedaLogo';
@@ -128,10 +129,11 @@ export const PublicWebsiteView: React.FC<PublicWebsiteViewProps> = ({
         <div className="flex items-center gap-2.5 shrink-0">
           <button
             onClick={onOpenLogin}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+            className="px-3.5 py-1.5 border border-slate-700/80 hover:border-slate-500 bg-slate-900/60 hover:bg-slate-800 text-slate-200 hover:text-white font-medium text-xs rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer shadow-xs"
+            aria-label="Sign In"
           >
-            <span>Client Portal &bull; System Login</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <Lock className="w-3.5 h-3.5 text-slate-400" />
+            <span>Sign In</span>
           </button>
         </div>
       </header>
@@ -624,10 +626,11 @@ export const PublicWebsiteView: React.FC<PublicWebsiteViewProps> = ({
           <div className="flex items-center gap-4 text-xs font-semibold">
             <button
               onClick={onOpenLogin}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
+              className="px-3.5 py-1.5 border border-slate-700/80 hover:border-slate-500 bg-slate-900/60 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+              aria-label="Sign In"
             >
-              <span>System Login (CEO &amp; Admins)</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <Lock className="w-3.5 h-3.5 text-slate-400" />
+              <span>Sign In</span>
             </button>
           </div>
         </div>
@@ -639,3 +642,5 @@ export const PublicWebsiteView: React.FC<PublicWebsiteViewProps> = ({
     </div>
   );
 };
+
+export default PublicWebsiteView;

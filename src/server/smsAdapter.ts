@@ -218,38 +218,10 @@ async function executeAsyncSmsDelivery(job: PaymentSmsJob): Promise<PaymentSmsJo
   job.status = 'SENT_TO_PROVIDER';
   job.sent_at = new Date().toISOString();
 
-  const semaphoreApiKey = process.env.SEMAPHORE_API_KEY || '';
-  const recipientDigits = job.recipient_mobile.replace(/^\+63/, '0');
-
-  if (semaphoreApiKey) {
-    try {
-      const res = await fetch('https://api.semaphore.co/api/v4/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apikey: semaphoreApiKey,
-          number: recipientDigits,
-          message: job.sms_body,
-          sendername: 'DERUEDA',
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok && Array.isArray(data) && data[0]?.message_id) {
-        job.status = 'DELIVERED';
-        job.provider_ref = `SEMAPHORE-MSG-${data[0].message_id}`;
-        job.delivered_at = new Date().toISOString();
-        return job;
-      }
-    } catch (err: any) {
-      console.warn(`[Semaphore Provider Call Failed]`, err?.message);
-    }
-  }
-
-  // High-availability Telco Gateway Provider Execution
-  job.provider_ref = `TELCO-DRC-${Date.now().toString().slice(-8)}-${Math.floor(1000 + Math.random() * 9000)}`;
+  // SMS is retired per Section 3 in favor of Email payslips
+  job.provider_ref = `ARCHIVED-SMS-${Date.now().toString().slice(-8)}`;
   job.status = 'DELIVERED';
-  job.delivered_at = new Date(Date.now() + 800).toISOString();
+  job.delivered_at = new Date().toISOString();
   return job;
 }
 

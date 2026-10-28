@@ -27,10 +27,12 @@ import {
   Clock,
   AlertTriangle,
   RotateCcw,
+  Mail,
 } from 'lucide-react';
 import { GCashPaymentModal } from '../modals/GCashPaymentModal';
 import { SmsPayslipLogsModal } from '../modals/SmsPayslipLogsModal';
 import { downloadReportPDF, downloadCSV } from '../../utils/exporters';
+import { sendPayrollEmail } from '../../utils/emailService';
 
 interface PayrollViewProps {
   onOpenSinglePayslip: (payrollId: string) => void;
@@ -178,19 +180,64 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
     e.preventDefault();
     if (!proofingRecord) return;
 
-    if (proofForm.payment_method === 'Cash' && !proofForm.employee_acknowledged) {
-      alert('Per compliance rules, cash disbursement requires explicit employee voucher sign-off acknowledgement.');
-      return;
+    if (proofForm.payment_method === 'Cash') {
+      if (!proofForm.proof_url) {
+        alert('DOLE & De Rueda Compliance Enforcement: Cash wage release strictly requires an uploaded or captured photo of the recipient worker receiving the cash envelope before payment can be confirmed.');
+        return;
+      }
+      if (!proofForm.employee_acknowledged) {
+        alert('Per compliance rules, cash disbursement requires explicit employee voucher sign-off acknowledgement.');
+        return;
+      }
     }
+
+    const effectiveRef = proofForm.reference_no.trim() || `VCH-${Date.now().toString().substring(6)}`;
 
     verifyPayrollProof(
       proofingRecord.payroll_id,
       proofForm.payment_method,
-      proofForm.reference_no.trim() || `VCH-${Date.now().toString().substring(6)}`,
+      effectiveRef,
       proofForm.status,
       proofForm.proof_url,
       `${proofForm.notes.trim()}${proofForm.employee_acknowledged ? ' [Employee Personally Acknowledged & Signed]' : ''}`
     );
+
+    // Invoke newly created email utility service once marked as confirmed (for both cash and digital methods)
+    if (proofForm.status === 'Verified' || proofForm.status === 'Paid') {
+      const emp = employees.find((em) => em.employee_id === proofingRecord.employee_id);
+      const empEmail = emp?.email || `${proofingRecord.employee_id.toLowerCase().replace(/[^a-z0-9]/g, '')}@deruedaconstruction.com`;
+
+      sendPayrollEmail({
+        payroll_id: proofingRecord.payroll_id,
+        employee_id: proofingRecord.employee_id,
+        employee_name: emp?.name || proofingRecord.employee_id,
+        employee_email: empEmail,
+        pay_period: proofingRecord.week_key,
+        site_id: proofingRecord.site_id,
+        gross_pay: proofingRecord.gross_pay,
+        deductions: {
+          sss: proofingRecord.sss,
+          philhealth: proofingRecord.philhealth,
+          canteen: proofingRecord.canteen,
+          other: (proofingRecord.other_deduction || 0) + (proofingRecord.cash_advance || 0),
+          total: proofingRecord.total_deductions,
+        },
+        net_pay: proofingRecord.net_pay,
+        payment_method: proofForm.payment_method,
+        status: proofForm.payment_method === 'Cash' ? 'CASH_CONFIRMED' : 'PAID_VERIFIED',
+        reference_no: effectiveRef,
+        confirmed_by: proofForm.cash_receiver_witness || 'Finance Officer',
+      }).then((emailResult) => {
+        if (emailResult.success) {
+          console.log('[PayrollView] Automated payslip email dispatched:', emailResult.message);
+        } else {
+          console.warn('[PayrollView] Payslip email dispatch note:', emailResult.message);
+        }
+      }).catch((emailErr) => {
+        console.warn('[PayrollView] Payslip email dispatch error:', emailErr);
+      });
+    }
+
     setProofingRecord(null);
   };
 
@@ -480,10 +527,10 @@ export const PayrollView: React.FC<PayrollViewProps> = ({ onOpenSinglePayslip })
           <button
             onClick={() => setIsSmsLogsOpen(true)}
             className="px-3 py-2 bg-[#13241f] border border-[#234338] text-white hover:border-emerald-400 font-bold text-xs rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer relative"
-            title="Inspect Automated SMS Payslip Delivery Logs & HR Exception Queue"
+            title="Inspect Automated Email & SMS Payslip Delivery Logs"
           >
-            <MessageSquare className="w-4 h-4 text-emerald-400" />
-            <span>SMS Payslips</span>
+            <Mail className="w-4 h-4 text-emerald-400" />
+            <span>Email &amp; Payslip Logs</span>
             {failedSmsCount > 0 ? (
               <span className="px-1.5 py-0.2 bg-rose-500 text-white rounded-full text-[9px] font-mono font-black animate-pulse">
                 {failedSmsCount}

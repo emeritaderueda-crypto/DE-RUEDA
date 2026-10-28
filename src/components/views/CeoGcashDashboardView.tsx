@@ -173,7 +173,7 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
         amount: pRecord.net_pay,
         purpose: `Weekly Wage Payout (${pRecord.week_key}) - ${empName}`,
         payroll_id: payrollId,
-        user_pin: 'Emerita0279',
+        user_pin: ceoPin.trim() || undefined,
       });
 
       setNotificationMsg(
@@ -213,7 +213,7 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
           amount: p.net_pay,
           purpose: `Batch Weekly Wage (${p.week_key}) - ${empName}`,
           payroll_id: p.payroll_id,
-          user_pin: 'Emerita0279',
+          user_pin: ceoPin.trim() || undefined,
         });
         count++;
         total += p.net_pay;
@@ -977,7 +977,7 @@ export const CeoGcashDashboardView: React.FC<CeoGcashDashboardViewProps> = ({ on
                 <input
                   type="password"
                   required
-                  placeholder="Enter CEO PIN (Emerita0279)"
+                  placeholder="Enter authorized passkey..."
                   value={ceoPin}
                   onChange={(e) => setCeoPin(e.target.value)}
                   className="w-full px-3 py-2 bg-[#080f0d] border border-[#234338] rounded-lg text-white font-mono text-xs focus:outline-none focus:border-[#a3e635]"

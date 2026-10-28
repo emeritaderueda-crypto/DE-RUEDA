@@ -164,27 +164,23 @@ export async function executeDisbursement(
     return disabledResult;
   }
 
-  // Prepared Provider API Call boundary for future live credentials
-  const gcashApiKey = process.env.GCASH_API_KEY || '';
-  if (!gcashApiKey) {
-    const unconfiguredResult: DisbursementResult = {
-      transaction_id: `UNCONFIGURED-${Date.now()}`,
-      reference_no: 'N/A-UNCONFIGURED',
-      payroll_id: item.payroll_id,
-      employee_name: item.employee_name,
-      recipient_mobile: item.gcash_number,
-      amount: item.amount,
-      status: 'FAILED',
-      timestamp,
-      error_message: 'Official GCash API credentials not provisioned in server secrets store.',
-      reconciliation_required: false,
-    };
-    IDEMPOTENCY_STORE.set(idemKey, unconfiguredResult);
-    return unconfiguredResult;
-  }
-
-  // Official Provider API call will be placed here once partner onboarding token is issued
-  throw new Error('Official GCash partner API client pending token activation.');
+  // Section 1 Enforcement: Separate Direct GCash API is retired.
+  // All electronic wallet and GCash disbursements route through PayMongo as the single planned payment gateway.
+  const paymongoDirectResult: DisbursementResult = {
+    transaction_id: `PM-ROUTE-${Date.now()}`,
+    reference_no: 'N/A-PAYMONGO-GATEWAY',
+    payroll_id: item.payroll_id,
+    employee_name: item.employee_name,
+    recipient_mobile: item.gcash_number,
+    amount: item.amount,
+    status: 'DISABLED_PENDING_APPROVAL',
+    timestamp,
+    error_message:
+      'Separate GCash direct API is retired. All GCash disbursement operations route through PayMongo as the single unified payment gateway. Live disbursements are currently paused while PayMongo is on hold.',
+    reconciliation_required: false,
+  };
+  IDEMPOTENCY_STORE.set(idemKey, paymongoDirectResult);
+  return paymongoDirectResult;
 }
 
 /**

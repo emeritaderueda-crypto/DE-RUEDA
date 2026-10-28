@@ -40,24 +40,18 @@ export interface WeeklyDtrEmailPayload {
   };
 }
 
-export interface EmailDeliveryRecord {
-  id: string;
-  week_key: string;
-  site_id: string;
-  recipient_email: string;
-  recipient_name: string;
-  recipient_role: string;
-  subject: string;
-  status: 'DELIVERED' | 'SENT' | 'FAILED';
-  message_id: string;
-  sent_at: string;
-  delivered_at?: string;
-  html_preview?: string;
-  failure_reason?: string;
-}
-
-// In-Memory store for dispatched DTR email reports
-export const SERVER_EMAIL_LOGS: EmailDeliveryRecord[] = [];
+import {
+  EmailDeliveryRecord,
+  SERVER_EMAIL_LOGS,
+  getEmailServiceConfig,
+  type PayslipEmailPayload,
+  type ResendSendResult,
+  type EmailServiceStatus,
+  generatePayslipEmailHtml,
+  sendEmailViaResend,
+  dispatchPayslipEmail,
+  retryPayslipEmail,
+} from './emailService.js';
 
 // Generate clean, highly professional executive HTML email content
 export function generateWeeklyDtrEmailHtml(payload: WeeklyDtrEmailPayload, recipient: EmailDtrRecipient): string {
@@ -290,6 +284,8 @@ export async function dispatchWeeklyDtrEmail(payload: WeeklyDtrEmailPayload): Pr
       message_id: messageId,
       sent_at: now.toISOString(),
       delivered_at: now.toISOString(),
+      attempts: 1,
+      can_retry: false,
       html_preview: htmlContent,
     };
 
@@ -308,3 +304,21 @@ export async function dispatchWeeklyDtrEmail(payload: WeeklyDtrEmailPayload): Pr
 export function getEmailDeliveryLogs(): EmailDeliveryRecord[] {
   return SERVER_EMAIL_LOGS;
 }
+
+// Re-export official Payslip Email Engine and Service types
+export {
+  type PayslipEmailPayload,
+  type EmailDeliveryRecord,
+  type ResendSendResult,
+  type EmailServiceStatus,
+  generatePayslipEmailHtml,
+  getEmailServiceConfig,
+  sendEmailViaResend,
+  dispatchPayslipEmail,
+  retryPayslipEmail,
+  SERVER_EMAIL_LOGS,
+};
+
+// Legacy compatibility alias
+export const getEmailProviderConfig = getEmailServiceConfig;
+

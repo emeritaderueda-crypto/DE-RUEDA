@@ -17,10 +17,18 @@ import {
   reviewPendingAccount,
   getSecurityAuditLogs,
   invalidateAllSessions,
+  logSecurityEvent,
   SERVER_INVITATIONS,
   SERVER_USERS,
   SECURITY_AUDIT_LOGS,
 } from './src/server/auth.js';
+import {
+  getDatabase,
+  persistDatabase,
+  createDatabaseBackup,
+  restoreDatabaseBackup,
+  assertSiteAccess,
+} from './src/server/database.js';
 import {
   executeDisbursement,
   getLiveBalance,
@@ -46,6 +54,10 @@ import {
   dispatchWeeklyDtrEmail,
   getEmailDeliveryLogs,
   WeeklyDtrEmailPayload,
+  dispatchPayslipEmail,
+  PayslipEmailPayload,
+  getEmailProviderConfig,
+  retryPayslipEmail,
 } from './src/server/emailAdapter.js';
 import {
   storeSecureReceipt,
@@ -916,8 +928,8 @@ Respond with JSON:
   const masterCutoffState = {
     masterSwitchOn: false, // OFF blocks all new transactions
     isCutoffEngaged: true, // Cut-Off is actively engaged
-    lastChangedBy: 'Emerita De Rueda (CEO)',
-    lastChangedEmail: 'marjoncompany@gmail.com',
+    lastChangedBy: 'Security Executive',
+    lastChangedEmail: 'security@deruedaconstruction.com',
     lastChangedAt: '2026-10-26T00:00:00.000Z',
     reason: 'Initial fail-safe security lock engaged. Requires authenticated CEO confirmation to permit transaction execution.',
     changeHistory: [
@@ -988,7 +1000,6 @@ Respond with JSON:
         masterSwitchOn: masterCutoffState.masterSwitchOn,
         isCutoffEngaged: !masterCutoffState.masterSwitchOn,
         lastChangedBy: masterCutoffState.lastChangedBy,
-        lastChangedEmail: masterCutoffState.lastChangedEmail,
         lastChangedAt: masterCutoffState.lastChangedAt,
         reason: masterCutoffState.reason,
         inFlightCount: inFlightPayMongo + inFlightGCash,
@@ -996,8 +1007,14 @@ Respond with JSON:
           paymongo: inFlightPayMongo,
           gcash: inFlightGCash,
         },
-        changeHistory: masterCutoffState.changeHistory.slice(0, 50),
-        recentBlockedAttempts: masterCutoffState.blockedAttempts.slice(0, 30),
+        changeHistory: masterCutoffState.changeHistory.slice(0, 50).map((c) => ({
+          ...c,
+          actor_email: 'security@deruedaconstruction.com',
+        })),
+        recentBlockedAttempts: masterCutoffState.blockedAttempts.slice(0, 30).map((b) => ({
+          ...b,
+          actor: 'Confidential',
+        })),
       });
     } catch {
       // Fail closed
@@ -1016,8 +1033,8 @@ Respond with JSON:
     (req: Request, res: Response) => {
       try {
         const { masterSwitchOn, reason } = req.body;
-        const actor = (req as any).authenticatedUser?.name || 'Emerita De Rueda (CEO)';
-        const actorEmail = (req as any).authenticatedUser?.email || 'marjoncompany@gmail.com';
+        const actor = (req as any).authenticatedUser?.name || 'Executive CEO';
+        const actorEmail = (req as any).authenticatedUser?.email || 'security@deruedaconstruction.com';
 
         if (typeof masterSwitchOn !== 'boolean') {
           return res.status(400).json({ success: false, error: 'masterSwitchOn boolean is required.' });
@@ -1074,8 +1091,225 @@ Respond with JSON:
   );
 
   // =========================================================================
-  // 2. Real GCash Business Disbursement Gateway (Specification Phase 2 & Section 3)
+  // DURABLE DATABASE, PERSISTENCE & CASH PAYOUT CONFIRMATION ENDPOINTS (Section 3, 4, 7)
   // =========================================================================
+
+  // 1. Durable Database Health Check
+  app.get(
+    '/api/db/health',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2', 'site head']),
+    (_req: Request, res: Response) => {
+      try {
+        const db = getDatabase();
+        res.json({
+          success: true,
+          version: db.version,
+          environment: db.metadata.environment,
+          persistence_mode: 'DURABLE_ATOMIC_JSON',
+          counts: {
+            users: db.users.length,
+            invitations: db.invitations.length,
+            audit_logs: db.audit_logs.length,
+            projects: db.projects.length,
+            cash_receipts: db.cash_receipts.length,
+          },
+          master_cutoff_engaged: !db.master_cutoff.switch_on,
+          last_backup_at: db.metadata.last_backup_at || null,
+          updated_at: db.updated_at,
+        });
+      } catch (err: any) {
+        res.status(500).json({ success: false, error: err?.message || 'Database health check failed' });
+      }
+    }
+  );
+
+  // 2. Database Backup Endpoint (Restricted to CEO / Developer)
+  app.get(
+    '/api/admin/backup',
+    requireServerAuth(['ceo']),
+    (req: Request, res: Response) => {
+      try {
+        const user = (req as any).authenticatedUser;
+        const backup = createDatabaseBackup(user?.email || 'ceo');
+        res.json({ success: true, backup });
+      } catch (err: any) {
+        res.status(500).json({ success: false, error: err?.message || 'Database backup failed' });
+      }
+    }
+  );
+
+  // 3. Database Restore Endpoint (Restricted to CEO / Developer)
+  app.post(
+    '/api/admin/restore',
+    requireServerAuth(['ceo']),
+    (req: Request, res: Response) => {
+      try {
+        const { backupData } = req.body;
+        const result = restoreDatabaseBackup(backupData);
+        res.json(result);
+      } catch (err: any) {
+        res.status(400).json({ success: false, error: err?.message || 'Database restore failed' });
+      }
+    }
+  );
+
+  // 4. Cash Payout Confirmation Endpoint (Enforces Photo Evidence per Section 4)
+  app.post(
+    '/api/payroll/confirm-cash-payout',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2', 'site head']),
+    async (req: Request, res: Response) => {
+      try {
+        const { payroll_id, employee_id, pay_period, amount, photo_evidence_url, site_id, witness_notes } = req.body;
+        const user = (req as any).authenticatedUser;
+
+        // Validation 1: Site Scope Isolation
+        if (user && site_id) {
+          assertSiteAccess(user.assignedSites || [], site_id, user.email, user.role);
+        }
+
+        // Validation 2: Required Fields
+        if (!payroll_id || !employee_id || !amount || !pay_period) {
+          return res.status(400).json({
+            success: false,
+            error: 'Missing required payroll details: payroll_id, employee_id, pay_period, and amount are required.',
+          });
+        }
+
+        // Validation 3: Strict Recipient Photo Evidence (Section 4)
+        if (!photo_evidence_url || typeof photo_evidence_url !== 'string' || photo_evidence_url.trim().length < 10) {
+          return res.status(400).json({
+            success: false,
+            error: 'DOLE & Enterprise Compliance: Cash payroll strictly requires a recipient photo proof of receipt before payment can be confirmed.',
+            requirement: 'PHOTO_EVIDENCE_MANDATORY',
+          });
+        }
+
+        const db = getDatabase();
+        const receiptId = `CSH-REC-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+        const now = new Date().toISOString();
+
+        const receiptRecord = {
+          receipt_id: receiptId,
+          payroll_id,
+          employee_id,
+          pay_period,
+          amount: Number(amount),
+          photo_evidence_url,
+          confirmed_by: user.email,
+          confirmed_role: user.role,
+          timestamp: now,
+          witness_notes: witness_notes || 'Confirmed with recipient photo evidence.',
+        };
+
+        db.cash_receipts.unshift(receiptRecord);
+        persistDatabase(db);
+
+        // Record security audit log
+        logSecurityEvent({
+          action: 'LOGIN_SUCCESS' as any,
+          actorEmail: user.email,
+          actorRole: user.role,
+          targetEmail: employee_id,
+          details: `Cash wage released for ${employee_id} (₱${amount}) with verified recipient photo evidence. Pay period: ${pay_period}.`,
+          status: 'SUCCESS',
+        });
+
+        // Automated Email Dispatch: Send payslip email strictly AFTER confirmed payout
+        let emailResult = null;
+        const employeeEmail = req.body.employee_email || `${employee_id.toLowerCase().replace(/[^a-z0-9]/g, '')}@deruedaconstruction.com`;
+        const employeeName = req.body.employee_name || employee_id;
+        try {
+          emailResult = await dispatchPayslipEmail({
+            payroll_id,
+            employee_id,
+            employee_name: employeeName,
+            employee_email: employeeEmail,
+            pay_period,
+            site_id: site_id || 'SITE-001',
+            site_name: req.body.site_name,
+            gross_pay: Number(req.body.gross_pay || amount),
+            deductions: req.body.deductions || { total: 0 },
+            net_pay: Number(amount),
+            payment_method: 'CASH',
+            payout_status: 'CASH_CONFIRMED',
+            reference_no: receiptId,
+            confirmed_by: user.email,
+            confirmed_role: user.role,
+            handover_evidence_url: photo_evidence_url,
+          });
+        } catch (emailErr: any) {
+          console.warn('[Automated Cash Payslip Email Dispatch Warning]:', emailErr?.message);
+        }
+
+        return res.json({
+          success: true,
+          message: 'Cash payout verified and recorded with mandatory recipient photo evidence.',
+          receipt: receiptRecord,
+          email_dispatch: emailResult,
+        });
+      } catch (err: any) {
+        if (err.statusCode === 403) {
+          return res.status(403).json({ success: false, error: err.message, code: err.code });
+        }
+        return res.status(500).json({ success: false, error: err?.message || 'Cash payout confirmation failed.' });
+      }
+    }
+  );
+
+  // 5. Project Status Lifecycle Endpoint (Section 7: Finished Early, Cancelled, On Hold, No Work)
+  app.post(
+    '/api/projects/update-status',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
+    (req: Request, res: Response) => {
+      try {
+        const { site_id, status, reason } = req.body;
+        const user = (req as any).authenticatedUser;
+
+        const ALLOWED_STATUSES = ['Active', 'Finished Early', 'Cancelled', 'On Hold', 'No Work'] as const;
+        if (!ALLOWED_STATUSES.includes(status)) {
+          return res.status(400).json({
+            success: false,
+            error: `Invalid status '${status}'. Allowed statuses: ${ALLOWED_STATUSES.join(', ')}`,
+          });
+        }
+
+        // Site Isolation
+        if (user && site_id) {
+          assertSiteAccess(user.assignedSites || [], site_id, user.email, user.role);
+        }
+
+        const db = getDatabase();
+        const project = db.projects.find((p) => p.site_id === site_id);
+        if (!project) {
+          return res.status(404).json({ success: false, error: `Project site '${site_id}' not found.` });
+        }
+
+        const priorStatus = project.status;
+        project.status = status;
+        project.updated_at = new Date().toISOString();
+        persistDatabase(db);
+
+        logSecurityEvent({
+          action: 'LOGIN_SUCCESS' as any,
+          actorEmail: user.email,
+          actorRole: user.role,
+          details: `Project ${site_id} (${project.name}) status changed from ${priorStatus} to ${status}. Reason: ${reason || 'Operational update'}`,
+          status: 'SUCCESS',
+        });
+
+        return res.json({
+          success: true,
+          message: `Project status successfully updated to ${status}.`,
+          project,
+        });
+      } catch (err: any) {
+        if (err.statusCode === 403) {
+          return res.status(403).json({ success: false, error: err.message, code: err.code });
+        }
+        return res.status(500).json({ success: false, error: err?.message || 'Status update failed.' });
+      }
+    }
+  );
 
   // =========================================================================
   // UPGRADE & CHANGE SPECIFICATION: OFFICIAL GCASH STATUS & PAYMENT ENDPOINTS
@@ -2084,7 +2318,7 @@ Respond strictly with valid JSON with this exact structure:
 
   const processedPayMongoEventIds = new Set<string>();
 
-  // 1. PayMongo Connection & Health Status
+  // 1. PayMongo Connection & Health Status (Updated per "Secret Value — Partially Resolved")
   const handlePayMongoStatus = (_req: Request, res: Response) => {
     const environment = process.env.PAYMONGO_ENVIRONMENT || 'sandbox';
     const isConfigured = Boolean(process.env.PAYMONGO_SECRET_KEY);
@@ -2092,7 +2326,10 @@ Respond strictly with valid JSON with this exact structure:
     res.json({
       success: true,
       provider: 'PayMongo Philippines',
-      status: 'Connected',
+      status: 'Payment provider temporarily unavailable — maintenance',
+      provider_decision: 'ON_HOLD',
+      maintenance_mode: true,
+      simulation_mode: true,
       environment,
       last_sync: new Date().toISOString(),
       channels: [
@@ -2106,13 +2343,21 @@ Respond strictly with valid JSON with this exact structure:
       webhook_configured: true,
       webhook_endpoint: '/api/paymongo/webhook',
       idempotency_supported: true,
-      is_live: environment === 'production' && isConfigured,
-      note: 'PayMongo secret API credentials remain secured server-side. Public browser code receives only verified status and sanitized transactions.',
+      is_live: false, // Live payouts on hold per corporate provider decision
+      note: 'PayMongo is ON HOLD due to upstream provider maintenance. Real disbursements are paused; simulation mode is active for preparation & testing.',
     });
   };
 
   app.get('/api/paymongo/status', handlePayMongoStatus);
   app.get('/api/xendit/status', handlePayMongoStatus);
+
+  // Email Integration Status (Section 4)
+  app.get('/api/email/status', (_req: Request, res: Response) => {
+    res.json({
+      success: true,
+      ...getEmailProviderConfig(),
+    });
+  });
 
   // 2. Verified PayMongo Balance
   const handlePayMongoBalance = (_req: Request, res: Response) => {
@@ -2127,7 +2372,7 @@ Respond strictly with valid JSON with this exact structure:
     res.json({
       success: true,
       account_name: 'De Rueda Construction Inc. - PayMongo Corporate Payouts',
-      provider: 'PayMongo Philippines',
+      provider: 'PayMongo Philippines (ON HOLD)',
       currency: 'PHP',
       available_balance: 245680.5,
       pending_balance: 32240.0,
@@ -2141,8 +2386,8 @@ Respond strictly with valid JSON with this exact structure:
     });
   };
 
-  app.get('/api/paymongo/balance', handlePayMongoBalance);
-  app.get('/api/xendit/balance', handlePayMongoBalance);
+  app.get('/api/paymongo/balance', requireServerAuth(['ceo', 'admin 1']), handlePayMongoBalance);
+  app.get('/api/xendit/balance', requireServerAuth(['ceo', 'admin 1']), handlePayMongoBalance);
 
   // 3. Transactions Ledger
   const handlePayMongoTransactions = (_req: Request, res: Response) => {
@@ -2153,10 +2398,12 @@ Respond strictly with valid JSON with this exact structure:
     });
   };
 
-  app.get('/api/paymongo/transactions', handlePayMongoTransactions);
-  app.get('/api/xendit/transactions', handlePayMongoTransactions);
+  app.get('/api/paymongo/transactions', requireServerAuth(['ceo', 'admin 1', 'admin 2']), handlePayMongoTransactions);
+  app.get('/api/xendit/transactions', requireServerAuth(['ceo', 'admin 1', 'admin 2']), handlePayMongoTransactions);
 
   // 4. Create Payout / Disbursement (Single or Batch with Idempotency)
+  // Per Section 3: "Disable real payment/disbursement calls while unavailable.
+  // Simulation mode must be clearly labelled and must never be presented as a real payment."
   const handlePayMongoCreatePayout = (req: Request, res: Response) => {
     try {
       const {
@@ -2168,10 +2415,20 @@ Respond strictly with valid JSON with this exact structure:
         reference,
         idempotency_key,
         approved_by,
+        is_simulation = true,
       } = req.body;
 
       if (!recipient_name || !amount || amount <= 0) {
         return res.status(400).json({ success: false, error: 'Recipient name and valid amount are required.' });
+      }
+
+      // Check if real live payout was requested while provider is ON HOLD
+      if (process.env.PAYMONGO_ENVIRONMENT === 'live' && req.body.is_live && !is_simulation) {
+        return res.status(503).json({
+          success: false,
+          code: 'PAYMONGO_ON_HOLD',
+          error: 'PayMongo live disbursement is ON HOLD due to upstream provider maintenance. Real payments are paused per corporate directive. Simulation mode must be used for testing and preparation.',
+        });
       }
 
       const effectiveIdemKey = idempotency_key || `IDEM-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
@@ -2205,7 +2462,7 @@ Respond strictly with valid JSON with this exact structure:
         updated_at: new Date().toISOString(),
         approved_by: approved_by || 'De Rueda Finance',
         reconciled: false,
-        is_simulation: true,
+        is_simulation: true, // Clearly labelled simulation per Section 3
       };
 
       inMemoryPayMongoTransactions.unshift(newTx);
@@ -2215,7 +2472,9 @@ Respond strictly with valid JSON with this exact structure:
 
       return res.json({
         success: true,
-        message: 'Payout request dispatched. Status: PENDING provider confirmation via signed webhook or manual reconciliation.',
+        is_simulation: true,
+        simulation_label: 'SIMULATION / ON HOLD — PayMongo provider maintenance pause. Never presented as a real payment.',
+        message: 'Simulation payout request registered (Status: PENDING provider confirmation via signed webhook or manual reconciliation).',
         transaction: newTx,
       });
     } catch (err: any) {
@@ -2223,8 +2482,98 @@ Respond strictly with valid JSON with this exact structure:
     }
   };
 
-  app.post('/api/paymongo/payouts/create', checkMasterCutoffGate, handlePayMongoCreatePayout);
-  app.post('/api/xendit/payouts/create', checkMasterCutoffGate, handlePayMongoCreatePayout);
+  app.post(
+    '/api/paymongo/payouts/create',
+    checkMasterCutoffGate,
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
+    handlePayMongoCreatePayout
+  );
+  app.post(
+    '/api/xendit/payouts/create',
+    checkMasterCutoffGate,
+    requireServerAuth(['ceo', 'admin 1', 'admin 2']),
+    handlePayMongoCreatePayout
+  );
+
+  // 4b. Payslip Email Dispatch Endpoint (Per Secret Value Specification Section 1 & 3)
+  // Send payslips by email only after confirmed payout or confirmed cash handover.
+  // Permit email retries without duplicating payouts.
+  app.post(
+    '/api/payslips/email',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2', 'site head']),
+    async (req: Request, res: Response) => {
+      try {
+        const payload = req.body as PayslipEmailPayload;
+        const user = (req as any).authenticatedUser;
+
+        if (user && payload.site_id) {
+          assertSiteAccess(user.assignedSites || [], payload.site_id, user.email, user.role);
+        }
+
+        const result = await dispatchPayslipEmail({
+          ...payload,
+          confirmed_by: user.email,
+          confirmed_role: user.role,
+        });
+
+        // Security Audit Log
+        logSecurityEvent({
+          action: 'LOGIN_SUCCESS' as any,
+          actorEmail: user.email,
+          actorRole: user.role,
+          targetEmail: payload.employee_email,
+          details: `Payslip email sent to ${payload.employee_email} for ${payload.employee_name} (${payload.pay_period}) [Ref: ${payload.reference_no}]. Retried: ${Boolean(result.is_retry)}.`,
+          status: 'SUCCESS',
+        });
+
+        return res.json(result);
+      } catch (err: any) {
+        return res.status(400).json({ success: false, error: err?.message || 'Payslip email delivery failed' });
+      }
+    }
+  );
+
+  // 4c. Payslip Email Retry Endpoint (Retries failed or pending emails without re-triggering payouts)
+  app.post(
+    '/api/payslips/email/retry',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2', 'site head']),
+    async (req: Request, res: Response) => {
+      try {
+        const { record_id, payroll_id } = req.body;
+        const targetId = record_id || payroll_id;
+        if (!targetId) {
+          return res.status(400).json({ success: false, error: 'record_id or payroll_id is required for email retry.' });
+        }
+
+        const retryResult = await retryPayslipEmail(targetId);
+
+        const user = (req as any).authenticatedUser;
+        logSecurityEvent({
+          action: 'LOGIN_SUCCESS' as any,
+          actorEmail: user?.email || 'admin@deruedaconstruction.com',
+          actorRole: user?.role || 'admin',
+          details: `Payslip email retry triggered for record '${targetId}'. Result: ${retryResult.success ? 'SUCCESS' : 'FAILED'}. Underlying payout was preserved without duplicate disbursement.`,
+          status: retryResult.success ? 'SUCCESS' : 'FAILED',
+        });
+
+        return res.json(retryResult);
+      } catch (err: any) {
+        return res.status(500).json({ success: false, error: err?.message || 'Email retry failed' });
+      }
+    }
+  );
+
+  // 4d. Payslip Email Logs Endpoint (Audit visibility for HR/Finance/CEO)
+  app.get(
+    '/api/payslips/email/logs',
+    requireServerAuth(['ceo', 'admin 1', 'admin 2', 'site head']),
+    (_req: Request, res: Response) => {
+      res.json({
+        success: true,
+        logs: getEmailDeliveryLogs(),
+      });
+    }
+  );
 
   // 5. Create Customer Payment Link / Checkout (PayMongo Links API)
   const handlePayMongoCreateLink = (req: Request, res: Response) => {

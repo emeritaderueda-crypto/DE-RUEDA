@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface DeRuedaLogoProps {
   className?: string;
@@ -15,6 +15,9 @@ export const DeRuedaLogo: React.FC<DeRuedaLogoProps> = ({
   theme = 'dark',
   showSubtitle = true,
 }) => {
+  const [imageError, setImageError] = useState(false);
+  const officialLogoPath = '/assets/aistudio/Glossy_De_Rueda_Construction_Logo-Picsart-BackgroundRemover_09a8f6f6.png';
+
   const iconSizes = {
     sm: { width: 32, height: 26 },
     md: { width: 44, height: 36 },
@@ -29,10 +32,17 @@ export const DeRuedaLogo: React.FC<DeRuedaLogoProps> = ({
     xl: { title: 'text-3xl', sub: 'text-sm' },
   };
 
+  const imageHeights = {
+    sm: 'h-8 max-w-[130px]',
+    md: 'h-11 max-w-[180px]',
+    lg: 'h-16 max-w-[240px]',
+    xl: 'h-22 max-w-[320px]',
+  };
+
   const currentIcon = iconSizes[size];
   const currentText = textSizes[size];
 
-  // SVG Architectural Glossy Green Emblem
+  // SVG Architectural Glossy Green Emblem Fallback
   const EmblemSvg = (
     <div className="relative inline-flex items-center justify-center shrink-0">
       <svg
@@ -44,7 +54,6 @@ export const DeRuedaLogo: React.FC<DeRuedaLogoProps> = ({
         className="filter drop-shadow-[0_4px_12px_rgba(16,185,129,0.35)] transition-transform duration-300 hover:scale-105"
       >
         <defs>
-          {/* Glossy Green Top Gradients */}
           <linearGradient id="drGlossyGreenTop" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#bef264" />
             <stop offset="35%" stopColor="#84cc16" />
@@ -52,7 +61,6 @@ export const DeRuedaLogo: React.FC<DeRuedaLogoProps> = ({
             <stop offset="100%" stopColor="#15803d" />
           </linearGradient>
 
-          {/* Deep Architectural Pillar Gradient */}
           <linearGradient id="drGlossyPillar" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor="#a3e635" />
             <stop offset="30%" stopColor="#10b981" />
@@ -60,51 +68,35 @@ export const DeRuedaLogo: React.FC<DeRuedaLogoProps> = ({
             <stop offset="100%" stopColor="#064e3b" />
           </linearGradient>
 
-          {/* Chrome / Specular Highlight */}
           <linearGradient id="drChromeHighlight" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
             <stop offset="40%" stopColor="#d9f99d" stopOpacity="0.4" />
             <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
           </linearGradient>
-
-          {/* Dark Blue Base Shadow */}
-          <linearGradient id="drDeepNavyShadow" x1="0%" y1="100%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#0b132b" />
-            <stop offset="100%" stopColor="#1e3a8a" />
-          </linearGradient>
         </defs>
 
-        {/* Base Foundation Glow */}
         <ellipse cx="60" cy="94" rx="48" ry="5" fill="#10b981" fillOpacity="0.3" filter="blur(3px)" />
 
-        {/* 3D Vertical Architectural Tower Beams (Angled Ascent) */}
-        {/* Beam 1 (Leftmost, Shortest) */}
         <polygon points="12,72 26,48 36,52 22,76" fill="url(#drGlossyPillar)" />
         <polygon points="26,48 30,42 40,46 36,52" fill="#d9f99d" />
         <polygon points="36,52 40,46 26,70 22,76" fill="#047857" />
 
-        {/* Beam 2 (Middle) */}
         <polygon points="28,68 46,32 58,37 40,73" fill="url(#drGlossyPillar)" />
         <polygon points="46,32 52,24 64,29 58,37" fill="#ecfccb" />
         <polygon points="58,37 64,29 46,65 40,73" fill="#065f46" />
 
-        {/* Beam 3 (Tallest Center Spine) */}
         <polygon points="48,64 68,16 82,22 62,70" fill="url(#drGlossyGreenTop)" />
         <polygon points="68,16 74,8 88,14 82,22" fill="#ffffff" fillOpacity="0.95" />
         <polygon points="82,22 88,14 68,62 62,70" fill="#047857" />
 
-        {/* Horizontal Cantilever Truss ("E" / Dynamic Rueda Cross Beams) */}
-        {/* Top Horizontal Wing */}
         <path
           d="M 44 34 L 102 34 L 92 48 L 38 48 Z"
           fill="url(#drGlossyGreenTop)"
           stroke="#a3e635"
           strokeWidth="1.2"
         />
-        {/* Top Wing Glossy Highlight */}
         <path d="M 46 36 L 98 36 L 92 41 L 42 41 Z" fill="url(#drChromeHighlight)" />
 
-        {/* Middle Horizontal Beam */}
         <path
           d="M 36 54 L 88 54 L 80 64 L 30 64 Z"
           fill="url(#drGlossyPillar)"
@@ -112,35 +104,37 @@ export const DeRuedaLogo: React.FC<DeRuedaLogoProps> = ({
           strokeWidth="1"
         />
 
-        {/* Bottom Horizontal Base Ramp */}
         <path
           d="M 18 74 L 112 74 L 98 88 L 8 88 Z"
           fill="url(#drGlossyGreenTop)"
           stroke="#22c55e"
           strokeWidth="1.2"
         />
-        {/* Bottom Ramp Highlight Line */}
         <path d="M 22 76 L 108 76 L 98 81 L 14 81 Z" fill="url(#drChromeHighlight)" />
 
-        {/* Subtle Architectural Corner Pins */}
         <circle cx="102" cy="34" r="2" fill="#ffffff" />
         <circle cx="88" cy="54" r="2" fill="#ffffff" />
         <circle cx="112" cy="74" r="2.2" fill="#ffffff" />
       </svg>
-
-      {/* Restrained Pink Glitter Star Accent (PDF instruction: 'with a little pink glitter used sparingly as a decorative accent') */}
-      <span
-        aria-hidden="true"
-        className="absolute -top-1 -right-1 text-[#f472b6] animate-pulse pointer-events-none select-none text-[10px]"
-        title="Quality & Precision"
-      >
-        ✦
-      </span>
     </div>
   );
 
   if (variant === 'icon-only') {
     return <div className={`inline-flex items-center ${className}`}>{EmblemSvg}</div>;
+  }
+
+  // Display the official metallic glossy brand logo image
+  if (!imageError) {
+    return (
+      <div className={`inline-flex items-center ${className}`}>
+        <img
+          src={officialLogoPath}
+          alt="De Rueda Construction Inc."
+          className={`${imageHeights[size]} w-auto object-contain filter drop-shadow-[0_2px_8px_rgba(34,197,94,0.3)] transition-transform duration-200 hover:scale-[1.02]`}
+          onError={() => setImageError(true)}
+        />
+      </div>
+    );
   }
 
   const isLight = theme === 'light';
@@ -165,8 +159,7 @@ export const DeRuedaLogo: React.FC<DeRuedaLogoProps> = ({
           >
             RUEDA
           </span>
-          {/* Second subtle pink glitter spark */}
-          <span className="text-[#f472b6] text-[9px] font-bold opacity-80 select-none ml-0.5">✦</span>
+          <span className="text-[#84cc16] text-[9px] font-bold select-none ml-0.5">✦</span>
         </div>
 
         {showSubtitle && (

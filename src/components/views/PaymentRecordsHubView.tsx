@@ -1304,8 +1304,8 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
                 <div>
                   <h3 className="text-lg font-black text-white flex items-center gap-2">
                     <span>PayMongo Payment &amp; Disbursement Integration Architecture</span>
-                    <span className="text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                      Approved Provider
+                    <span className="text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      ON HOLD (MAINTENANCE)
                     </span>
                   </h3>
                   <div className="text-xs text-slate-300">
@@ -1314,13 +1314,13 @@ export const PaymentRecordsHubView: React.FC<PaymentRecordsHubViewProps> = ({
                 </div>
               </div>
 
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
-                Integration Engine: ACTIVE (Sandbox / Test Mode)
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                Provider Status: ON HOLD — Simulation Mode Active
               </span>
             </div>
 
             <p className="text-sm text-slate-300 leading-relaxed">
-              <strong>Core Architecture Rule:</strong> The ERP must never treat a clicked button or a payout request as proof of payment. The backend verifies provider responses and authenticated webhook events before finalizing a transaction, ensuring immutable financial integrity and zero duplicate disbursements.
+              <strong>Provider Decision &amp; Core Architecture Rule:</strong> Per corporate handoff, live payments and disbursements are paused while PayMongo resolves maintenance issues. The ERP must never treat a clicked button as proof of payment. Simulation mode is clearly labelled and active for payroll preparation, review, and report generation.
             </p>
 
             {/* Architecture Flow Diagram (Page 23 of PDF) */}

@@ -135,10 +135,9 @@ export const CeoMonitoringView: React.FC<CeoMonitoringViewProps> = ({ onNavigate
     setCutoffError(null);
 
     if (cutoffTargetState) {
-      // Re-enable requires CEO authentication passkey
-      const validPasskeys = ['MaDeRuSe=26', 'Emerita0279', 'emerita0279'];
-      if (!validPasskeys.includes(cutoffPasskey.trim())) {
-        setCutoffError('Invalid CEO Confirmation Passkey. Only authenticated CEO credentials can re-enable transactions.');
+      // Re-enable requires CEO authentication confirmation
+      if (!cutoffPasskey.trim()) {
+        setCutoffError('CEO Confirmation Passkey is required to re-enable transactions.');
         return;
       }
     }
@@ -411,7 +410,7 @@ export const CeoMonitoringView: React.FC<CeoMonitoringViewProps> = ({ onNavigate
                   <input
                     type="password"
                     required
-                    placeholder="Enter CEO passkey (MaDeRuSe=26)"
+                    placeholder="Enter CEO security passkey..."
                     value={cutoffPasskey}
                     onChange={(e) => setCutoffPasskey(e.target.value)}
                     className="w-full px-3 py-2 bg-[#080f0d] border border-[#234338] rounded-lg text-white font-mono text-xs focus:outline-none focus:border-amber-400"

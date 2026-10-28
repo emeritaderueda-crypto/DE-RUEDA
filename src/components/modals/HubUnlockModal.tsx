@@ -45,7 +45,6 @@ export const HubUnlockModal: React.FC<HubUnlockModalProps> = ({
       allowedRoles: ['ceo'],
       badge: 'EMERITA RESTRICTED',
       color: 'amber',
-      defaultPinHint: 'Emerita0279',
       desc: 'Direct execution of corporate payment disbursements for weekly worker salaries, site operations, and emergency funding.',
     },
     exec_distribution_hub: {
@@ -54,7 +53,6 @@ export const HubUnlockModal: React.FC<HubUnlockModalProps> = ({
       allowedRoles: ['ceo', 'admin 1'],
       badge: 'HR EXECUTIVE',
       color: 'emerald',
-      defaultPinHint: 'DRC02',
       desc: 'Company-wide weekly salary batch execution, canteen concessionaire meal disbursements, and automated SMS payslip dispatch.',
     },
     admin2_distribution_hub: {
@@ -63,7 +61,6 @@ export const HubUnlockModal: React.FC<HubUnlockModalProps> = ({
       allowedRoles: ['ceo', 'admin 2'],
       badge: 'SITE OPS (ISOLATED)',
       color: 'sky',
-      defaultPinHint: 'DRC03',
       desc: 'Site-level worker weekly salary disbursement with strict physical site boundary enforcement.',
     },
   }[targetHubId];
@@ -146,7 +143,7 @@ export const HubUnlockModal: React.FC<HubUnlockModalProps> = ({
                 Your Account Password / PIN
               </label>
               <span className="text-[10px] text-slate-500 font-mono">
-                Hint: {hubConfig.defaultPinHint}
+                Authoritative Credentials
               </span>
             </div>
             <div className="relative">
@@ -177,7 +174,7 @@ export const HubUnlockModal: React.FC<HubUnlockModalProps> = ({
               <label className="text-xs font-bold uppercase tracking-wider text-slate-300">
                 MFA / One-Time Backup Code <span className="text-slate-500 font-normal">(Optional)</span>
               </label>
-              <span className="text-[10px] text-slate-500 font-mono">TOTP: 123456</span>
+              <span className="text-[10px] text-slate-500 font-mono">RFC 6238 TOTP</span>
             </div>
             <input
               type="text"

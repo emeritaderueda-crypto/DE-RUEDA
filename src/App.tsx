@@ -6,30 +6,43 @@ import { GlobalSearchModal } from './components/modals/GlobalSearchModal';
 import { AuthModal } from './components/modals/AuthModal';
 import { LogoutModal } from './components/modals/LogoutModal';
 
-// Lazy-loaded Views for optimized code-splitting and zero bundle warnings
-const DashboardView = React.lazy(() => import('./components/views/DashboardView').then(m => ({ default: m.DashboardView })));
-const EmployeesView = React.lazy(() => import('./components/views/EmployeesView').then(m => ({ default: m.EmployeesView })));
-const SitesView = React.lazy(() => import('./components/views/SitesView').then(m => ({ default: m.SitesView })));
-const AttendanceView = React.lazy(() => import('./components/views/AttendanceView').then(m => ({ default: m.AttendanceView })));
-const DeductionsView = React.lazy(() => import('./components/views/DeductionsView').then(m => ({ default: m.DeductionsView })));
-const PayrollView = React.lazy(() => import('./components/views/PayrollView').then(m => ({ default: m.PayrollView })));
-const CashFlowView = React.lazy(() => import('./components/views/CashFlowView').then(m => ({ default: m.CashFlowView })));
-const PayslipsView = React.lazy(() => import('./components/views/PayslipsView').then(m => ({ default: m.PayslipsView })));
-const MaterialsView = React.lazy(() => import('./components/views/MaterialsView').then(m => ({ default: m.MaterialsView })));
-const ExpensesView = React.lazy(() => import('./components/views/ExpensesView').then(m => ({ default: m.ExpensesView })));
-const ReportsView = React.lazy(() => import('./components/views/ReportsView').then(m => ({ default: m.ReportsView })));
-const MessagesView = React.lazy(() => import('./components/views/MessagesView').then(m => ({ default: m.MessagesView })));
-const DocumentsView = React.lazy(() => import('./components/views/DocumentsView').then(m => ({ default: m.DocumentsView })));
-const IntakeView = React.lazy(() => import('./components/views/IntakeView').then(m => ({ default: m.IntakeView })));
-const SettingsView = React.lazy(() => import('./components/views/SettingsView').then(m => ({ default: m.SettingsView })));
-const AuditView = React.lazy(() => import('./components/views/AuditView').then(m => ({ default: m.AuditView })));
-const PublicWebsiteView = React.lazy(() => import('./components/views/PublicWebsiteView').then(m => ({ default: m.PublicWebsiteView })));
-const LandingPagePreviewView = React.lazy(() => import('./components/views/LandingPagePreviewView').then(m => ({ default: m.LandingPagePreviewView })));
-const CeoMonitoringView = React.lazy(() => import('./components/views/CeoMonitoringView').then(m => ({ default: m.CeoMonitoringView })));
-const PaymentRecordsHubView = React.lazy(() => import('./components/views/PaymentRecordsHubView').then(m => ({ default: m.PaymentRecordsHubView })));
-const CanteenView = React.lazy(() => import('./components/views/CanteenView').then(m => ({ default: m.CanteenView })));
-const ClientsView = React.lazy(() => import('./components/views/ClientsView').then(m => ({ default: m.ClientsView })));
-const AdjustmentsView = React.lazy(() => import('./components/views/AdjustmentsView').then(m => ({ default: m.AdjustmentsView })));
+import { PublicWebsiteView } from './components/views/PublicWebsiteView';
+import { DashboardView } from './components/views/DashboardView';
+
+// Helper for resilient lazy-loading with automatic retry
+function safeLazy<T extends React.ComponentType<any>>(importFn: () => Promise<{ default: T }>) {
+  return React.lazy(async () => {
+    try {
+      return await importFn();
+    } catch {
+      await new Promise((r) => setTimeout(r, 250));
+      return await importFn();
+    }
+  });
+}
+
+// Lazy-loaded secondary views
+const EmployeesView = safeLazy(() => import('./components/views/EmployeesView').then(m => ({ default: m.EmployeesView })));
+const SitesView = safeLazy(() => import('./components/views/SitesView').then(m => ({ default: m.SitesView })));
+const AttendanceView = safeLazy(() => import('./components/views/AttendanceView').then(m => ({ default: m.AttendanceView })));
+const DeductionsView = safeLazy(() => import('./components/views/DeductionsView').then(m => ({ default: m.DeductionsView })));
+const PayrollView = safeLazy(() => import('./components/views/PayrollView').then(m => ({ default: m.PayrollView })));
+const CashFlowView = safeLazy(() => import('./components/views/CashFlowView').then(m => ({ default: m.CashFlowView })));
+const PayslipsView = safeLazy(() => import('./components/views/PayslipsView').then(m => ({ default: m.PayslipsView })));
+const MaterialsView = safeLazy(() => import('./components/views/MaterialsView').then(m => ({ default: m.MaterialsView })));
+const ExpensesView = safeLazy(() => import('./components/views/ExpensesView').then(m => ({ default: m.ExpensesView })));
+const ReportsView = safeLazy(() => import('./components/views/ReportsView').then(m => ({ default: m.ReportsView })));
+const MessagesView = safeLazy(() => import('./components/views/MessagesView').then(m => ({ default: m.MessagesView })));
+const DocumentsView = safeLazy(() => import('./components/views/DocumentsView').then(m => ({ default: m.DocumentsView })));
+const IntakeView = safeLazy(() => import('./components/views/IntakeView').then(m => ({ default: m.IntakeView })));
+const SettingsView = safeLazy(() => import('./components/views/SettingsView').then(m => ({ default: m.SettingsView })));
+const AuditView = safeLazy(() => import('./components/views/AuditView').then(m => ({ default: m.AuditView })));
+const LandingPagePreviewView = safeLazy(() => import('./components/views/LandingPagePreviewView').then(m => ({ default: m.LandingPagePreviewView })));
+const CeoMonitoringView = safeLazy(() => import('./components/views/CeoMonitoringView').then(m => ({ default: m.CeoMonitoringView })));
+const PaymentRecordsHubView = safeLazy(() => import('./components/views/PaymentRecordsHubView').then(m => ({ default: m.PaymentRecordsHubView })));
+const CanteenView = safeLazy(() => import('./components/views/CanteenView').then(m => ({ default: m.CanteenView })));
+const ClientsView = safeLazy(() => import('./components/views/ClientsView').then(m => ({ default: m.ClientsView })));
+const AdjustmentsView = safeLazy(() => import('./components/views/AdjustmentsView').then(m => ({ default: m.AdjustmentsView })));
 import { NetworkSyncToast } from './components/common/NetworkSyncToast';
 
 const MainAppContent: React.FC = () => {
@@ -270,10 +283,50 @@ const MainAppContent: React.FC = () => {
   );
 };
 
+class AppErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: any }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: any, info: any) {
+    console.warn('[AppErrorBoundary caught error]:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#060b18] text-white flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-4">
+            <span className="text-2xl font-bold">DRC</span>
+          </div>
+          <h2 className="text-lg font-bold mb-2">De Rueda Construction ERP Ready</h2>
+          <p className="text-sm text-slate-400 max-w-md mb-6">
+            Click below to refresh the active application view.
+          </p>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              window.location.reload();
+            }}
+            className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-sm transition-all cursor-pointer"
+          >
+            Reload Application
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <AppProvider>
-      <MainAppContent />
-    </AppProvider>
+    <AppErrorBoundary>
+      <AppProvider>
+        <MainAppContent />
+      </AppProvider>
+    </AppErrorBoundary>
   );
 }

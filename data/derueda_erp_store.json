@@ -1,0 +1,658 @@
+{
+  "version": "2.0.0",
+  "created_at": "2026-10-26T14:24:55.985Z",
+  "updated_at": "2026-10-28T16:38:36.186Z",
+  "metadata": {
+    "system_name": "De Rueda Construction ERP",
+    "organization": "De Rueda Construction Inc.",
+    "environment": "production",
+    "durable_persistence": true,
+    "last_backup_at": "2026-10-28T16:38:35.660Z"
+  },
+  "master_cutoff": {
+    "switch_on": false,
+    "updated_at": "2026-10-26T14:24:55.985Z",
+    "updated_by": "security.initialization@deruedaconstruction.com",
+    "reason": "Initial security baseline cutover: Master cut-off engaged (fail-closed)",
+    "history": [
+      {
+        "timestamp": "2026-10-26T14:24:55.985Z",
+        "actor": "security.initialization@deruedaconstruction.com",
+        "new_state": "OFF",
+        "reason": "Initial security cutover baseline state",
+        "result": "SUCCESS"
+      }
+    ]
+  },
+  "users": [
+    {
+      "id": "USR-DEV-MARJON",
+      "email": "marjoncompany@gmail.com",
+      "name": "Developer & Lead Systems Architect (Marjon Company)",
+      "role": "ceo",
+      "position": "Developer / Super Admin",
+      "assignedSites": [
+        "ALL"
+      ],
+      "company": "De Rueda Construction Inc.",
+      "passwordSalt": "drc_salt_dev_2026",
+      "passwordHash": "1b4f92f96bd1e9fdc4580f6f595edf232187bd8b755b06de5f6224db0aa16d1307c299092925bfab9ab4db29cae074a30139d465abf49af4e9e613f46287699a",
+      "mfaEnabled": true,
+      "mfaSecret": "JBSWY3DPEHPK3PXP",
+      "backupCodesHashed": [
+        "811090718a64988774c3d10c0730a8547d772ff40651d847ac911a5e90a77cdea504924e76fff8e0cc39711547887898ebe0e81a15219bee82263b97a5b7a59f",
+        "d4a8d961daa22dc7b1e8249afef0e5c1d3088cbbb8527df0513597efff951827cb5e8915866eb5b7d5a5a5acf2ed20bf49410f8515d43db290d500dc40941a87"
+      ],
+      "status": "active",
+      "approvedBy": "Corporate Charter / Developer Provisioning",
+      "approvedAt": "2026-10-26T14:24:55.985Z",
+      "createdAt": "2026-01-01T08:00:00Z",
+      "updatedAt": "2026-10-26T14:24:55.985Z"
+    },
+    {
+      "id": "USR-CEO-EMERITA",
+      "email": "emeritaderueda@gmail.com",
+      "name": "Emerita De Rueda",
+      "role": "ceo",
+      "position": "Chief Executive Officer (CEO)",
+      "assignedSites": [
+        "ALL"
+      ],
+      "company": "De Rueda Construction Inc.",
+      "passwordSalt": "drc_salt_ceo_2026",
+      "passwordHash": "ca642b8939aa93450fffe40090e09ef8f5f3c8fd626981d57c2a3f1ab4889d5021d9f8a56b3011044cf67775993beaa5d4a00a58108d12074d4c94c282b0e54c",
+      "mfaEnabled": true,
+      "mfaSecret": "JBSWY3DPEHPK3PXP",
+      "backupCodesHashed": [
+        "51d4c6549e4ddd13aa5e0cdde61040a40b2e84d6f64eb562415cf7091c010f13cd43171011eabad731f52f4025fd89ef32ec35dd1d05b092c7fcbcb2716f261f",
+        "7a59a76523b27a8f1c0452d84f937e1957e0051b6031ace10f62f67325649fd284afb16a08ca05ce7e95a1cba1a4af8b138abefeac00b8613c780ab665d1cd19",
+        "81fb26ed9669cbdc46a06304f76604244e90e1258c0435c8d79c4ba6d13760fd5a8482470f3dbbb22c85b7fb3b4e617fcaab3ab32c53f3ccca9136ee9f03b504",
+        "453c127b395afcadff89cc9d032eae84ceb8860aa348ba490e8de581df4fe42c9bf50a9a51c1a1f19f27e8f6cffeb41641cf6eb90b7cd026055879f48bd2d02b"
+      ],
+      "status": "active",
+      "approvedBy": "Board of Directors / Corporate Charter",
+      "approvedAt": "2026-01-01T08:00:00Z",
+      "createdAt": "2026-01-01T08:00:00Z",
+      "updatedAt": "2026-10-26T14:24:55.985Z"
+    },
+    {
+      "id": "USR-CEO-01",
+      "email": "operations@deruedaconstruction.com",
+      "name": "Emerita De Rueda (Operations Hub)",
+      "role": "ceo",
+      "position": "Executive CEO",
+      "assignedSites": [
+        "ALL"
+      ],
+      "company": "De Rueda Construction Inc.",
+      "passwordSalt": "drc_salt_ceo_2026",
+      "passwordHash": "ca642b8939aa93450fffe40090e09ef8f5f3c8fd626981d57c2a3f1ab4889d5021d9f8a56b3011044cf67775993beaa5d4a00a58108d12074d4c94c282b0e54c",
+      "mfaEnabled": true,
+      "mfaSecret": "JBSWY3DPEHPK3PXP",
+      "backupCodesHashed": [
+        "51d4c6549e4ddd13aa5e0cdde61040a40b2e84d6f64eb562415cf7091c010f13cd43171011eabad731f52f4025fd89ef32ec35dd1d05b092c7fcbcb2716f261f",
+        "7a59a76523b27a8f1c0452d84f937e1957e0051b6031ace10f62f67325649fd284afb16a08ca05ce7e95a1cba1a4af8b138abefeac00b8613c780ab665d1cd19"
+      ],
+      "status": "active",
+      "approvedBy": "Board of Directors",
+      "approvedAt": "2026-01-01T08:00:00Z",
+      "createdAt": "2026-01-01T08:00:00Z",
+      "updatedAt": "2026-10-26T14:24:55.985Z"
+    },
+    {
+      "id": "USR-HR-01",
+      "email": "admin1@deruedaconstruction.com",
+      "name": "Grace Villanueva",
+      "role": "admin 1",
+      "position": "HR Officer",
+      "assignedSites": [
+        "ALL"
+      ],
+      "company": "De Rueda Construction Inc.",
+      "passwordSalt": "drc_salt_hr_2026",
+      "passwordHash": "c814e3c8b91ef4ae75cac8c7427e4b887039613f4773a4a9d894c565ec11f5d9e4e0ca71dc4e6e812ba59ad8f87e5a068c6fbc83231c0f1e4b7da386719eeb23",
+      "mfaEnabled": true,
+      "mfaSecret": "KRSXG5CTMVRXEZLU",
+      "backupCodesHashed": [
+        "a0a8ef6a9bb395e69311a70a66ab2f18881af77e629d834621f1fbb5c88712c126c1eea9948b3fc02df287451260f5de7526e5ef601f7363151beee7dae9bbaa",
+        "07523da25a747143c115e2e4f90913fa17bbef490bd40598ffb2bbf2e9a1b7791ab73faa2ac9b4436086aa69345567c3c4db848edacaf838dd8d96f10d9326ec"
+      ],
+      "status": "active",
+      "approvedBy": "operations@deruedaconstruction.com",
+      "approvedAt": "2026-01-15T08:00:00Z",
+      "createdAt": "2026-01-15T08:00:00Z",
+      "updatedAt": "2026-10-26T14:24:55.985Z"
+    },
+    {
+      "id": "USR-ADM2-SITE1",
+      "email": "admin2.mariveles@deruedaconstruction.com",
+      "name": "Engr. Marco De Rueda",
+      "role": "admin 2",
+      "position": "Site Engineer",
+      "assignedSites": [
+        "SITE-001"
+      ],
+      "company": "De Rueda Construction Inc.",
+      "passwordSalt": "drc_salt_adm2_mariveles_2026",
+      "passwordHash": "77e6b83652da06e1d8f03618c58e3091ee12fd4fdeb1b96d315cceac944cc03d006e831de6314f2f5adde1e0453099ea46b075b0a9fbe960b7e1682788545373",
+      "mfaEnabled": true,
+      "mfaSecret": "MZSWG2LLMVRXEZLU",
+      "backupCodesHashed": [
+        "cfc89d38fe32b432e5981ac51943a4351520110057c624681732e42b74f4d1feb4d1fbf9641453fb4aec2e44a01a79fdb8837681276b77231d0dbf528355c35e",
+        "cd2c5a9505479f30f8d1b20494407a707db298cbb9fcbc9e66c0b539dc1d99557cb5db0ed095837e144bf35e80b8dbd34b434e5ae636aa3b26746b2a3d7e3ac0"
+      ],
+      "status": "active",
+      "approvedBy": "admin1@deruedaconstruction.com",
+      "approvedAt": "2026-02-01T08:00:00Z",
+      "createdAt": "2026-02-01T08:00:00Z",
+      "updatedAt": "2026-10-26T14:24:55.985Z"
+    },
+    {
+      "id": "USR-ADM2-SITE2",
+      "email": "admin2.subic@deruedaconstruction.com",
+      "name": "Foreman Aris Valdez",
+      "role": "admin 2",
+      "position": "Foreman",
+      "assignedSites": [
+        "SITE-002"
+      ],
+      "company": "De Rueda Construction Inc.",
+      "passwordSalt": "drc_salt_adm2_subic_2026",
+      "passwordHash": "b34ec9cd9411c7b34cb5109d8c79651cf08f090eb377d5a6874bbd81a45723e3334d8725175debe2e5d847775d64259eedcc855dfdd48c842b712167de95c185",
+      "mfaEnabled": true,
+      "mfaSecret": "NBSWY3DPEHPK3PXP",
+      "backupCodesHashed": [
+        "37fbb1354f8cc231b73f51bb906b9487da6ce5169c4722f2fa6297617cd9d807ed128f30c3ab7853a0239edcb04c6dc218d6df36aafa1ecfa06d079ba9860083",
+        "5375a28842f2f6d1d81fe74eb582d2cb44a49d74e3465f869c68e248714258622b8625779a36bd38c7e0eeadeb023afb7f47940d35207741ec73d0e779a559e8"
+      ],
+      "status": "active",
+      "approvedBy": "admin1@deruedaconstruction.com",
+      "approvedAt": "2026-03-15T08:00:00Z",
+      "createdAt": "2026-03-15T08:00:00Z",
+      "updatedAt": "2026-10-26T14:24:55.985Z"
+    },
+    {
+      "id": "USR-ADM2-SITE3",
+      "email": "admin2.balanga@deruedaconstruction.com",
+      "name": "Foreman Danilo Santos",
+      "role": "admin 2",
+      "position": "Foreman",
+      "assignedSites": [
+        "SITE-003"
+      ],
+      "company": "De Rueda Construction Inc.",
+      "passwordSalt": "drc_salt_adm2_balanga_2026",
+      "passwordHash": "a8567e5cdc8934381555fc071b819e0aabfbf5aa22b0d912ce83411fd822de1d4e67a67a81412038571aa311d843a283ffc0fb7d526127af83b9fddfa48f004f",
+      "mfaEnabled": true,
+      "mfaSecret": "OBSWY3DPEHPK3PXP",
+      "backupCodesHashed": [
+        "2927aa5920f3ec9be00d303ad94d6d8e842f288fc508d1deb75f5e98ce1784240ce11748e4262f2a9a7a6e9036e482a7726eb2800c77c1463e1d503e65f6ea99",
+        "6f1cde53d4b2d6e15e42fb05c89b3ce8ea32db4fd6c18c86550a288a75a01bd70359499a3528c3027c0d477cbd77d754b9e99e0b515cafd297f725895a6edb31"
+      ],
+      "status": "active",
+      "approvedBy": "admin1@deruedaconstruction.com",
+      "approvedAt": "2026-05-10T08:00:00Z",
+      "createdAt": "2026-05-10T08:00:00Z",
+      "updatedAt": "2026-10-26T14:24:55.985Z"
+    }
+  ],
+  "invitations": [
+    {
+      "id": "INV-DEMO-EXPIRED",
+      "token": "INV-DRC-EXPIRED-TOKEN-DEMO",
+      "email": "expired.candidate@example.com",
+      "company": "De Rueda Construction Inc.",
+      "assignedRole": "admin 2",
+      "assignedPosition": "Expired Position",
+      "assignedSites": [
+        "SITE-001"
+      ],
+      "createdBy": "operations@deruedaconstruction.com",
+      "createdAt": "2025-01-01T00:00:00Z",
+      "expiresAt": "2025-01-02T00:00:00Z",
+      "status": "EXPIRED"
+    },
+    {
+      "id": "INV-DEMO-REVOKED",
+      "token": "INV-DRC-REVOKED-TOKEN-DEMO",
+      "email": "revoked.candidate@example.com",
+      "company": "De Rueda Construction Inc.",
+      "assignedRole": "admin 2",
+      "assignedPosition": "Revoked Position",
+      "assignedSites": [
+        "SITE-001"
+      ],
+      "createdBy": "operations@deruedaconstruction.com",
+      "createdAt": "2026-01-01T00:00:00Z",
+      "expiresAt": "2026-12-31T00:00:00Z",
+      "status": "REVOKED"
+    }
+  ],
+  "audit_logs": [
+    {
+      "id": "SEC-LOG-INITIAL",
+      "timestamp": "2026-10-26T14:24:55.985Z",
+      "action": "SESSIONS_INVALIDATED_ALL",
+      "actorEmail": "security.initialization@deruedaconstruction.com",
+      "actorRole": "system",
+      "details": "Durable Enterprise Database initialized. Security Replacement and Legacy Retirement verified.",
+      "status": "SUCCESS"
+    }
+  ],
+  "idempotency_store": {},
+  "projects": [
+    {
+      "site_id": "SITE-001",
+      "name": "Mariveles Commercial Complex",
+      "location": "Mariveles, Bataan",
+      "status": "Finished Early",
+      "progress": 68,
+      "head_engineer": "Engr. Marco De Rueda",
+      "updated_at": "2026-10-28T16:38:35.664Z"
+    },
+    {
+      "site_id": "SITE-002",
+      "name": "Subic Industrial Warehouse",
+      "location": "Subic Bay Freeport Zone",
+      "status": "Active",
+      "progress": 42,
+      "head_engineer": "Foreman Aris Valdez",
+      "updated_at": "2026-10-26T14:24:55.985Z"
+    },
+    {
+      "site_id": "SITE-003",
+      "name": "Balanga High-Rise Residences",
+      "location": "Balanga City, Bataan",
+      "status": "Active",
+      "progress": 85,
+      "head_engineer": "Foreman Danilo Santos",
+      "updated_at": "2026-10-26T14:24:55.985Z"
+    }
+  ],
+  "cash_receipts": [
+    {
+      "receipt_id": "CSH-REC-1793205516186-353",
+      "payroll_id": "PAY-CASH-AUTOMAIL-1793205516184",
+      "employee_id": "EMP-0003",
+      "pay_period": "Week 42 (Oct 19 - Oct 25, 2026)",
+      "amount": 4850,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-28T16:38:36.186Z",
+      "witness_notes": "Confirmed cash wage envelope handover with photographic voucher."
+    },
+    {
+      "receipt_id": "CSH-REC-1793205515354-644",
+      "payroll_id": "PAY-W41-1793205515351",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-28T16:38:35.354Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793205196729-383",
+      "payroll_id": "PAY-CASH-AUTOMAIL-1793205196728",
+      "employee_id": "EMP-0003",
+      "pay_period": "Week 42 (Oct 19 - Oct 25, 2026)",
+      "amount": 4850,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-28T16:33:16.729Z",
+      "witness_notes": "Confirmed cash wage envelope handover with photographic voucher."
+    },
+    {
+      "receipt_id": "CSH-REC-1793205195891-233",
+      "payroll_id": "PAY-W41-1793205195889",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-28T16:33:15.891Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793205021252-208",
+      "payroll_id": "PAY-CASH-AUTOMAIL-1793205021250",
+      "employee_id": "EMP-0003",
+      "pay_period": "Week 42 (Oct 19 - Oct 25, 2026)",
+      "amount": 4850,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-28T16:30:21.252Z",
+      "witness_notes": "Confirmed cash wage envelope handover with photographic voucher."
+    },
+    {
+      "receipt_id": "CSH-REC-1793205020656-590",
+      "payroll_id": "PAY-W41-1793205020652",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-28T16:30:20.656Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793202417045-827",
+      "payroll_id": "PAY-CASH-AUTOMAIL-1793202417044",
+      "employee_id": "EMP-0003",
+      "pay_period": "Week 42 (Oct 19 - Oct 25, 2026)",
+      "amount": 4850,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-28T15:46:57.045Z",
+      "witness_notes": "Confirmed cash wage envelope handover with photographic voucher."
+    },
+    {
+      "receipt_id": "CSH-REC-1793202416984-887",
+      "payroll_id": "PAY-W41-1793202416982",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-28T15:46:56.984Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793202065730-833",
+      "payroll_id": "PAY-CASH-AUTOMAIL-1793202065728",
+      "employee_id": "EMP-0003",
+      "pay_period": "Week 42 (Oct 19 - Oct 25, 2026)",
+      "amount": 4850,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-28T15:41:05.730Z",
+      "witness_notes": "Confirmed cash wage envelope handover with photographic voucher."
+    },
+    {
+      "receipt_id": "CSH-REC-1793202065674-341",
+      "payroll_id": "PAY-W41-1793202065671",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-28T15:41:05.674Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793202007230-434",
+      "payroll_id": "PAY-CASH-AUTOMAIL-1793202007229",
+      "employee_id": "EMP-0003",
+      "pay_period": "Week 42 (Oct 19 - Oct 25, 2026)",
+      "amount": 4850,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-28T15:40:07.230Z",
+      "witness_notes": "Confirmed cash wage envelope handover with photographic voucher."
+    },
+    {
+      "receipt_id": "CSH-REC-1793202007174-956",
+      "payroll_id": "PAY-W41-1793202007165",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-28T15:40:07.174Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793200400984-756",
+      "payroll_id": "PAY-CASH-AUTOMAIL-1793200400968",
+      "employee_id": "EMP-0003",
+      "pay_period": "Week 42 (Oct 19 - Oct 25, 2026)",
+      "amount": 4850,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-28T15:13:20.984Z",
+      "witness_notes": "Confirmed cash wage envelope handover with photographic voucher."
+    },
+    {
+      "receipt_id": "CSH-REC-1793200400939-636",
+      "payroll_id": "PAY-CASH-AUTOMAIL-1793200400929",
+      "employee_id": "EMP-0003",
+      "pay_period": "Week 42 (Oct 19 - Oct 25, 2026)",
+      "amount": 4850,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-28T15:13:20.939Z",
+      "witness_notes": "Confirmed cash wage envelope handover with photographic voucher."
+    },
+    {
+      "receipt_id": "CSH-REC-1793200400769-421",
+      "payroll_id": "PAY-W41-1793200400753",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-28T15:13:20.769Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793200400704-265",
+      "payroll_id": "PAY-W41-1793200400685",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-28T15:13:20.704Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793118345029-883",
+      "payroll_id": "PAY-CASH-AUTOMAIL-1793118345027",
+      "employee_id": "EMP-0003",
+      "pay_period": "Week 42 (Oct 19 - Oct 25, 2026)",
+      "amount": 4850,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-27T16:25:45.029Z",
+      "witness_notes": "Confirmed cash wage envelope handover with photographic voucher."
+    },
+    {
+      "receipt_id": "CSH-REC-1793118344989-579",
+      "payroll_id": "PAY-W41-1793118344987",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-27T16:25:44.989Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793118338304-737",
+      "payroll_id": "PAY-CASH-AUTOMAIL-1793118338302",
+      "employee_id": "EMP-0003",
+      "pay_period": "Week 42 (Oct 19 - Oct 25, 2026)",
+      "amount": 4850,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-27T16:25:38.304Z",
+      "witness_notes": "Confirmed cash wage envelope handover with photographic voucher."
+    },
+    {
+      "receipt_id": "CSH-REC-1793118338257-209",
+      "payroll_id": "PAY-W41-1793118338254",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-27T16:25:38.257Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793117584031-774",
+      "payroll_id": "PAY-CASH-AUTOMAIL-1793117584028",
+      "employee_id": "EMP-0003",
+      "pay_period": "Week 42 (Oct 19 - Oct 25, 2026)",
+      "amount": 4850,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-27T16:13:04.031Z",
+      "witness_notes": "Confirmed cash wage envelope handover with photographic voucher."
+    },
+    {
+      "receipt_id": "CSH-REC-1793117583968-669",
+      "payroll_id": "PAY-W41-1793117583961",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-27T16:13:03.968Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793117095189-824",
+      "payroll_id": "PAY-CASH-AUTOMAIL-1793117095187",
+      "employee_id": "EMP-0003",
+      "pay_period": "Week 42 (Oct 19 - Oct 25, 2026)",
+      "amount": 4850,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-27T16:04:55.189Z",
+      "witness_notes": "Confirmed cash wage envelope handover with photographic voucher."
+    },
+    {
+      "receipt_id": "CSH-REC-1793117095127-688",
+      "payroll_id": "PAY-W41-1793117095124",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-27T16:04:55.127Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793116393570-223",
+      "payroll_id": "PAY-CASH-AUTOMAIL-1793116393568",
+      "employee_id": "EMP-0003",
+      "pay_period": "Week 42 (Oct 19 - Oct 25, 2026)",
+      "amount": 4850,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-27T15:53:13.570Z",
+      "witness_notes": "Confirmed cash wage envelope handover with photographic voucher."
+    },
+    {
+      "receipt_id": "CSH-REC-1793116393508-140",
+      "payroll_id": "PAY-W41-1793116393502",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-27T15:53:13.508Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793114996931-337",
+      "payroll_id": "PAY-CASH-AUTOMAIL-1793114996929",
+      "employee_id": "EMP-0003",
+      "pay_period": "Week 42 (Oct 19 - Oct 25, 2026)",
+      "amount": 4850,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-27T15:29:56.931Z",
+      "witness_notes": "Confirmed cash wage envelope handover with photographic voucher."
+    },
+    {
+      "receipt_id": "CSH-REC-1793114996863-335",
+      "payroll_id": "PAY-W41-1793114996857",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-27T15:29:56.863Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793113039884-328",
+      "payroll_id": "PAY-W41-1793113039879",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-27T14:57:19.884Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793112334387-626",
+      "payroll_id": "PAY-W41-1793112334378",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-27T14:45:34.387Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793110907366-324",
+      "payroll_id": "PAY-W41-1793110907362",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-27T14:21:47.366Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793024696083-514",
+      "payroll_id": "PAY-W41-1793024695982",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-26T14:24:56.083Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    }
+  ]
+}

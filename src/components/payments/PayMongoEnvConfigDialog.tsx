@@ -186,11 +186,24 @@ export const PayMongoEnvConfigDialog: React.FC<PayMongoEnvConfigDialogProps> = (
           </button>
         </div>
 
+        {/* Corporate Status Handoff Notice: ON HOLD */}
+        <div className="px-6 py-2.5 bg-amber-500/10 border-b border-amber-500/30 text-amber-200 text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              <strong>Provider Status: ON HOLD (Maintenance Issue)</strong> — Live payments and disbursements are paused per corporate directive. Simulation mode is enabled for development, payroll review, and preparation.
+            </span>
+          </div>
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 uppercase">
+            On Hold
+          </span>
+        </div>
+
         {/* Current Status Strip */}
         <div className={`px-6 py-3 border-b text-xs flex items-center justify-between gap-3 ${
           isConfigured
             ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300'
-            : 'bg-amber-950/30 border-amber-500/30 text-amber-300'
+            : 'bg-slate-900 border-slate-700 text-slate-300'
         }`}>
           <div className="flex items-center gap-2">
             {isConfigured ? (
@@ -200,8 +213,8 @@ export const PayMongoEnvConfigDialog: React.FC<PayMongoEnvConfigDialogProps> = (
             )}
             <span>
               {isConfigured
-                ? `Checkout Status: Configured for ${environment === 'live' ? 'Live Production' : 'Sandbox Testing'}.`
-                : 'Checkout Status: Unconfigured / Setup Required. Enter official PayMongo credentials below.'}
+                ? `Checkout Status: Configured for ${environment === 'live' ? 'Live Production (Paused while on hold)' : 'Sandbox Simulation'}.`
+                : 'Checkout Status: Keys On Hold. Enter provider credentials below once service is restored.'}
             </span>
           </div>
           <span className="text-[10px] font-mono text-slate-400">

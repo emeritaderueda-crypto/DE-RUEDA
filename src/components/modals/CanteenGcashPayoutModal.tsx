@@ -159,6 +159,12 @@ export const CanteenGcashPayoutModal: React.FC<CanteenGcashPayoutModalProps> = (
         });
       }
 
+      if (!ceoPin.trim()) {
+        setValidationError('Please enter your authorized security passkey to confirm this payout.');
+        setIsProcessing(false);
+        return;
+      }
+
       // 2. Dispatch GCash payout
       const res = await sendGcashDisbursement({
         category: 'Site Canteen Payout',
@@ -167,7 +173,7 @@ export const CanteenGcashPayoutModal: React.FC<CanteenGcashPayoutModalProps> = (
         recipient_mobile: cleanMobile,
         amount: Number(amount),
         purpose: purpose.trim() || `Canteen Meal Settlement (${weekKey})`,
-        user_pin: ceoPin.trim() || 'Emerita0279',
+        user_pin: ceoPin.trim(),
       });
 
       setPaymentResult({

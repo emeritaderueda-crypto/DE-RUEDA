@@ -1,6 +1,0 @@
-{
-  "summary":  "Implementation plan for the De Rueda Construction Management System upgrade, adding a Canteen Spending Aggregator tab in Reports View, service worker caching with offline pending transaction sync, and executing roadmap security and governance controls.",
-  "updatedAt":  "2026-10-12T07:45:35.333748458Z",
-  "requestFeedback":  true,
-  "userFacing":  true
-}

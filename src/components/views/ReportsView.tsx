@@ -6,9 +6,258 @@ import {
   downloadWordDoc,
   downloadReportPDF,
 } from '../../utils/exporters';
-import { FileBarChart, Download, FileSpreadsheet, FileText, Printer, FileCheck, UtensilsCrossed, ArrowRight, Mail, Send } from 'lucide-react';
+import {
+  FileBarChart,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Printer,
+  FileCheck,
+  UtensilsCrossed,
+  ArrowRight,
+  Mail,
+  Send,
+  AlertCircle,
+  RefreshCw,
+  CheckCircle2,
+  TrendingUp,
+} from 'lucide-react';
 import { CanteenSpendingAggregationTab } from '../reports/CanteenSpendingAggregationTab';
 import { WeeklyDtrEmailHub } from '../reports/WeeklyDtrEmailHub';
+import { MonthlyPayrollTrendsChart } from '../reports/MonthlyPayrollTrendsChart';
+import { getPayrollEmailLogs, retryPayrollEmail } from '../../utils/emailService';
+
+/**
+ * FailedEmails Module within ReportsView
+ * Specifically filters for emails with 'failed' status and adds a 'Retry' action button for each entry,
+ * which invokes the email service again for that specific payroll record.
+ */
+export const FailedEmails: React.FC = () => {
+  const { emailDeliveryLogs, retryEmailPayslip } = useApp();
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Specifically filter for emails with 'failed' status
+  const failedContextLogs = emailDeliveryLogs.filter((log) => log.status === 'FAILED');
+  const failedLocalLogs = getPayrollEmailLogs().filter((log) => log.status === 'FAILED');
+
+  interface FailedEmailItem {
+    id: string;
+    payroll_id: string;
+    employee_name: string;
+    recipient_email: string;
+    pay_period: string;
+    site_id: string;
+    failure_reason: string;
+    attempts: number;
+    sent_at: string;
+    payout_ref: string;
+    payment_method: string;
+  }
+
+  const failedMap = new Map<string, FailedEmailItem>();
+
+  failedContextLogs.forEach((l) => {
+    const key = l.payroll_id || l.id;
+    failedMap.set(key, {
+      id: l.id,
+      payroll_id: l.payroll_id || l.id,
+      employee_name: l.recipient_name || 'Worker',
+      recipient_email: l.recipient_email,
+      pay_period: l.week_key,
+      site_id: l.site_id,
+      failure_reason: l.failure_reason || 'Email provider dispatch exception',
+      attempts: l.attempts || 1,
+      sent_at: l.sent_at,
+      payout_ref: l.payout_reference || 'REF-CONFIRMED',
+      payment_method: l.payment_method || 'CASH',
+    });
+  });
+
+  failedLocalLogs.forEach((l) => {
+    const key = l.payroll_id || l.id;
+    if (!failedMap.has(key)) {
+      failedMap.set(key, {
+        id: l.id,
+        payroll_id: l.payroll_id,
+        employee_name: l.employee_name,
+        recipient_email: l.recipient_email,
+        pay_period: l.pay_period,
+        site_id: l.site_id || 'SITE-001',
+        failure_reason: l.failure_reason || 'Email provider dispatch exception',
+        attempts: l.attempts || 1,
+        sent_at: l.last_attempt_at,
+        payout_ref: l.payout_reference || 'REF-CONFIRMED',
+        payment_method: l.payment_method || 'CASH',
+      });
+    }
+  });
+
+  const failedList = Array.from(failedMap.values());
+
+  const handleRetry = async (entry: FailedEmailItem) => {
+    setRetryingId(entry.id);
+    setNotice(null);
+    try {
+      // Invoke email service again for that specific payroll record
+      let res = await retryEmailPayslip(entry.id);
+      if (!res.success) {
+        const localRes = await retryPayrollEmail(entry.payroll_id || entry.id);
+        if (localRes.success) {
+          res = { success: true, message: localRes.message };
+        }
+      }
+
+      if (res.success) {
+        setNotice({
+          type: 'success',
+          message: `Payslip email re-sent successfully for ${entry.employee_name} (${entry.recipient_email}) without repeating payout.`,
+        });
+      } else {
+        setNotice({
+          type: 'error',
+          message: res.message || 'Retry failed. Error logged for retry.',
+        });
+      }
+    } catch (err: any) {
+      setNotice({
+        type: 'error',
+        message: err?.message || 'Error occurred during email retry.',
+      });
+    } finally {
+      setRetryingId(null);
+      setTimeout(() => setNotice(null), 6000);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-rose-400" />
+            <h2 className="text-base font-black text-white uppercase tracking-tight">
+              Failed Emails Module (HR Manual Retry)
+            </h2>
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+              {failedList.length} FAILED IN QUEUE
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Specifically filters for emails with 'failed' status and provides a 'Retry' action button for each entry.
+          </p>
+        </div>
+      </div>
+
+      {notice && (
+        <div
+          className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
+            notice.type === 'success'
+              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200'
+              : 'bg-rose-500/15 border-rose-500/40 text-rose-200'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {notice.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-400" />
+            )}
+            <span>{notice.message}</span>
+          </div>
+          <button onClick={() => setNotice(null)} className="text-slate-400 hover:text-white cursor-pointer">
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="bg-[#0e1a16] border border-[#234338] rounded-xl overflow-hidden shadow-lg">
+        {failedList.length === 0 ? (
+          <div className="p-10 text-center text-slate-400 text-xs space-y-2">
+            <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+            <div className="font-bold text-white text-sm">No Failed Emails Found</div>
+            <p className="text-slate-500 max-w-sm mx-auto">
+              All payroll emails are either confirmed delivered or recorded in the audit outbox.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-[#13241f] border-b border-[#234338] text-slate-400 uppercase text-[10px] font-bold tracking-wider">
+                  <th className="p-3">Status</th>
+                  <th className="p-3">Recipient Employee</th>
+                  <th className="p-3">Payroll Run &amp; Site</th>
+                  <th className="p-3">Disbursement Ref</th>
+                  <th className="p-3">Failure Error Message</th>
+                  <th className="p-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#234338]">
+                {failedList.map((entry) => {
+                  const isRetrying = retryingId === entry.id;
+
+                  return (
+                    <tr key={entry.id} className="hover:bg-[#13241f]/50 transition-colors">
+                      <td className="p-3 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                          <AlertCircle className="w-3 h-3 text-rose-400" />
+                          FAILED
+                        </span>
+                        <div className="text-[9px] text-slate-500 font-mono mt-0.5">
+                          Tries: {entry.attempts}
+                        </div>
+                      </td>
+
+                      <td className="p-3">
+                        <div className="font-bold text-white text-sm">{entry.employee_name}</div>
+                        <div className="text-[11px] text-emerald-400 font-mono flex items-center gap-1 mt-0.5">
+                          <Mail className="w-3 h-3" />
+                          <span>{entry.recipient_email}</span>
+                        </div>
+                      </td>
+
+                      <td className="p-3 whitespace-nowrap">
+                        <div className="font-bold text-slate-200">{entry.payroll_id}</div>
+                        <div className="text-[10px] text-slate-400">{entry.pay_period} · {entry.site_id}</div>
+                      </td>
+
+                      <td className="p-3 whitespace-nowrap font-mono text-[11px]">
+                        <div className="text-slate-300 font-bold">{entry.payout_ref}</div>
+                        <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-slate-800 text-slate-300">
+                          {entry.payment_method.toUpperCase()}
+                        </span>
+                      </td>
+
+                      <td className="p-3 max-w-xs">
+                        <div className="text-[10px] font-mono text-rose-300 bg-rose-950/30 p-1.5 rounded border border-rose-900/40">
+                          {entry.failure_reason}
+                        </div>
+                      </td>
+
+                      <td className="p-3 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => handleRetry(entry)}
+                          disabled={retryingId !== null}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500 text-black font-bold text-xs hover:bg-emerald-400 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${isRetrying ? 'animate-spin' : ''}`} />
+                          <span>{isRetrying ? 'Retrying...' : 'Retry'}</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export const ReportsView: React.FC = () => {
   const {
@@ -27,7 +276,8 @@ export const ReportsView: React.FC = () => {
     emailDeliveryLogs,
   } = useApp();
 
-  const [activeMainTab, setActiveMainTab] = useState<'standard' | 'canteen-aggregation' | 'dtr-email'>('standard');
+  const [activeMainTab, setActiveMainTab] = useState<'standard' | 'payroll-trends' | 'canteen-aggregation' | 'dtr-email' | 'failed-emails'>('standard');
+  const failedEmailsCount = emailDeliveryLogs.filter((l) => l.status === 'FAILED').length;
   const [showDtrEmailModal, setShowDtrEmailModal] = useState<boolean>(false);
   const [reportType, setReportType] = useState('attendance-dtr');
   const [siteFilter, setSiteFilter] = useState(currentSite);
@@ -401,6 +651,18 @@ export const ReportsView: React.FC = () => {
         </button>
 
         <button
+          onClick={() => setActiveMainTab('payroll-trends')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+            activeMainTab === 'payroll-trends'
+              ? 'bg-[#13241f] text-[#a3e635] border border-[#a3e635]/40 shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-[#13241f]/50 border border-transparent'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4 text-[#a3e635]" />
+          <span>Monthly Payroll Trends vs. Budget (Recharts)</span>
+        </button>
+
+        <button
           onClick={() => setActiveMainTab('canteen-aggregation')}
           className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
             activeMainTab === 'canteen-aggregation'
@@ -429,12 +691,37 @@ export const ReportsView: React.FC = () => {
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Auto-Schedule Active" />
           )}
         </button>
+
+        <button
+          onClick={() => setActiveMainTab('failed-emails')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+            activeMainTab === 'failed-emails'
+              ? 'bg-[#13241f] text-rose-400 border border-rose-500/40 shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-[#13241f]/50 border border-transparent'
+          }`}
+        >
+          <AlertCircle className="w-4 h-4 text-rose-400" />
+          <span>Failed Emails &amp; Retries</span>
+          {failedEmailsCount > 0 ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-black bg-rose-500/20 text-rose-300 border border-rose-500/30 animate-pulse">
+              {failedEmailsCount} Failed
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-[#13241f] text-slate-400 border border-[#234338]">
+              0
+            </span>
+          )}
+        </button>
       </div>
 
-      {activeMainTab === 'canteen-aggregation' ? (
+      {activeMainTab === 'payroll-trends' ? (
+        <MonthlyPayrollTrendsChart />
+      ) : activeMainTab === 'canteen-aggregation' ? (
         <CanteenSpendingAggregationTab />
       ) : activeMainTab === 'dtr-email' ? (
         <WeeklyDtrEmailHub initialSiteId={siteFilter} initialWeekKey={weekFilter} />
+      ) : activeMainTab === 'failed-emails' ? (
+        <FailedEmails />
       ) : (
         <>
           {/* Header */}
