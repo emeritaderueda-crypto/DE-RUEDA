@@ -28,6 +28,9 @@ import {
   createDatabaseBackup,
   restoreDatabaseBackup,
   assertSiteAccess,
+  getDatabaseDir,
+  getDatabaseFilePath,
+  getBackupDir,
 } from './src/server/database.js';
 import {
   executeDisbursement,
@@ -1106,6 +1109,9 @@ Respond with JSON:
           version: db.version,
           environment: db.metadata.environment,
           persistence_mode: 'DURABLE_ATOMIC_JSON',
+          database_dir: getDatabaseDir(),
+          database_file: getDatabaseFilePath(),
+          backup_dir: getBackupDir(),
           counts: {
             users: db.users.length,
             invitations: db.invitations.length,
@@ -1122,6 +1128,31 @@ Respond with JSON:
       }
     }
   );
+
+  // 1b. Public Database Diagnostic & Configuration Status
+  app.get('/api/database/status', (_req: Request, res: Response) => {
+    try {
+      const db = getDatabase();
+      res.json({
+        success: true,
+        status: {
+          platform: 'Node.js Express (Cloud Run / Dedicated Host)',
+          timestamp: new Date().toISOString(),
+          database_dir: getDatabaseDir(),
+          database_file: getDatabaseFilePath(),
+          d1_compatible_migrations: true,
+          database: {
+            provider: 'Durable Local JSON Store (Configurable via DATABASE_DIR)',
+            users_count: db.users.length,
+            projects_count: db.projects.length,
+            master_cutoff_state: db.master_cutoff.switch_on ? 'ON' : 'OFF',
+          },
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || 'Database status check failed' });
+    }
+  });
 
   // 2. Database Backup Endpoint (Restricted to CEO / Developer)
   app.get(

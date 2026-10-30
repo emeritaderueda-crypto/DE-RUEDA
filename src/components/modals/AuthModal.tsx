@@ -20,6 +20,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { DeRuedaLogo } from '../brand/DeRuedaLogo';
+import { safeFetchJson } from '../../utils/apiClient';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -100,9 +101,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/auth/login', {
+      const { ok, data } = await safeFetchJson<any>('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: trimmedEmail,
           password: entered,
@@ -110,23 +110,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }),
       });
 
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        if (data.pending_approval) {
+      if (!ok || !data?.success) {
+        if (data?.pending_approval) {
           setIsPendingApprovalNotice(true);
           setError(data.error || 'Account registration is pending formal approval by HR or CEO.');
           setIsSubmitting(false);
           return;
         }
 
-        if (data.require_mfa) {
+        if (data?.require_mfa) {
           setRequiresMfa(true);
           setError('Two-Factor Authentication required: enter 6-digit TOTP from your authenticator app (or recovery code).');
           setIsSubmitting(false);
           return;
         }
 
-        setError(data.error || 'Authentication failed. Please verify your credentials.');
+        setError(data?.error || 'Authentication failed. Please verify your credentials.');
         setIsSubmitting(false);
         return;
       }
@@ -166,30 +165,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setIsValidatingToken(true);
     setError('');
     try {
-      const response = await fetch('/api/auth/invitations/validate', {
+      const { ok, data } = await safeFetchJson<any>('/api/auth/invitations/validate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token: trimmed,
           email: inviteEmail.trim() || undefined,
         }),
       });
 
-      const data = await response.json();
-      if (!response.ok || !data.valid) {
-        setError(data.error || 'Invalid, expired, revoked, or already-used invitation token.');
+      if (!ok || (!data?.valid && !data?.success)) {
+        setError(data?.error || 'Invalid, expired, revoked, or already-used invitation token.');
         setTokenValidationInfo(null);
       } else {
+        const inv = data.invitation || {};
         setTokenValidationInfo({
           valid: true,
-          assignedPosition: data.invitation?.assignedPosition,
-          assignedRole: data.invitation?.assignedRole,
-          assignedSites: data.invitation?.assignedSites,
-          company: data.invitation?.company,
-          expiresAt: data.invitation?.expiresAt,
+          assignedPosition: inv.assignedPosition,
+          assignedRole: inv.assignedRole,
+          assignedSites: inv.assignedSites,
+          company: inv.company,
+          expiresAt: inv.expiresAt,
         });
-        if (data.invitation?.email && !inviteEmail) {
-          setInviteEmail(data.invitation.email);
+        if (inv.email && !inviteEmail) {
+          setInviteEmail(inv.email);
         }
       }
     } catch (err: any) {
@@ -222,9 +220,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/auth/register-invite', {
+      const { ok, data } = await safeFetchJson<any>('/api/auth/register-invite', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token: inviteToken.trim(),
           email: inviteEmail.trim(),
@@ -234,9 +231,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         }),
       });
 
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        setError(data.error || 'Failed to complete invitation registration.');
+      if (!ok || !data?.success) {
+        setError(data?.error || 'Failed to complete invitation registration.');
       } else {
         setRegistrationSuccess({
           email: data.email || inviteEmail,

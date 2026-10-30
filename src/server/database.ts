@@ -5,9 +5,27 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_DIR = path.resolve(__dirname, '../../data');
-const DB_FILE_PATH = path.join(DATA_DIR, 'derueda_erp_store.json');
-const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+
+/**
+ * Returns the resolved persistent database directory.
+ * Reads process.env.DATABASE_DIR if set (e.g. './data' or absolute path).
+ * Falls back to resolving '../../data' relative to the server source or current working directory.
+ */
+export function getDatabaseDir(): string {
+  const envDir = process.env.DATABASE_DIR?.trim();
+  if (envDir && envDir.length > 0) {
+    return path.isAbsolute(envDir) ? envDir : path.resolve(process.cwd(), envDir);
+  }
+  return path.resolve(__dirname, '../../data');
+}
+
+export function getDatabaseFilePath(): string {
+  return path.join(getDatabaseDir(), 'derueda_erp_store.json');
+}
+
+export function getBackupDir(): string {
+  return path.join(getDatabaseDir(), 'backups');
+}
 
 export interface ErpDatabaseSchema {
   version: string;
@@ -392,13 +410,19 @@ function createDefaultSeed(): ErpDatabaseSchema {
 // In-Memory cache synchronized with durable file storage
 let cachedDb: ErpDatabaseSchema | null = null;
 
+export function clearDatabaseCache(): void {
+  cachedDb = null;
+}
+
 // Ensure storage directories exist
-function ensureDataDirectories(): void {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+export function ensureDataDirectories(): void {
+  const dataDir = getDatabaseDir();
+  const backupDir = getBackupDir();
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
   }
-  if (!fs.existsSync(BACKUP_DIR)) {
-    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  if (!fs.existsSync(backupDir)) {
+    fs.mkdirSync(backupDir, { recursive: true });
   }
 }
 
@@ -407,10 +431,11 @@ export function getDatabase(): ErpDatabaseSchema {
   if (cachedDb) return cachedDb;
 
   ensureDataDirectories();
+  const dbFilePath = getDatabaseFilePath();
 
-  if (fs.existsSync(DB_FILE_PATH)) {
+  if (fs.existsSync(dbFilePath)) {
     try {
-      const raw = fs.readFileSync(DB_FILE_PATH, 'utf-8');
+      const raw = fs.readFileSync(dbFilePath, 'utf-8');
       const parsed = JSON.parse(raw);
       if (parsed && parsed.version && Array.isArray(parsed.users)) {
         cachedDb = parsed;
@@ -432,11 +457,13 @@ export function persistDatabase(db: ErpDatabaseSchema): void {
   ensureDataDirectories();
   db.updated_at = new Date().toISOString();
 
-  const tempPath = path.join(DATA_DIR, `derueda_erp_store.tmp.${Date.now()}`);
+  const dataDir = getDatabaseDir();
+  const dbFilePath = getDatabaseFilePath();
+  const tempPath = path.join(dataDir, `derueda_erp_store.tmp.${Date.now()}`);
   const data = JSON.stringify(db, null, 2);
 
   fs.writeFileSync(tempPath, data, 'utf-8');
-  fs.renameSync(tempPath, DB_FILE_PATH);
+  fs.renameSync(tempPath, dbFilePath);
   cachedDb = db;
 }
 
@@ -452,7 +479,7 @@ export function createDatabaseBackup(actorEmail = 'system'): {
   const timestamp = new Date().toISOString();
   const backupId = `DRC_BACKUP_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
   const filename = `${backupId}.json`;
-  const filePath = path.join(BACKUP_DIR, filename);
+  const filePath = path.join(getBackupDir(), filename);
 
   const backupData = {
     backup_id: backupId,

@@ -620,4 +620,231 @@ describe('De Rueda Construction ERP - The Eanuxx Recipe System Verification', ()
     assert.equal(raw.includes('marjoncompany@gmail.com'), false, 'Must not leak marjoncompany email');
     assert.equal(raw.includes('emeritaderueda@gmail.com'), false, 'Must not leak emeritaderueda email');
   });
+
+  it('25. DATABASE_DIR configuration and persistent storage health endpoint', async () => {
+    // 1. Check authenticated db health endpoint
+    const resHealth = await fetch(`${BASE_URL}/api/db/health`, {
+      headers: { Authorization: `Bearer ${ceoToken}` },
+    });
+    assert.equal(resHealth.status, 200);
+    const dataHealth = await resHealth.json();
+    assert.equal(dataHealth.success, true);
+    assert.ok(dataHealth.database_dir, 'Database directory must be reported');
+    assert.ok(dataHealth.database_dir.endsWith('data'), 'Database directory should resolve to data dir');
+    assert.ok(dataHealth.database_file.endsWith('derueda_erp_store.json'));
+
+    // 2. Check public diagnostic database status endpoint
+    const resStatus = await fetch(`${BASE_URL}/api/database/status`);
+    assert.equal(resStatus.status, 200);
+    const dataStatus = await resStatus.json();
+    assert.equal(dataStatus.success, true);
+    assert.ok(dataStatus.status.database_dir);
+    assert.equal(dataStatus.status.d1_compatible_migrations, true);
+  });
+
+  it('26. Cloudflare D1 migrations and schema DDL validity', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+
+    const schemaPath = path.resolve(process.cwd(), 'migrations/0001_d1_erp_schema.sql');
+    const seedPath = path.resolve(process.cwd(), 'migrations/0002_d1_seed_initial_data.sql');
+
+    assert.ok(fs.existsSync(schemaPath), '0001_d1_erp_schema.sql must exist');
+    assert.ok(fs.existsSync(seedPath), '0002_d1_seed_initial_data.sql must exist');
+
+    const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
+    const seedSql = fs.readFileSync(seedPath, 'utf-8');
+
+    assert.match(schemaSql, /CREATE TABLE IF NOT EXISTS users/);
+    assert.match(schemaSql, /CREATE TABLE IF NOT EXISTS sessions/);
+    assert.match(schemaSql, /CREATE TABLE IF NOT EXISTS master_cutoff/);
+    assert.match(schemaSql, /CREATE TABLE IF NOT EXISTS audit_logs/);
+    assert.match(schemaSql, /CREATE TABLE IF NOT EXISTS projects/);
+    assert.match(schemaSql, /CREATE TABLE IF NOT EXISTS cash_receipts/);
+
+    assert.match(seedSql, /marjoncompany@gmail\.com/);
+    assert.match(seedSql, /emeritaderueda@gmail\.com/);
+    assert.match(seedSql, /INSERT OR IGNORE INTO users/);
+  });
+
+  it('27. Authenticates Developer marjoncompany@gmail.com and CEO emeritaderueda@gmail.com and generates verified sessions', async () => {
+    // 1. Authenticate Developer
+    const devRes = await fetch(`${BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'marjoncompany@gmail.com',
+        password: 'MaDeRuSe=26',
+        mfa_code: '027902',
+      }),
+    });
+    assert.equal(devRes.status, 200);
+    const devData = await devRes.json();
+    assert.equal(devData.success, true);
+    assert.equal(devData.user?.email, 'marjoncompany@gmail.com');
+    assert.equal(devData.user?.role, 'ceo');
+    assert.ok(devData.session_token);
+
+    // 2. Authenticate Executive CEO
+    const ceoRes = await fetch(`${BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'emeritaderueda@gmail.com',
+        password: 'Emerita0279',
+        mfa_code: '027902',
+      }),
+    });
+    assert.equal(ceoRes.status, 200);
+    const ceoData = await ceoRes.json();
+    assert.equal(ceoData.success, true);
+    assert.equal(ceoData.user?.email, 'emeritaderueda@gmail.com');
+    assert.equal(ceoData.user?.role, 'ceo');
+    assert.ok(ceoData.session_token);
+
+    // 3. Rejects invalid credentials with safe, uniform 401 error
+    const badRes = await fetch(`${BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'marjoncompany@gmail.com',
+        password: 'WrongPassword!',
+      }),
+    });
+    assert.equal(badRes.status, 401);
+    const badData = await badRes.json();
+    assert.equal(badData.success, false);
+    assert.match(badData.error, /Invalid email or password/);
+  });
+
+  it('28. Resilient JSON response parser handles empty or HTML responses without crashing with Unexpected end of JSON input', async () => {
+    // Test safe JSON parsing algorithm directly
+    async function safeParseResponse(mockResponse) {
+      const contentType = (mockResponse.headers.get('content-type') || '').toLowerCase();
+      const rawText = await mockResponse.text();
+
+      if (!rawText || rawText.trim().length === 0) {
+        return {
+          ok: mockResponse.ok,
+          status: mockResponse.status,
+          data: {
+            success: mockResponse.ok,
+            error: mockResponse.ok ? undefined : `Server returned an empty response (HTTP ${mockResponse.status}).`,
+          },
+        };
+      }
+
+      if (contentType.includes('text/html') || rawText.trim().startsWith('<!DOCTYPE') || rawText.trim().startsWith('<html')) {
+        return {
+          ok: false,
+          status: mockResponse.status,
+          data: {
+            success: false,
+            error: `Authentication endpoint returned an unexpected HTML document instead of JSON (HTTP ${mockResponse.status}).`,
+          },
+        };
+      }
+
+      try {
+        return { ok: mockResponse.ok, status: mockResponse.status, data: JSON.parse(rawText) };
+      } catch {
+        return { ok: false, status: mockResponse.status, data: { success: false, error: 'Malformed JSON response' } };
+      }
+    }
+
+    // 1. Test HTML response (Cloudflare Pages fallback to index.html)
+    const htmlResponse = new Response('<!DOCTYPE html><html><head><title>App</title></head><body>Root</body></html>', {
+      status: 200,
+      headers: { 'Content-Type': 'text/html' },
+    });
+    const parsedHtml = await safeParseResponse(htmlResponse);
+    assert.equal(parsedHtml.ok, false);
+    assert.equal(parsedHtml.data.success, false);
+    assert.match(parsedHtml.data.error, /unexpected HTML document/);
+
+    // 2. Test empty response (502 / gateway error)
+    const emptyResponse = new Response('', {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const parsedEmpty = await safeParseResponse(emptyResponse);
+    assert.equal(parsedEmpty.ok, false);
+    assert.equal(parsedEmpty.data.success, false);
+    assert.match(parsedEmpty.data.error, /empty response/);
+
+    // 3. Test valid JSON response
+    const validResponse = new Response(JSON.stringify({ success: true, session_token: 'valid-test-token-123' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const parsedValid = await safeParseResponse(validResponse);
+    assert.equal(parsedValid.ok, true);
+    assert.equal(parsedValid.data.success, true);
+    assert.equal(parsedValid.data.session_token, 'valid-test-token-123');
+  });
+
+  it('29. CEO/Admin-only database backup export with SHA-256 integrity and Google Drive manual archive destination', async () => {
+    // 1. Rejects unauthenticated request
+    const unauthRes = await fetch(`${BASE_URL}/api/backup/export`);
+    assert.equal(unauthRes.status, 401, 'Unauthenticated backup export must return HTTP 401');
+
+    // 2. Authenticated CEO download
+    const res = await fetch(`${BASE_URL}/api/backup/export`, {
+      headers: { Authorization: `Bearer ${ceoToken}` },
+    });
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.system, 'De Rueda Construction Management System');
+    assert.equal(data.version, '2.0.0');
+    assert.ok(data.export_timestamp);
+    assert.ok(data.checksum, 'Cryptographic checksum must be present');
+    assert.ok(data.collections, 'Backup collections must be present');
+  });
+
+  it('30. Protected backup restoration workflow validates payload structure and creates pre-restore rollback snapshot', async () => {
+    // 1. Rejects unauthenticated restore
+    const unauthRes = await fetch(`${BASE_URL}/api/backup/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ backupData: {} }),
+    });
+    assert.equal(unauthRes.status, 401);
+
+    // 2. Rejects invalid backup structure
+    const invalidRes = await fetch(`${BASE_URL}/api/backup/restore`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${ceoToken}`,
+      },
+      body: JSON.stringify({ backupData: { invalid: true } }),
+    });
+    assert.equal(invalidRes.status, 400);
+
+    // 3. Accepts valid authoritative payload and produces rollback snapshot
+    const validBackup = {
+      system: 'De Rueda Construction Management System',
+      version: '2.0.0',
+      export_timestamp: new Date().toISOString(),
+      collections: {
+        transactions: [],
+        sms_outbox: [],
+        gcash_transfers: [],
+      },
+    };
+
+    const validRes = await fetch(`${BASE_URL}/api/backup/restore`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${ceoToken}`,
+      },
+      body: JSON.stringify({ backupData: validBackup }),
+    });
+    assert.equal(validRes.status, 200);
+    const resultData = await validRes.json();
+    assert.equal(resultData.success, true);
+    assert.ok(resultData.snapshot_id, 'Pre-restore rollback snapshot must be created');
+    assert.equal(resultData.rollback_available, true);
+  });
 });

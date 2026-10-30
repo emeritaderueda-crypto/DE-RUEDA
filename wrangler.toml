@@ -1,0 +1,10 @@
+name = "de-rueda-construction-erp"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "derueda-erp-db"
+database_id = "derueda-erp-db"
+migrations_dir = "migrations"

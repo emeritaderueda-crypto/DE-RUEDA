@@ -66,6 +66,7 @@ import {
 } from '../../utils/offlineStorage';
 import { AdminAccountsSecurityTab } from '../settings/AdminAccountsSecurityTab';
 import { PayMongoEnvConfigDialog } from '../payments/PayMongoEnvConfigDialog';
+import { DatabaseBackupPanel } from '../settings/DatabaseBackupPanel';
 
 export const SettingsView: React.FC = () => {
   const {
@@ -2073,57 +2074,8 @@ export const SettingsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Authoritative System Backup & Restore Card (Specification Section 1) */}
-          <div className="bg-[#0e1a16] border border-[#234338] rounded-xl p-5 space-y-4 shadow-lg">
-            <div className="flex items-center justify-between pb-3 border-b border-[#234338] flex-wrap gap-2">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <HardDrive className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <span>Authoritative Storage &amp; Dependable Backups</span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                      RFC Cryptographic Checksum
-                    </span>
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    Download complete snapshot of ERP records or restore system from a verified backup JSON file
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {backupMessage && (
-              <div className="p-2.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
-                {backupMessage}
-              </div>
-            )}
-
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={handleExportBackup}
-                disabled={isBackupExporting}
-                className="px-4 py-2.5 bg-[#13241f] hover:bg-[#1a342c] border border-[#234338] hover:border-emerald-500 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-2 cursor-pointer shadow-sm"
-              >
-                <Download className="w-4 h-4 text-[#a3e635]" />
-                <span>{isBackupExporting ? 'Exporting...' : 'Download Authoritative Backup (.json)'}</span>
-              </button>
-
-              <label className="px-4 py-2.5 bg-[#13241f] hover:bg-[#1a342c] border border-[#234338] hover:border-sky-500 text-slate-200 hover:text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-2 cursor-pointer shadow-sm">
-                <UploadCloud className="w-4 h-4 text-sky-400" />
-                <span>{isBackupRestoring ? 'Restoring System...' : 'Restore from Backup JSON'}</span>
-                <input
-                  type="file"
-                  accept=".json,application/json"
-                  className="hidden"
-                  onChange={handleRestoreBackupFile}
-                  disabled={isBackupRestoring}
-                />
-              </label>
-            </div>
-          </div>
+          {/* Comprehensive Database Backup & Restoration Panel with Google Drive Archival */}
+          <DatabaseBackupPanel />
 
           {/* Factory Default Reset & Demo Data Purge Card */}
           <div className="bg-[#0e1a16] border border-rose-900/40 rounded-xl p-5 space-y-3">
