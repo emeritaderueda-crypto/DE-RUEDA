@@ -1,5 +1,5 @@
-import { ServerUserRecord, ServerSession, SecurityAuditEntry } from './auth.js';
-import { ErpDatabaseSchema } from './database.js';
+import type { ServerUserRecord, ServerSession, SecurityAuditEntry } from './auth.js';
+import type { ErpDatabaseSchema } from './database.js';
 
 /**
  * Cloudflare D1 Database Interfaces (Compatible with @cloudflare/workers-types)
@@ -158,6 +158,7 @@ CREATE TABLE IF NOT EXISTS cash_receipts (
 /**
  * Ensures D1 tables and baseline seed exist.
  * Safe and non-destructive: never overwrites existing records.
+ * Production security: Does not inject hardcoded default credentials or MFA secrets.
  */
 export async function ensureD1Schema(db: D1Database): Promise<{ initialized: boolean; message: string }> {
   try {
@@ -173,65 +174,10 @@ export async function ensureD1Schema(db: D1Database): Promise<{ initialized: boo
       ).bind(now, 'security.initialization@deruedaconstruction.com', 'Initial security baseline (fail-closed)').run();
     }
 
-    // 3. Check if baseline authorized users exist
-    const userCount = await db.prepare('SELECT COUNT(*) as count FROM users').first<{ count: number }>();
-    if (!userCount || userCount.count === 0) {
+    // 3. Baseline site projects
+    const projectCount = await db.prepare('SELECT COUNT(*) as count FROM projects').first<{ count: number }>();
+    if (!projectCount || projectCount.count === 0) {
       const now = new Date().toISOString();
-      // Insert Developer Account (marjoncompany@gmail.com)
-      await db.prepare(`
-        INSERT OR IGNORE INTO users (
-          id, email, name, role, position, assigned_sites, company,
-          password_hash, password_salt, mfa_enabled, mfa_secret, backup_codes,
-          status, approved_by, approved_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        'USR-DEV-MARJON',
-        'marjoncompany@gmail.com',
-        'Developer & Lead Systems Architect (Marjon Company)',
-        'ceo',
-        'Developer / Super Admin',
-        '["ALL"]',
-        'De Rueda Construction Inc.',
-        '1b4f92f96bd1e9fdc4580f6f595edf232187bd8b755b06de5f6224db0aa16d1307c299092925bfab9ab4db29cae074a30139d465abf49af4e9e613f46287699a',
-        'drc_salt_dev_2026',
-        1,
-        'JBSWY3DPEHPK3PXP',
-        '["c1b07221b34bb7678fc7bbd5668aa1c8ff4a3901b87b7aebba7101adfe5606d39d91f216dd1972f7d6391a6d71b3e92cf4a01c40be6a89c8d5d14cf05c3c0d01"]',
-        'active',
-        'Corporate Charter / Developer Provisioning',
-        now,
-        '2026-01-01T08:00:00Z',
-        now
-      ).run();
-
-      // Insert Executive CEO Account (emeritaderueda@gmail.com)
-      await db.prepare(`
-        INSERT OR IGNORE INTO users (
-          id, email, name, role, position, assigned_sites, company,
-          password_hash, password_salt, mfa_enabled, mfa_secret, backup_codes,
-          status, approved_by, approved_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        'USR-CEO-EMERITA',
-        'emeritaderueda@gmail.com',
-        'Emerita De Rueda',
-        'ceo',
-        'Chief Executive Officer (CEO)',
-        '["ALL"]',
-        'De Rueda Construction Inc.',
-        '3ea75e47c1f8a846c4aa637da7576550ec4feef2287f34c26a02b793132e0e0a5bb86e885dcf545191cfaefcbb3d8c116ff1a0dbdaea502591ae9a04a5fb8cb6',
-        'drc_salt_ceo_2026',
-        1,
-        'JBSWY3DPEHPK3PXP',
-        '["c1b07221b34bb7678fc7bbd5668aa1c8ff4a3901b87b7aebba7101adfe5606d39d91f216dd1972f7d6391a6d71b3e92cf4a01c40be6a89c8d5d14cf05c3c0d01"]',
-        'active',
-        'Board of Directors / Corporate Charter',
-        now,
-        '2026-01-01T08:00:00Z',
-        now
-      ).run();
-
-      // Baseline site projects
       await db.prepare(`
         INSERT OR IGNORE INTO projects (site_id, name, location, status, progress, head_engineer, updated_at)
         VALUES 

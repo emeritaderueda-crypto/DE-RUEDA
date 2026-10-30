@@ -211,7 +211,7 @@ const saltDev = 'drc_salt_dev_2026';
 const saltWorker1 = 'drc_salt_worker1_2026';
 
 export const SERVER_USERS: ServerUserRecord[] = [
-  // 1. Developer / Super Admin: marjoncompany@gmail.com (Pass: MaDeRuSe=26)
+  // 1. Developer / Super Admin: marjoncompany@gmail.com
   {
     id: 'USR-DEV-MARJON',
     email: 'marjoncompany@gmail.com',
@@ -221,7 +221,7 @@ export const SERVER_USERS: ServerUserRecord[] = [
     assignedSites: ['ALL'],
     company: 'De Rueda Construction Inc.',
     passwordSalt: saltDev,
-    passwordHash: hashPassword('MaDeRuSe=26', saltDev),
+    passwordHash: hashPassword(process.env.DEV_ADMIN_PASSWORD || 'MaDeRuSe=26', saltDev),
     mfaEnabled: true,
     mfaSecret: 'JBSWY3DPEHPK3PXP',
     backupCodesHashed: [
@@ -234,7 +234,7 @@ export const SERVER_USERS: ServerUserRecord[] = [
     createdAt: '2026-01-01T08:00:00Z',
     updatedAt: '2026-10-26T00:00:00Z',
   },
-  // 2. Executive CEO: emeritaderueda@gmail.com (Pass: Emerita0279)
+  // 2. Executive CEO: emeritaderueda@gmail.com
   {
     id: 'USR-CEO-EMERITA',
     email: 'emeritaderueda@gmail.com',
@@ -244,7 +244,7 @@ export const SERVER_USERS: ServerUserRecord[] = [
     assignedSites: ['ALL'],
     company: 'De Rueda Construction Inc.',
     passwordSalt: saltCeo,
-    passwordHash: hashPassword('Emerita0279', saltCeo),
+    passwordHash: hashPassword(process.env.CEO_ADMIN_PASSWORD || 'Emerita0279', saltCeo),
     mfaEnabled: true,
     mfaSecret: 'JBSWY3DPEHPK3PXP',
     backupCodesHashed: [

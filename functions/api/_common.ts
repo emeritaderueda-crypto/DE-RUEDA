@@ -175,7 +175,7 @@ export function generateSessionTokenWeb(): string {
  * even during initial Cloudflare D1 provisioning or cold-starts.
  */
 export const FALLBACK_ACCOUNTS = [
-  // 1. Developer Account: marjoncompany@gmail.com / MaDeRuSe=26
+  // 1. Developer Account: marjoncompany@gmail.com
   {
     id: 'USR-DEV-MARJON',
     email: 'marjoncompany@gmail.com',
@@ -197,7 +197,7 @@ export const FALLBACK_ACCOUNTS = [
     createdAt: '2026-01-01T08:00:00Z',
     updatedAt: '2026-10-26T00:00:00Z',
   },
-  // 2. Executive CEO Account: emeritaderueda@gmail.com / Emerita0279
+  // 2. Executive CEO Account: emeritaderueda@gmail.com
   {
     id: 'USR-CEO-EMERITA',
     email: 'emeritaderueda@gmail.com',

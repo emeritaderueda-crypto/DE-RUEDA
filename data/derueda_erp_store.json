@@ -1,13 +1,13 @@
 {
   "version": "2.0.0",
   "created_at": "2026-10-26T14:24:55.985Z",
-  "updated_at": "2026-10-30T10:15:23.665Z",
+  "updated_at": "2026-10-30T10:43:44.171Z",
   "metadata": {
     "system_name": "De Rueda Construction ERP",
     "organization": "De Rueda Construction Inc.",
     "environment": "production",
     "durable_persistence": true,
-    "last_backup_at": "2026-10-30T10:15:23.009Z"
+    "last_backup_at": "2026-10-30T10:43:43.669Z"
   },
   "master_cutoff": {
     "switch_on": false,
@@ -248,7 +248,7 @@
       "status": "Finished Early",
       "progress": 68,
       "head_engineer": "Engr. Marco De Rueda",
-      "updated_at": "2026-10-30T10:15:23.014Z"
+      "updated_at": "2026-10-30T10:43:43.673Z"
     },
     {
       "site_id": "SITE-002",
@@ -270,6 +270,54 @@
     }
   ],
   "cash_receipts": [
+    {
+      "receipt_id": "CSH-REC-1793357024171-641",
+      "payroll_id": "PAY-CASH-AUTOMAIL-1793357024169",
+      "employee_id": "EMP-0003",
+      "pay_period": "Week 42 (Oct 19 - Oct 25, 2026)",
+      "amount": 4850,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-30T10:43:44.171Z",
+      "witness_notes": "Confirmed cash wage envelope handover with photographic voucher."
+    },
+    {
+      "receipt_id": "CSH-REC-1793357023406-628",
+      "payroll_id": "PAY-W41-1793357023403",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-30T10:43:43.406Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
+    {
+      "receipt_id": "CSH-REC-1793356980698-609",
+      "payroll_id": "PAY-CASH-AUTOMAIL-1793356980696",
+      "employee_id": "EMP-0003",
+      "pay_period": "Week 42 (Oct 19 - Oct 25, 2026)",
+      "amount": 4850,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-30T10:43:00.698Z",
+      "witness_notes": "Confirmed cash wage envelope handover with photographic voucher."
+    },
+    {
+      "receipt_id": "CSH-REC-1793356979818-787",
+      "payroll_id": "PAY-W41-1793356979815",
+      "employee_id": "EMP-0002",
+      "pay_period": "Week 41 (Oct 19 - Oct 25, 2026)",
+      "amount": 5200,
+      "photo_evidence_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "confirmed_by": "operations@deruedaconstruction.com",
+      "confirmed_role": "ceo",
+      "timestamp": "2026-10-30T10:42:59.818Z",
+      "witness_notes": "Cash envelope received and signed by worker in presence of Site Timekeeper"
+    },
     {
       "receipt_id": "CSH-REC-1793355323665-444",
       "payroll_id": "PAY-CASH-AUTOMAIL-1793355323663",

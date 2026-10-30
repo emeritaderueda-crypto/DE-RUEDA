@@ -1,10 +1,17 @@
+# Cloudflare Pages Configuration for De Rueda Construction ERP
 name = "de-rueda-construction-erp"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "dist"
 
+# ==============================================================================
+# Cloudflare D1 Database Binding
+# ==============================================================================
+# Primary Persistent Production Database for De Rueda Construction ERP
+# Binding name "DB" is referenced in functions/api/ and src/server/d1Database.ts
+# ==============================================================================
 [[d1_databases]]
 binding = "DB"
 database_name = "derueda-erp-db"
-database_id = "derueda-erp-db"
+database_id = "7cbf9162-4195-4a90-aca5-1ade12e736f0"
 migrations_dir = "migrations"

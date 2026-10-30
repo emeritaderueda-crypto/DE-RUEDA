@@ -1,7 +1,7 @@
 -- =============================================================================
 -- Cloudflare D1 Database Migration: 0002_d1_seed_initial_data.sql
--- Seed baseline security configurations and verified master accounts
--- Safe execution: uses INSERT OR IGNORE to never overwrite existing records
+-- Baseline Operational and Project Configuration
+-- Safe execution: uses INSERT OR IGNORE to never overwrite existing records.
 -- =============================================================================
 
 -- 1. Metadata baseline
@@ -13,6 +13,7 @@ VALUES
   ('database_version', '2.0.0', datetime('now'));
 
 -- 2. Master Cut-off Fail-Closed Switch (Default: 0 = OFF/Engaged)
+-- Ensures system fails closed until explicitly authorized by executive CEO
 INSERT OR IGNORE INTO master_cutoff (id, switch_on, updated_at, updated_by, reason)
 VALUES (
   1,
@@ -22,8 +23,7 @@ VALUES (
   'Initial baseline cutover: Master cut-off engaged (fail-closed)'
 );
 
--- 3. Developer Super Admin Account: marjoncompany@gmail.com (Pass: MaDeRuSe=26)
--- PBKDF2 10,000 iterations, 64-byte hex digest with salt 'drc_salt_dev_2026'
+-- 3. Developer Super Admin Account: marjoncompany@gmail.com
 INSERT OR IGNORE INTO users (
   id,
   email,
@@ -62,8 +62,7 @@ INSERT OR IGNORE INTO users (
   datetime('now')
 );
 
--- 4. Executive CEO Account: emeritaderueda@gmail.com (Pass: Emerita0279)
--- PBKDF2 10,000 iterations, 64-byte hex digest with salt 'drc_salt_ceo_2026'
+-- 4. Executive CEO Account: emeritaderueda@gmail.com
 INSERT OR IGNORE INTO users (
   id,
   email,
@@ -109,5 +108,6 @@ VALUES
   ('SITE-002', 'Subic Industrial Warehouse', 'Subic Bay Freeport Zone', 'Active', 42.0, 'Foreman Aris Valdez', datetime('now')),
   ('SITE-003', 'Balanga High-Rise Residences', 'Balanga City, Bataan', 'Active', 85.0, 'Foreman Danilo Santos', datetime('now'));
 
+-- 6. Log migration completion
 INSERT OR IGNORE INTO d1_migrations (version, applied_at, description)
-VALUES ('0002_d1_seed_initial_data', datetime('now'), 'Baseline seeds for De Rueda Construction ERP');
+VALUES ('0002_d1_seed_initial_data', datetime('now'), 'Baseline configuration and project seeds for De Rueda Construction ERP');
