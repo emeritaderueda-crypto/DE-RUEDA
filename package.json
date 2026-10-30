@@ -4,8 +4,8 @@
   "version": "1.0.0",
   "type": "module",
   "engines": {
-    "node": ">=20.19.0",
-    "npm": ">=10.2.0"
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
   },
   "scripts": {
     "dev": "tsx server.ts",
@@ -35,7 +35,7 @@
     "react-dom": "^19.0.1",
     "recharts": "^3.10.1",
     "vite": "^8.3.0",
-    "xlsx": "^0.18.5"
+    "write-excel-file": "^4.1.1"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

@@ -11,6 +11,8 @@ export interface PagesEnv {
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
   EMAIL_PROVIDER?: string;
+  INITIAL_PROVISIONING_KEY?: string;
+  BOOTSTRAP_TOKEN?: string;
 }
 
 export const CORS_HEADERS = {

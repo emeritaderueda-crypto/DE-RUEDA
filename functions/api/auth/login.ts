@@ -137,11 +137,23 @@ export async function onRequestPost(context: { request: Request; env: PagesEnv }
     // Verify TOTP
     let mfaPassed = await verifyTotpWeb(mfaCode, user.mfaSecret);
 
-    // If TOTP fails, check backup recovery codes
+    // If TOTP fails, check backup recovery codes (strictly one-time use)
+    let usedBackupCode = false;
     if (!mfaPassed && Array.isArray(user.backupCodesHashed)) {
       const codeHash = await hashPasswordWeb(mfaCode, user.passwordSalt, env.PBKDF2_PEPPER || '');
-      if (user.backupCodesHashed.includes(codeHash)) {
+      const codeIdx = user.backupCodesHashed.indexOf(codeHash);
+      if (codeIdx !== -1) {
         mfaPassed = true;
+        usedBackupCode = true;
+        // Consume one-time recovery code
+        user.backupCodesHashed.splice(codeIdx, 1);
+        try {
+          await env.DB.prepare('UPDATE users SET backup_codes = ?, updated_at = ? WHERE id = ?')
+            .bind(JSON.stringify(user.backupCodesHashed), new Date().toISOString(), user.id)
+            .run();
+        } catch (consumeErr) {
+          console.error('[D1 Recovery Code Invalidation Warning]:', consumeErr);
+        }
       }
     }
 
@@ -172,7 +184,7 @@ export async function onRequestPost(context: { request: Request; env: PagesEnv }
     lastActiveAt: Date.now(),
   };
 
-  // Persist session strictly to Cloudflare D1
+  // 7. Persist session strictly to Cloudflare D1. FAIL CLOSED if persistence fails.
   try {
     await d1CreateSession(env.DB, sessionRecord);
     await d1AddAuditLog(env.DB, {
@@ -185,8 +197,13 @@ export async function onRequestPost(context: { request: Request; env: PagesEnv }
       status: 'SUCCESS',
       ipAddress: request.headers.get('cf-connecting-ip') || 'edge-client',
     });
-  } catch (saveErr) {
+  } catch (saveErr: any) {
     console.error('[D1 Session Save Error] Could not persist session to D1:', saveErr);
+    return errorResponse(
+      'Authentication failed: unable to establish secure session in persistent storage. Session persistence failed.',
+      500,
+      'SESSION_PERSISTENCE_FAILED'
+    );
   }
 
   return jsonResponse({

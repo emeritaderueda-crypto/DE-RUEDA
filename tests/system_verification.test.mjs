@@ -662,9 +662,12 @@ describe('De Rueda Construction ERP - The Eanuxx Recipe System Verification', ()
     assert.match(schemaSql, /CREATE TABLE IF NOT EXISTS projects/);
     assert.match(schemaSql, /CREATE TABLE IF NOT EXISTS cash_receipts/);
 
-    assert.match(seedSql, /marjoncompany@gmail\.com/);
-    assert.match(seedSql, /emeritaderueda@gmail\.com/);
-    assert.match(seedSql, /INSERT OR IGNORE INTO users/);
+    assert.match(seedSql, /INSERT OR IGNORE INTO metadata/);
+    assert.match(seedSql, /INSERT OR IGNORE INTO master_cutoff/);
+    assert.match(seedSql, /INSERT OR IGNORE INTO projects/);
+    assert.doesNotMatch(seedSql, /INSERT OR IGNORE INTO users/, 'Seed migration must not hardcode user accounts');
+    assert.doesNotMatch(seedSql, /password_hash/, 'Seed migration must not hardcode password hashes');
+    assert.doesNotMatch(seedSql, /mfa_secret/, 'Seed migration must not hardcode MFA secrets');
   });
 
   it('27. Authenticates Developer marjoncompany@gmail.com and CEO emeritaderueda@gmail.com and generates verified sessions', async () => {

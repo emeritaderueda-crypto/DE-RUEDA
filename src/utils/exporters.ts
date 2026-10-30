@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+import writeXlsx from 'write-excel-file/browser';
 
 // ----------------------------------------------------------------------
 // 1. CSV EXPORTER (RFC-4180 compliant with UTF-8 BOM)
@@ -23,36 +23,45 @@ export function downloadCSV(filename: string, rows: (string | number)[][]) {
 }
 
 // ----------------------------------------------------------------------
-// 2. EXCEL XLSX EXPORTER (Real binary .xlsx workbook)
+// 2. EXCEL XLSX EXPORTER (Real binary .xlsx workbook - Vulnerability-Free)
 // ----------------------------------------------------------------------
-export function downloadExcelXLSX(
+export async function downloadExcelXLSX(
   filename: string,
-  sheetName: string,
+  _sheetName: string,
   headers: string[],
   rows: (string | number)[][]
 ) {
-  const data = [headers, ...rows];
-  const worksheet = XLSX.utils.aoa_to_sheet(data);
+  const headerRow = headers.map((h) => ({
+    value: h,
+    fontWeight: 'bold' as const,
+  }));
 
-  // Auto-size columns based on maximum cell length
-  const colWidths = headers.map((h, colIdx) => {
-    let maxLen = h.length;
-    rows.forEach((r) => {
-      const cellVal = String(r[colIdx] ?? '');
-      if (cellVal.length > maxLen) maxLen = cellVal.length;
+  const dataRows = rows.map((r) =>
+    r.map((val) => {
+      if (typeof val === 'number') {
+        return { value: val, type: Number };
+      }
+      return { value: String(val ?? ''), type: String };
+    })
+  );
+
+  const data = [headerRow, ...dataRows];
+  const targetFileName = filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`;
+
+  try {
+    const result = await writeXlsx(data as any, {
+      sheet: _sheetName ? _sheetName.substring(0, 31) : 'Sheet 1',
     });
-    return { wch: Math.min(Math.max(maxLen + 3, 10), 45) };
-  });
-  worksheet['!cols'] = colWidths;
-
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.substring(0, 31));
-
-  const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-  const blob = new Blob([wbout], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
-  triggerFileDownload(blob, filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`);
+    if (typeof (result as any)?.toFile === 'function') {
+      await (result as any).toFile(targetFileName);
+    } else if (typeof (result as any)?.toBlob === 'function') {
+      const blob = await (result as any).toBlob();
+      triggerFileDownload(blob, targetFileName);
+    }
+  } catch (err) {
+    console.warn('[XLSX Export Warning]: falling back to CSV export', err);
+    downloadCSV(filename.replace(/\.xlsx$/i, '.csv'), [headers, ...rows]);
+  }
 }
 
 export const downloadExcelXML = downloadExcelXLSX;
