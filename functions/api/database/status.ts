@@ -28,6 +28,9 @@ export async function onRequestGet(context: { env: PagesEnv }): Promise<Response
 
       statusInfo.database = {
         provider: 'Cloudflare D1',
+        live_connectivity: true,
+        database_name: 'derueda-erp-db',
+        database_id: '7cbf9162-4195-4a90-aca5-1ade12e736f0',
         schema_status: initResult.message,
         users_count: userCount?.count || 0,
         active_sessions_count: sessionCount?.count || 0,
@@ -38,15 +41,16 @@ export async function onRequestGet(context: { env: PagesEnv }): Promise<Response
     } catch (err: any) {
       statusInfo.database = {
         provider: 'Cloudflare D1 (Error)',
+        live_connectivity: false,
         error: err?.message || String(err),
       };
     }
   } else {
     statusInfo.database = {
-      provider: 'Edge In-Memory Seed (D1 binding not detected)',
-      notice: 'To enable full Edge persistence on Cloudflare Pages, bind a D1 database named "DB" in Cloudflare Pages dashboard under Settings > Functions > D1 database bindings.',
-      developer_accounts_ready: true,
-      command_help: 'npx wrangler d1 create derueda-erp-db && npx wrangler d1 migrations apply derueda-erp-db',
+      provider: 'None (D1 binding not detected)',
+      live_connectivity: false,
+      notice: 'To enable persistent D1 database storage on Cloudflare Pages, bind the D1 database named "derueda-erp-db" (ID: 7cbf9162-4195-4a90-aca5-1ade12e736f0) with variable name "DB" in Cloudflare Pages dashboard under Settings > Functions > D1 database bindings.',
+      command_help: 'npx wrangler d1 migrations apply derueda-erp-db --remote',
     };
   }
 

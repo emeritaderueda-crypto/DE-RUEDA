@@ -8,6 +8,9 @@ export interface PagesEnv {
   GEMINI_API_KEY?: string;
   PAYMONGO_SECRET_KEY?: string;
   EMAIL_API_KEY?: string;
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
+  EMAIL_PROVIDER?: string;
 }
 
 export const CORS_HEADERS = {
@@ -118,6 +121,37 @@ function base32Decode(base32: string): Uint8Array {
 }
 
 /**
+ * Base32 Encode for RFC 6238 TOTP secret generation
+ */
+export function base32Encode(bytes: Uint8Array): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = 0;
+  let value = 0;
+  let output = '';
+  for (let i = 0; i < bytes.length; i++) {
+    value = (value << 8) | bytes[i];
+    bits += 8;
+    while (bits >= 5) {
+      output += alphabet[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) {
+    output += alphabet[(value << (5 - bits)) & 31];
+  }
+  return output;
+}
+
+/**
+ * Generates dynamic RFC 6238 Base32 Secret using Web Crypto
+ */
+export function generateTotpSecretWeb(byteLength = 20): string {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return base32Encode(bytes);
+}
+
+/**
  * RFC 6238 Time-Based One-Time Password generator using Web Crypto HMAC-SHA1
  */
 export async function generateTotpWeb(secret: string, epochSeconds: number, windowOffset = 0): Promise<string> {
@@ -170,53 +204,66 @@ export function generateSessionTokenWeb(): string {
 }
 
 /**
- * Authoritative Pre-Seeded Corporate Accounts for Cloudflare Pages (Fail-Safe)
- * Guaranteed to match database seeds exactly, so authorized accounts ALWAYS log in
- * even during initial Cloudflare D1 provisioning or cold-starts.
+ * Generates random cryptographic salt
  */
-export const FALLBACK_ACCOUNTS = [
-  // 1. Developer Account: marjoncompany@gmail.com
-  {
-    id: 'USR-DEV-MARJON',
-    email: 'marjoncompany@gmail.com',
-    name: 'Developer & Lead Systems Architect (Marjon Company)',
-    role: 'ceo' as const,
-    position: 'Developer / Super Admin',
-    assignedSites: ['ALL'],
-    company: 'De Rueda Construction Inc.',
-    passwordSalt: 'drc_salt_dev_2026',
-    passwordHash: '1b4f92f96bd1e9fdc4580f6f595edf232187bd8b755b06de5f6224db0aa16d1307c299092925bfab9ab4db29cae074a30139d465abf49af4e9e613f46287699a',
-    mfaEnabled: true,
-    mfaSecret: 'JBSWY3DPEHPK3PXP',
-    backupCodesHashed: [
-      'c1b07221b34bb7678fc7bbd5668aa1c8ff4a3901b87b7aebba7101adfe5606d39d91f216dd1972f7d6391a6d71b3e92cf4a01c40be6a89c8d5d14cf05c3c0d01',
-    ],
-    status: 'active' as const,
-    approvedBy: 'Corporate Charter / Developer Provisioning',
-    approvedAt: '2026-01-01T08:00:00Z',
-    createdAt: '2026-01-01T08:00:00Z',
-    updatedAt: '2026-10-26T00:00:00Z',
-  },
-  // 2. Executive CEO Account: emeritaderueda@gmail.com
-  {
-    id: 'USR-CEO-EMERITA',
-    email: 'emeritaderueda@gmail.com',
-    name: 'Emerita De Rueda',
-    role: 'ceo' as const,
-    position: 'Chief Executive Officer (CEO)',
-    assignedSites: ['ALL'],
-    company: 'De Rueda Construction Inc.',
-    passwordSalt: 'drc_salt_ceo_2026',
-    passwordHash: '3ea75e47c1f8a846c4aa637da7576550ec4feef2287f34c26a02b793132e0e0a5bb86e885dcf545191cfaefcbb3d8c116ff1a0dbdaea502591ae9a04a5fb8cb6',
-    mfaEnabled: true,
-    mfaSecret: 'JBSWY3DPEHPK3PXP',
-    backupCodesHashed: [
-      'c1b07221b34bb7678fc7bbd5668aa1c8ff4a3901b87b7aebba7101adfe5606d39d91f216dd1972f7d6391a6d71b3e92cf4a01c40be6a89c8d5d14cf05c3c0d01',
-    ],
-    status: 'active' as const,
-    approvedBy: 'Board of Directors / Corporate Charter',
-    approvedAt: '2026-01-01T08:00:00Z',
-    createdAt: '2026-01-01T08:00:00Z',
-    updatedAt: '2026-10-26T00:00:00Z',
-  },
-];
+export function generateSaltWeb(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Authoritative session authenticator for Cloudflare Pages Functions.
+ * Validates token strictly against Cloudflare D1 persistent sessions.
+ * Never allows arbitrary bypasses.
+ */
+export async function getAuthenticatedUserFromRequest(
+  request: Request,
+  env: PagesEnv,
+  allowedRoles?: string[]
+): Promise<{ user: any | null; errorResponse: Response | null }> {
+  const authHeader = request.headers.get('authorization') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+
+  if (!token) {
+    return {
+      user: null,
+      errorResponse: errorResponse('Authentication required: missing Bearer token', 401, 'UNAUTHORIZED'),
+    };
+  }
+
+  if (!env.DB) {
+    return {
+      user: null,
+      errorResponse: errorResponse('Database service unavailable: Cloudflare D1 binding required', 503, 'DATABASE_UNAVAILABLE'),
+    };
+  }
+
+  try {
+    const session = await d1GetSession(env.DB, token);
+    if (!session || !session.user) {
+      return {
+        user: null,
+        errorResponse: errorResponse('Session token expired or invalid', 401, 'INVALID_SESSION'),
+      };
+    }
+
+    if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(session.user.role)) {
+      return {
+        user: null,
+        errorResponse: errorResponse(`Forbidden: Role '${session.user.role}' is not authorized for this resource`, 403, 'FORBIDDEN'),
+      };
+    }
+
+    return { user: session.user, errorResponse: null };
+  } catch (err: any) {
+    return {
+      user: null,
+      errorResponse: errorResponse('Database error validating session', 500, 'D1_QUERY_ERROR'),
+    };
+  }
+}
+
+

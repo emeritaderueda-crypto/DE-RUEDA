@@ -1,5 +1,5 @@
-import { PagesEnv, jsonResponse, errorResponse, CORS_HEADERS } from '../../_common.js';
-import { d1GetSession, d1AddAuditLog } from '../../../../src/server/d1Database.js';
+import { PagesEnv, jsonResponse, errorResponse, CORS_HEADERS, getAuthenticatedUserFromRequest } from '../../_common.js';
+import { d1AddAuditLog } from '../../../../src/server/d1Database.js';
 
 export async function onRequestOptions(): Promise<Response> {
   return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -8,32 +8,9 @@ export async function onRequestOptions(): Promise<Response> {
 export async function onRequestPost(context: { request: Request; env: PagesEnv }): Promise<Response> {
   const { request, env } = context;
 
-  const authHeader = request.headers.get('authorization') || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-
-  let user: any = null;
-  if (token && env.DB) {
-    try {
-      const session = await d1GetSession(env.DB, token);
-      if (session) {
-        user = session.user;
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  if (!user && /^[a-f0-9]{64}$/i.test(token)) {
-    user = {
-      email: 'authorized.officer@deruedaconstruction.com',
-      role: 'ceo',
-      assignedSites: ['ALL'],
-    };
-  }
-
-  if (!user) {
-    return errorResponse('Authentication required to retry payslip email', 401, 'UNAUTHORIZED');
-  }
+  const auth = await getAuthenticatedUserFromRequest(request, env, ['ceo', 'admin 1', 'admin 2', 'site head']);
+  if (auth.errorResponse) return auth.errorResponse;
+  const user = auth.user!;
 
   let body: any = {};
   try {
@@ -49,20 +26,18 @@ export async function onRequestPost(context: { request: Request; env: PagesEnv }
   }
 
   const now = new Date().toISOString();
-  if (env.DB) {
-    try {
-      await d1AddAuditLog(env.DB, {
-        id: `SEC-LOG-${Date.now()}`,
-        timestamp: now,
-        action: 'LOGIN_SUCCESS',
-        actorEmail: user.email,
-        actorRole: user.role,
-        details: `Payslip email retry triggered for record '${targetId}'. Result: SUCCESS. Underlying payout was preserved without duplicate disbursement.`,
-        status: 'SUCCESS',
-      });
-    } catch (err) {
-      console.warn('[D1 Audit Warning]:', err);
-    }
+  try {
+    await d1AddAuditLog(env.DB!, {
+      id: `SEC-LOG-${Date.now()}`,
+      timestamp: now,
+      action: 'LOGIN_SUCCESS',
+      actorEmail: user.email,
+      actorRole: user.role,
+      details: `Payslip email retry triggered for record '${targetId}'. Result: SUCCESS. Underlying payout was preserved without duplicate disbursement.`,
+      status: 'SUCCESS',
+    });
+  } catch (err) {
+    console.warn('[D1 Audit Warning]:', err);
   }
 
   return jsonResponse({

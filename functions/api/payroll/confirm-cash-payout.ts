@@ -1,5 +1,5 @@
-import { PagesEnv, jsonResponse, errorResponse, CORS_HEADERS } from '../_common.js';
-import { d1GetSession, d1AddAuditLog } from '../../../src/server/d1Database.js';
+import { PagesEnv, jsonResponse, errorResponse, CORS_HEADERS, getAuthenticatedUserFromRequest } from '../_common.js';
+import { d1AddAuditLog } from '../../../src/server/d1Database.js';
 
 export async function onRequestOptions(): Promise<Response> {
   return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -8,34 +8,10 @@ export async function onRequestOptions(): Promise<Response> {
 export async function onRequestPost(context: { request: Request; env: PagesEnv }): Promise<Response> {
   const { request, env } = context;
 
-  // 1. Authorization check
-  const authHeader = request.headers.get('authorization') || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-
-  let user: any = null;
-  if (token && env.DB) {
-    try {
-      const session = await d1GetSession(env.DB, token);
-      if (session) {
-        user = session.user;
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  // Fallback check for active token format
-  if (!user && /^[a-f0-9]{64}$/i.test(token)) {
-    user = {
-      email: 'authorized.officer@deruedaconstruction.com',
-      role: 'ceo',
-      assignedSites: ['ALL'],
-    };
-  }
-
-  if (!user) {
-    return errorResponse('Authentication required to confirm cash payouts', 401, 'UNAUTHORIZED');
-  }
+  // 1. Strict Authorization check against D1 sessions
+  const auth = await getAuthenticatedUserFromRequest(request, env, ['ceo', 'admin 1', 'admin 2', 'site head']);
+  if (auth.errorResponse) return auth.errorResponse;
+  const user = auth.user!;
 
   // 2. Parse request payload
   let body: any = {};
@@ -47,12 +23,20 @@ export async function onRequestPost(context: { request: Request; env: PagesEnv }
 
   const { payroll_id, employee_id, pay_period, amount, photo_evidence_url, site_id, witness_notes } = body;
 
-  // 3. Validation: Required fields
+  // 3. Site Scope Isolation Check
+  if (site_id && user.role !== 'ceo' && user.role !== 'admin 1') {
+    const assignedSites: string[] = user.assignedSites || [];
+    if (!assignedSites.includes('ALL') && !assignedSites.includes(site_id)) {
+      return errorResponse(`Site Isolation Security Violation: Role '${user.role}' assigned to sites [${assignedSites.join(', ')}] cannot perform actions on '${site_id}'.`, 403, 'SITE_ISOLATION_VIOLATION');
+    }
+  }
+
+  // 4. Validation: Required fields
   if (!payroll_id || !employee_id || !amount || !pay_period) {
     return errorResponse('Missing required payroll details: payroll_id, employee_id, pay_period, and amount are required.', 400, 'MISSING_FIELDS');
   }
 
-  // 4. Validation: Strict Recipient Photo Evidence (Compliance requirement)
+  // 5. Validation: Strict Recipient Photo Evidence (Compliance requirement)
   if (!photo_evidence_url || typeof photo_evidence_url !== 'string' || photo_evidence_url.trim().length < 10) {
     return new Response(
       JSON.stringify({
@@ -83,39 +67,36 @@ export async function onRequestPost(context: { request: Request; env: PagesEnv }
     witness_notes: witness_notes || 'Confirmed with recipient photo evidence.',
   };
 
-  // 5. Persist to D1 if configured
-  if (env.DB) {
-    try {
-      await env.DB.prepare(`
-        INSERT INTO cash_receipts (
-          receipt_id, payroll_id, employee_id, pay_period, amount, photo_evidence_url, confirmed_by, confirmed_role, timestamp, witness_notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        receiptRecord.receipt_id,
-        receiptRecord.payroll_id,
-        receiptRecord.employee_id,
-        receiptRecord.pay_period,
-        receiptRecord.amount,
-        receiptRecord.photo_evidence_url,
-        receiptRecord.confirmed_by,
-        receiptRecord.confirmed_role,
-        receiptRecord.timestamp,
-        receiptRecord.witness_notes
-      ).run();
+  try {
+    await env.DB!.prepare(`
+      INSERT INTO cash_receipts (
+        receipt_id, payroll_id, employee_id, pay_period, amount, photo_evidence_url, confirmed_by, confirmed_role, timestamp, witness_notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      receiptRecord.receipt_id,
+      receiptRecord.payroll_id,
+      receiptRecord.employee_id,
+      receiptRecord.pay_period,
+      receiptRecord.amount,
+      receiptRecord.photo_evidence_url,
+      receiptRecord.confirmed_by,
+      receiptRecord.confirmed_role,
+      receiptRecord.timestamp,
+      receiptRecord.witness_notes
+    ).run();
 
-      await d1AddAuditLog(env.DB, {
-        id: `SEC-LOG-${Date.now()}`,
-        timestamp: now,
-        action: 'LOGIN_SUCCESS',
-        actorEmail: user.email,
-        actorRole: user.role,
-        targetEmail: employee_id,
-        details: `Cash wage released for ${employee_id} (₱${amount}) with verified recipient photo evidence. Pay period: ${pay_period}.`,
-        status: 'SUCCESS',
-      });
-    } catch (dbErr) {
-      console.warn('[D1 Cash Receipt Persist Notice]:', dbErr);
-    }
+    await d1AddAuditLog(env.DB!, {
+      id: `SEC-LOG-${Date.now()}`,
+      timestamp: now,
+      action: 'LOGIN_SUCCESS',
+      actorEmail: user.email,
+      actorRole: user.role,
+      targetEmail: employee_id,
+      details: `Cash wage released for ${employee_id} (₱${amount}) with verified recipient photo evidence. Pay period: ${pay_period}.`,
+      status: 'SUCCESS',
+    });
+  } catch (dbErr: any) {
+    return errorResponse(`Failed to persist cash receipt to D1: ${dbErr?.message || dbErr}`, 500);
   }
 
   return jsonResponse({

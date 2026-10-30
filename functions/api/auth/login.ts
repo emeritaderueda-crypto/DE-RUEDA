@@ -6,7 +6,6 @@ import {
   verifyTotpWeb,
   hashPasswordWeb,
   generateSessionTokenWeb,
-  FALLBACK_ACCOUNTS,
   CORS_HEADERS,
 } from '../_common.js';
 import {
@@ -43,7 +42,6 @@ export async function onRequestPost(context: { request: Request; env: PagesEnv }
       });
     } catch (err: any) {
       console.error('[Cloudflare Proxy Error] Backend unreachable:', err);
-      // Fall through to Edge authentication if backend proxy fails
     }
   }
 
@@ -67,23 +65,27 @@ export async function onRequestPost(context: { request: Request; env: PagesEnv }
     return errorResponse('Corporate email and password are required', 400, 'MISSING_CREDENTIALS');
   }
 
-  // 3. Retrieve user from D1 database or Fallback pre-seeded accounts
-  let user: any = null;
-  let isD1Active = false;
-
-  if (env.DB) {
-    try {
-      await ensureD1Schema(env.DB);
-      user = await d1GetUserByEmail(env.DB, email);
-      isD1Active = true;
-    } catch (dbErr) {
-      console.warn('[D1 Query Notice] D1 query encountered error, falling back to verified seed:', dbErr);
-    }
+  // 3. Fail securely if D1 persistent database is not configured
+  if (!env.DB) {
+    return errorResponse(
+      'Authentication unavailable: Cloudflare D1 database binding "DB" is not connected. All credentials must be verified strictly against the persistent D1 database.',
+      503,
+      'D1_DATABASE_UNAVAILABLE'
+    );
   }
 
-  // Fallback to in-memory verified seeds (guarantees developer & CEO access during initial deployment)
-  if (!user) {
-    user = FALLBACK_ACCOUNTS.find((a) => a.email.toLowerCase() === email);
+  // 4. Retrieve user strictly from persistent D1 database
+  let user: any = null;
+  try {
+    await ensureD1Schema(env.DB);
+    user = await d1GetUserByEmail(env.DB, email);
+  } catch (dbErr: any) {
+    console.error('[D1 Database Error] User lookup failed:', dbErr);
+    return errorResponse(
+      'Database connectivity error during credential verification.',
+      500,
+      'D1_QUERY_ERROR'
+    );
   }
 
   // Uniform failure message to prevent account enumeration
@@ -170,23 +172,21 @@ export async function onRequestPost(context: { request: Request; env: PagesEnv }
     lastActiveAt: Date.now(),
   };
 
-  // Persist session to D1 if active
-  if (env.DB && isD1Active) {
-    try {
-      await d1CreateSession(env.DB, sessionRecord);
-      await d1AddAuditLog(env.DB, {
-        id: `SEC-LOG-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
-        timestamp: new Date().toISOString(),
-        action: 'LOGIN_SUCCESS',
-        actorEmail: user.email,
-        actorRole: user.role,
-        details: `Cloudflare Pages Edge login successful for ${user.email} (${user.role}).`,
-        status: 'SUCCESS',
-        ipAddress: request.headers.get('cf-connecting-ip') || 'edge-client',
-      });
-    } catch (saveErr) {
-      console.warn('[D1 Session Save Notice] Could not persist session to D1:', saveErr);
-    }
+  // Persist session strictly to Cloudflare D1
+  try {
+    await d1CreateSession(env.DB, sessionRecord);
+    await d1AddAuditLog(env.DB, {
+      id: `SEC-LOG-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      timestamp: new Date().toISOString(),
+      action: 'LOGIN_SUCCESS',
+      actorEmail: user.email,
+      actorRole: user.role,
+      details: `Cloudflare Pages Edge login successful for ${user.email} (${user.role}).`,
+      status: 'SUCCESS',
+      ipAddress: request.headers.get('cf-connecting-ip') || 'edge-client',
+    });
+  } catch (saveErr) {
+    console.error('[D1 Session Save Error] Could not persist session to D1:', saveErr);
   }
 
   return jsonResponse({
@@ -194,6 +194,6 @@ export async function onRequestPost(context: { request: Request; env: PagesEnv }
     session_token: token,
     user: sessionUser,
     message: 'Authentication successful.',
-    storage_type: isD1Active ? 'cloudflare-d1' : 'edge-memory',
+    storage_type: 'cloudflare-d1',
   });
 }

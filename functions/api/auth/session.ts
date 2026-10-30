@@ -34,31 +34,24 @@ export async function onRequest(context: { request: Request; env: PagesEnv }): P
     return errorResponse('Missing authorization session token', 401, 'MISSING_TOKEN');
   }
 
-  // Check D1 database if active
-  if (env.DB) {
-    try {
-      const session = await d1GetSession(env.DB, token);
-      if (session) {
-        return jsonResponse({
-          success: true,
-          authenticated: true,
-          session,
-          user: session.user,
-        });
-      }
-    } catch (dbErr) {
-      console.warn('[D1 Session Lookup Notice]:', dbErr);
-    }
+  if (!env.DB) {
+    return errorResponse('Database service unavailable: D1 binding required for session verification.', 503, 'DATABASE_UNAVAILABLE');
   }
 
-  // If token is 64 hex chars, permit edge continuity
-  if (/^[a-f0-9]{64}$/i.test(token)) {
-    return jsonResponse({
-      success: true,
-      authenticated: true,
-      token,
-      message: 'Active edge session validated.',
-    });
+  // Validate session strictly against Cloudflare D1
+  try {
+    const session = await d1GetSession(env.DB, token);
+    if (session) {
+      return jsonResponse({
+        success: true,
+        authenticated: true,
+        session,
+        user: session.user,
+      });
+    }
+  } catch (dbErr: any) {
+    console.error('[D1 Session Lookup Error]:', dbErr);
+    return errorResponse('Database error verifying session', 500, 'D1_QUERY_ERROR');
   }
 
   return errorResponse('Session token expired or invalid', 401, 'INVALID_SESSION');

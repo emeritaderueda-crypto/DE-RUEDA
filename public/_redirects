@@ -1,1 +1,3 @@
-/*    /index.html   200
+# Cloudflare Pages SPA Rewrite & Function Route Preservation
+/api/*  /api/:splat  200
+/*  /index.html  200

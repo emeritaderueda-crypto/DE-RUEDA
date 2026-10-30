@@ -6,16 +6,18 @@ export async function onRequestOptions(): Promise<Response> {
 
 export async function onRequestGet(context: { env: PagesEnv }): Promise<Response> {
   const { env } = context;
-  const isConfigured = Boolean(env.EMAIL_API_KEY && env.EMAIL_API_KEY.trim().length > 0);
+  const apiKey = (env.RESEND_API_KEY || env.EMAIL_API_KEY || '').trim();
+  const isConfigured = Boolean(apiKey.length > 0);
+  const from = env.EMAIL_FROM || 'De Rueda Payroll <payroll@deruedaconstruction.com>';
 
   return jsonResponse({
     success: true,
-    provider: 'resend',
+    provider: env.EMAIL_PROVIDER || 'resend',
     isConfigured,
-    from: 'De Rueda Payroll <payroll@deruedaconstruction.com>',
+    from,
     status: isConfigured ? 'CONFIGURED' : 'EMAIL_NOT_CONFIGURED',
     note: isConfigured
       ? 'Resend API operational for official payroll notifications.'
-      : 'Email provider not configured. Outgoing emails paused safely without disrupting payouts.',
+      : 'Email provider not configured (RESEND_API_KEY missing). Outgoing emails paused safely without disrupting payouts.',
   });
 }

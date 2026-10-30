@@ -78,9 +78,9 @@ export const SERVER_EMAIL_LOGS: EmailDeliveryRecord[] = [];
  */
 export function getEmailServiceConfig(): EmailServiceStatus {
   const provider = (process.env.EMAIL_PROVIDER || 'resend').toLowerCase();
-  const apiKey = process.env.EMAIL_API_KEY || '';
+  const apiKey = (process.env.RESEND_API_KEY || process.env.EMAIL_API_KEY || '').trim();
   const from = process.env.EMAIL_FROM || 'De Rueda Payroll <payroll@deruedaconstruction.com>';
-  const isConfigured = Boolean(apiKey && apiKey.trim().length > 0);
+  const isConfigured = Boolean(apiKey && apiKey.length > 0);
 
   return {
     provider,
@@ -89,7 +89,7 @@ export function getEmailServiceConfig(): EmailServiceStatus {
     status: isConfigured ? 'CONFIGURED' : 'EMAIL_NOT_CONFIGURED',
     note: isConfigured
       ? `Email service operational via ${provider.toUpperCase()}.`
-      : 'Email credentials not configured (EMAIL_API_KEY missing). App operating safely in email-not-configured state without failing startup.',
+      : 'Email credentials not configured (RESEND_API_KEY missing). App operating safely in email-not-configured state without failing startup.',
   };
 }
 
@@ -99,7 +99,7 @@ export function getEmailServiceConfig(): EmailServiceStatus {
 function sanitizeErrorMessage(err: unknown): string {
   if (!err) return 'Unknown email dispatch error';
   let message = typeof err === 'string' ? err : (err as any)?.message || JSON.stringify(err);
-  const apiKey = process.env.EMAIL_API_KEY;
+  const apiKey = process.env.RESEND_API_KEY || process.env.EMAIL_API_KEY;
   if (apiKey && apiKey.length > 4) {
     message = message.split(apiKey).join('[REDACTED_API_KEY]');
   }
@@ -120,7 +120,7 @@ export async function sendEmailViaResend(params: {
   timeoutMs?: number;
 }): Promise<ResendSendResult> {
   const config = getEmailServiceConfig();
-  const apiKey = process.env.EMAIL_API_KEY;
+  const apiKey = (process.env.RESEND_API_KEY || process.env.EMAIL_API_KEY || '').trim();
 
   if (!config.isConfigured || !apiKey) {
     return {
