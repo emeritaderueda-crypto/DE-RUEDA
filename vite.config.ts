@@ -9,6 +9,23 @@ const projectRootDir = typeof import.meta.dirname !== 'undefined'
   : path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(() => {
+  const appUrl = process.env.APP_URL;
+  let wsClientPort: number | undefined = undefined;
+  let wsProtocol: string | undefined = undefined;
+
+  if (appUrl) {
+    try {
+      const parsed = new URL(appUrl);
+      if (parsed.protocol === 'https:') {
+        wsProtocol = 'wss';
+        wsClientPort = parsed.port ? parseInt(parsed.port, 10) : 443;
+      } else {
+        wsProtocol = 'ws';
+        wsClientPort = parsed.port ? parseInt(parsed.port, 10) : 80;
+      }
+    } catch {}
+  }
+
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
@@ -18,10 +35,15 @@ export default defineConfig(() => {
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      ws: {
+        ...(wsClientPort ? { clientPort: wsClientPort } : {}),
+        ...(wsProtocol ? { protocol: wsProtocol } : {}),
+      },
+      // Disable file watching when DISABLE_HMR is true; ignore database and backups to prevent reload loops
+      watch: process.env.DISABLE_HMR === 'true' ? null : {
+        ignored: ['**/data/**', '**/backups/**', '**/*.json.bak', '**/.git/**'],
+      },
     },
     build: {
       chunkSizeWarningLimit: 1200,

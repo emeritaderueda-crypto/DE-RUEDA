@@ -1,3 +1,4 @@
+import http from 'http';
 import express, { Request, Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
@@ -76,7 +77,21 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+  // Support command-line --port flag, DEFAULT_APP_PORT, and PORT (avoiding port 8080 used by Nginx)
+  const portArgIndex = process.argv.indexOf('--port');
+  let requestedPort =
+    portArgIndex !== -1 && process.argv[portArgIndex + 1]
+      ? parseInt(process.argv[portArgIndex + 1], 10)
+      : undefined;
+
+  if (!requestedPort && process.env.DEFAULT_APP_PORT) {
+    requestedPort = parseInt(process.env.DEFAULT_APP_PORT, 10);
+  }
+
+  const PORT =
+    requestedPort ||
+    (process.env.PORT && process.env.PORT !== '8080' ? parseInt(process.env.PORT, 10) : 3000);
 
   app.use(express.json());
 
@@ -3045,11 +3060,38 @@ Respond strictly with valid JSON with this exact structure:
     });
   });
 
+  const httpServer = http.createServer(app);
+
   // Vite Dev Server or Production Static Serving
   const isProd = process.env.NODE_ENV === 'production';
+  let vite: any = null;
   if (!isProd) {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
+    const appUrl = process.env.APP_URL;
+    let wsClientPort: number | undefined = undefined;
+    let wsProtocol: string | undefined = undefined;
+
+    if (appUrl) {
+      try {
+        const parsed = new URL(appUrl);
+        if (parsed.protocol === 'https:') {
+          wsProtocol = 'wss';
+          wsClientPort = parsed.port ? parseInt(parsed.port, 10) : 443;
+        } else {
+          wsProtocol = 'ws';
+          wsClientPort = parsed.port ? parseInt(parsed.port, 10) : 80;
+        }
+      } catch {}
+    }
+
+    vite = await createViteServer({
+      server: {
+        middlewareMode: true,
+        ws: {
+          server: httpServer,
+          ...(wsClientPort ? { clientPort: wsClientPort } : {}),
+          ...(wsProtocol ? { protocol: wsProtocol } : {}),
+        },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -3060,7 +3102,42 @@ Respond strictly with valid JSON with this exact structure:
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  // Graceful shutdown handling to release port and active sockets cleanly on SIGTERM/SIGINT
+  const gracefulShutdown = async () => {
+    console.log('Received shutdown signal, releasing server resources...');
+    if (vite) {
+      try {
+        await vite.close();
+      } catch {}
+    }
+    if (typeof (httpServer as any).closeAllConnections === 'function') {
+      (httpServer as any).closeAllConnections();
+    }
+    httpServer.close(() => {
+      console.log('Server stopped cleanly.');
+      process.exit(0);
+    });
+  };
+
+  process.once('SIGTERM', gracefulShutdown);
+  process.once('SIGINT', gracefulShutdown);
+
+  // Handle port conflicts gracefully without crashing
+  httpServer.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`[Server Warning] Port ${PORT} is temporarily in use. Retrying in 1s...`);
+      setTimeout(() => {
+        try {
+          httpServer.close();
+        } catch {}
+        httpServer.listen(PORT, '0.0.0.0');
+      }, 1000);
+    } else {
+      console.error('[Server Error]:', err);
+    }
+  });
+
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`De Rueda Construction Management System Server running on port ${PORT}`);
   });
 }

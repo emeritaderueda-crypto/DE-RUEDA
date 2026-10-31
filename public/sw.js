@@ -48,6 +48,19 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Never intercept Vite internal development routes, hot updates, or source modules
+  if (
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/node_modules/') ||
+    url.pathname.includes('hot-update') ||
+    url.pathname.includes('vite') ||
+    url.searchParams.has('import') ||
+    url.searchParams.has('t')
+  ) {
+    return;
+  }
+
   // Dedicated handler for Canteen Menu standards (Stale-While-Revalidate with full offline fallback)
   if (url.pathname === '/api/canteen/menu') {
     event.respondWith(
